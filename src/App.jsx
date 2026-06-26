@@ -149,7 +149,11 @@ function TraineeHomeSimple({ onNav }) {
         </div>
       </div>
 
-      <button className="btn btn-primary btn-lg mb-16" style={{ width: '100%', justifyContent: 'center' }}>
+      <button
+        className="btn btn-primary btn-lg mb-16"
+        style={{ width: '100%', justifyContent: 'center' }}
+        onClick={() => onNav('booking')}
+      >
         קביעת אימון עם רוני
       </button>
 
@@ -157,7 +161,11 @@ function TraineeHomeSimple({ onNav }) {
         <div className="stepper-num">האימון הבא</div>
         <div className="ex-name-big">Lower Body Strength</div>
         <div className="muted text-sm mb-12">4 תרגילים · 45 דקות</div>
-        <button className="btn btn-primary" style={{ width: '100%', justifyContent: 'center' }}>
+        <button
+          className="btn btn-primary"
+          style={{ width: '100%', justifyContent: 'center' }}
+          onClick={() => onNav('do-workout')}
+        >
           התחלת אימון
         </button>
       </div>
@@ -168,6 +176,179 @@ function TraineeHomeSimple({ onNav }) {
           עבודה מעולה באימון האחרון. אפשר להעלות מעט משקל בלחיצת כתף באימון הבא.
         </div>
       </div>
+    </div>
+  );
+}
+
+function BookingSimple({ onBack }) {
+  const [type, setType] = useState('front');
+  const [slot, setSlot] = useState('');
+  const [proofName, setProofName] = useState('');
+
+  const slots = [
+    { id: 'sun-0900', label: 'ראשון · 09:00', location: 'Midtown', available: true },
+    { id: 'sun-1730', label: 'ראשון · 17:30', location: 'בית הלקוח', available: true },
+    { id: 'tue-0800', label: 'שלישי · 08:00', location: 'Zoom', available: true },
+    { id: 'thu-1800', label: 'חמישי · 18:00', location: 'Midtown', available: false },
+  ];
+
+  return (
+    <div className="workout-mobile">
+      <div className="page-header">
+        <div className="page-header-title">קביעת אימון</div>
+        <div className="page-header-sub">בחרי סוג אימון, שעה ואסמכתת תשלום</div>
+      </div>
+
+      <div className="card mb-16">
+        <div className="section-title">1. סוג אימון</div>
+        <div className="grid-2">
+          <button
+            className={`filter-chip ${type === 'front' ? 'active' : ''}`}
+            onClick={() => setType('front')}
+          >
+            פרונטלי
+          </button>
+          <button
+            className={`filter-chip ${type === 'zoom' ? 'active' : ''}`}
+            onClick={() => setType('zoom')}
+          >
+            Zoom
+          </button>
+        </div>
+      </div>
+
+      <div className="card mb-16">
+        <div className="section-title">2. חלונות זמינים השבוע</div>
+        <div className="grid-2">
+          {slots.map(item => (
+            <button
+              key={item.id}
+              className={`time-slot ${slot === item.id ? 'sel' : ''} ${!item.available ? 'unavail' : ''}`}
+              onClick={() => item.available && setSlot(item.id)}
+            >
+              <div>{item.label}</div>
+              <div className="text-xs muted">{item.location}</div>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="card mb-16">
+        <div className="section-title">3. אסמכתת תשלום</div>
+        <div className="text-sm muted mb-12">
+          בשלב הזה זה דמו: מעלים שם קובץ כדי לדמות צילום מסך של העברה / PayBox / Bit.
+        </div>
+        <input
+          className="form-input"
+          placeholder="לדוגמה: paybox-maya.png"
+          value={proofName}
+          onChange={e => setProofName(e.target.value)}
+        />
+      </div>
+
+      <div className="card-sm mb-16">
+        <div className="section-title">סיכום בקשה</div>
+        <div className="text-sm muted">
+          הבקשה תישלח לרוני לאישור סופי. רק אחרי האישור האימון יופיע בלו״ז שלך ושלה.
+        </div>
+      </div>
+
+      <button
+        className="btn btn-primary btn-lg"
+        style={{ width: '100%', justifyContent: 'center' }}
+        disabled={!slot || !proofName}
+      >
+        שליחת בקשה לאישור רוני
+      </button>
+
+      <button className="btn btn-ghost mt-12" style={{ width: '100%', justifyContent: 'center' }} onClick={onBack}>
+        חזרה לבית
+      </button>
+    </div>
+  );
+}
+
+function DoWorkoutSimple({ onBack }) {
+  const [sets, setSets] = useState([
+    { id: 1, weight: '', reps: '', rir: '' },
+    { id: 2, weight: '', reps: '', rir: '' },
+    { id: 3, weight: '', reps: '', rir: '' },
+  ]);
+
+  function updateSet(id, field, value) {
+    setSets(prev => prev.map(set => set.id === id ? { ...set, [field]: value } : set));
+  }
+
+  function calcRpe(rir) {
+    if (rir === '') return '-';
+    const value = Math.max(0, Math.min(4, Number(rir)));
+    return 10 - value;
+  }
+
+  return (
+    <div className="workout-mobile">
+      <div className="page-header">
+        <div className="page-header-title">תיעוד אימון</div>
+        <div className="page-header-sub">ממלאים סטים מהר וברור, בלי אקסל</div>
+      </div>
+
+      <div className="alert-strip success">
+        מאחלת לך אימון מוצלח! אחרי כל סט מלאי משקל, חזרות וכמה חזרות נשארו לך ברזרבה.
+      </div>
+
+      <div className="ex-card-mobile">
+        <div className="stepper-num">תרגיל 1 מתוך 4</div>
+        <div className="ex-name-big">לחיצת כתף</div>
+        <div className="muted text-sm mb-12">3 סטים · 8–10 חזרות · מנוחה 90 שניות</div>
+
+        {sets.map(set => (
+          <div className="set-row" key={set.id}>
+            <div className="set-num">{set.id}</div>
+            <input
+              className="set-input"
+              placeholder="ק״ג"
+              value={set.weight}
+              onChange={e => updateSet(set.id, 'weight', e.target.value)}
+            />
+            <input
+              className="set-input"
+              placeholder="חזרות"
+              value={set.reps}
+              onChange={e => updateSet(set.id, 'reps', e.target.value)}
+            />
+            <select
+              className="rir-select"
+              value={set.rir}
+              onChange={e => updateSet(set.id, 'rir', e.target.value)}
+            >
+              <option value="">RIR</option>
+              <option value="0">0</option>
+              <option value="1">1</option>
+              <option value="2">2</option>
+              <option value="3">3</option>
+              <option value="4">4+</option>
+            </select>
+            <div className="rpe-pill">RPE {calcRpe(set.rir)}</div>
+          </div>
+        ))}
+
+        <div className="form-group mt-16">
+          <label className="form-label">הערה לתרגיל</label>
+          <textarea className="form-textarea" placeholder="איך הרגיש? כאב? טכניקה?" />
+        </div>
+
+        <button className="btn btn-outline" style={{ width: '100%', justifyContent: 'center' }}>
+          העלאת סרטון ביצוע
+        </button>
+      </div>
+
+      <button className="btn btn-primary btn-lg" style={{ width: '100%', justifyContent: 'center' }}>
+        שליחת אימון לרוני
+      </button>
+
+      <button className="btn btn-ghost mt-12" style={{ width: '100%', justifyContent: 'center' }} onClick={onBack}>
+        חזרה לבית
+      </button>
     </div>
   );
 }
@@ -227,14 +408,16 @@ export default function App() {
 
   const traineeLinks = [
     { view: 'trainee-home', icon: '🏠', label: 'בית' },
+    { view: 'booking', icon: '📅', label: 'קביעה' },
     { view: 'my-progress', icon: '📈', label: 'התקדמות' },
-    { view: 'notifications', icon: '🔔', label: 'התראות', badge: 1 },
     { view: 'trainee-settings', icon: '⚙️', label: 'הגדרות' },
   ];
 
   function renderPage() {
     if (role === 'trainee') {
       if (view === 'trainee-home') return <TraineeHomeSimple onNav={onNav} />;
+      if (view === 'booking') return <BookingSimple onBack={() => onNav('trainee-home')} />;
+      if (view === 'do-workout') return <DoWorkoutSimple onBack={() => onNav('trainee-home')} />;
       if (view === 'my-progress') return <Placeholder title="ההתקדמות שלי" />;
       if (view === 'notifications') return <Placeholder title="התראות" />;
       if (view === 'trainee-settings') return <Placeholder title="הגדרות" />;

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import Layout from './components/Layout.jsx';
+import ProgressSimple from './pages/trainee/ProgressSimple.jsx';
 
 function Placeholder({ title }) {
   return (
@@ -418,7 +419,7 @@ export default function App() {
       if (view === 'trainee-home') return <TraineeHomeSimple onNav={onNav} />;
       if (view === 'booking') return <BookingSimple onBack={() => onNav('trainee-home')} />;
       if (view === 'do-workout') return <DoWorkoutSimple onBack={() => onNav('trainee-home')} />;
-      if (view === 'my-progress') return <Placeholder title="ההתקדמות שלי" />;
+      if (view === 'my-progress') return <ProgressSimple />;
       if (view === 'notifications') return <Placeholder title="התראות" />;
       if (view === 'trainee-settings') return <Placeholder title="הגדרות" />;
       return <TraineeHomeSimple onNav={onNav} />;

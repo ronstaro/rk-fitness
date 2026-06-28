@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import Layout from './components/Layout.jsx';
 import ProgressSimple from './pages/trainee/ProgressSimple.jsx';
+import WeeklyPlanSimple from './pages/trainee/WeeklyPlanSimple.jsx';
 
 function Placeholder({ title }) {
   return (
@@ -203,16 +204,10 @@ function BookingSimple({ onBack }) {
       <div className="card mb-16">
         <div className="section-title">1. סוג אימון</div>
         <div className="grid-2">
-          <button
-            className={`filter-chip ${type === 'front' ? 'active' : ''}`}
-            onClick={() => setType('front')}
-          >
+          <button className={`filter-chip ${type === 'front' ? 'active' : ''}`} onClick={() => setType('front')}>
             פרונטלי
           </button>
-          <button
-            className={`filter-chip ${type === 'zoom' ? 'active' : ''}`}
-            onClick={() => setType('zoom')}
-          >
+          <button className={`filter-chip ${type === 'zoom' ? 'active' : ''}`} onClick={() => setType('zoom')}>
             Zoom
           </button>
         </div>
@@ -409,6 +404,7 @@ export default function App() {
 
   const traineeLinks = [
     { view: 'trainee-home', icon: '🏠', label: 'בית' },
+    { view: 'weekly-plan', icon: '📋', label: 'תוכנית' },
     { view: 'booking', icon: '📅', label: 'קביעה' },
     { view: 'my-progress', icon: '📈', label: 'התקדמות' },
     { view: 'trainee-settings', icon: '⚙️', label: 'הגדרות' },
@@ -417,6 +413,7 @@ export default function App() {
   function renderPage() {
     if (role === 'trainee') {
       if (view === 'trainee-home') return <TraineeHomeSimple onNav={onNav} />;
+      if (view === 'weekly-plan') return <WeeklyPlanSimple onNav={onNav} />;
       if (view === 'booking') return <BookingSimple onBack={() => onNav('trainee-home')} />;
       if (view === 'do-workout') return <DoWorkoutSimple onBack={() => onNav('trainee-home')} />;
       if (view === 'my-progress') return <ProgressSimple />;

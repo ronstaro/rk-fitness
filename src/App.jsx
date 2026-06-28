@@ -264,12 +264,13 @@ function BookingSimple({ onBack }) {
   );
 }
 
-function DoWorkoutSimple({ onBack }) {
+function DoWorkoutSimple({ onBack, onProgress }) {
   const [sets, setSets] = useState([
     { id: 1, weight: '', reps: '', rir: '' },
     { id: 2, weight: '', reps: '', rir: '' },
     { id: 3, weight: '', reps: '', rir: '' },
   ]);
+  const [sent, setSent] = useState(false);
 
   function updateSet(id, field, value) {
     setSets(prev => prev.map(set => set.id === id ? { ...set, [field]: value } : set));
@@ -279,6 +280,36 @@ function DoWorkoutSimple({ onBack }) {
     if (rir === '') return '-';
     const value = Math.max(0, Math.min(4, Number(rir)));
     return 10 - value;
+  }
+
+  if (sent) {
+    return (
+      <div className="workout-mobile">
+        <div className="page-header">
+          <div className="page-header-title">האימון נשלח לרוני</div>
+          <div className="page-header-sub">רוני תוכל לעבור על הביצוע ולתת לך משוב</div>
+        </div>
+
+        <div className="alert-strip success">
+          כל הכבוד! סיימת ותיעדת את האימון. בדמו הזה האימון נשמר מקומית רק כחיווי מסך.
+        </div>
+
+        <div className="card-sm mb-16">
+          <div className="section-title">מה קורה עכשיו?</div>
+          <div className="text-sm muted">
+            בשלב הבא נחבר את זה לסקירת אימונים של רוני, כדי שהיא תראה את הסטים, ה־RIR וההערות שלך.
+          </div>
+        </div>
+
+        <button className="btn btn-primary btn-lg" style={{ width: '100%', justifyContent: 'center' }} onClick={onProgress}>
+          צפייה בהתקדמות
+        </button>
+
+        <button className="btn btn-ghost mt-12" style={{ width: '100%', justifyContent: 'center' }} onClick={onBack}>
+          חזרה לבית
+        </button>
+      </div>
+    );
   }
 
   return (
@@ -338,7 +369,7 @@ function DoWorkoutSimple({ onBack }) {
         </button>
       </div>
 
-      <button className="btn btn-primary btn-lg" style={{ width: '100%', justifyContent: 'center' }}>
+      <button className="btn btn-primary btn-lg" style={{ width: '100%', justifyContent: 'center' }} onClick={() => setSent(true)}>
         שליחת אימון לרוני
       </button>
 
@@ -415,7 +446,7 @@ export default function App() {
       if (view === 'trainee-home') return <TraineeHomeSimple onNav={onNav} />;
       if (view === 'weekly-plan') return <WeeklyPlanSimple onNav={onNav} />;
       if (view === 'booking') return <BookingSimple onBack={() => onNav('trainee-home')} />;
-      if (view === 'do-workout') return <DoWorkoutSimple onBack={() => onNav('trainee-home')} />;
+      if (view === 'do-workout') return <DoWorkoutSimple onBack={() => onNav('trainee-home')} onProgress={() => onNav('my-progress')} />;
       if (view === 'my-progress') return <ProgressSimple />;
       if (view === 'notifications') return <Placeholder title="התראות" />;
       if (view === 'trainee-settings') return <Placeholder title="הגדרות" />;

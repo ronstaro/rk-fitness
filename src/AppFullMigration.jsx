@@ -151,6 +151,44 @@ function TraineeHome() {
   );
 }
 
+
+function Workout() {
+  return (
+    <div>
+      <div style={{ marginBottom: 20 }}>
+        <h2 style={{ margin: 0, fontSize: 20, color: "#1E1C19" }}>אימון</h2>
+        <p style={{ margin: "4px 0 0", fontSize: 13, color: "#9E9A90" }}>תרגילים, סטים ומשוב</p>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16, marginBottom: 24 }}>
+        <div style={{ background: "#fff", borderRadius: 10, border: "0.5px solid #EDEBE6", padding: 16 }}>
+          <div style={{ fontSize: 11, color: "#9E9A90", marginBottom: 6 }}>תרגילים</div>
+          <div style={{ fontSize: 28, fontWeight: 700 }}>--</div>
+        </div>
+        <div style={{ background: "#fff", borderRadius: 10, border: "0.5px solid #EDEBE6", padding: 16 }}>
+          <div style={{ fontSize: 11, color: "#9E9A90", marginBottom: 6 }}>סטים</div>
+          <div style={{ fontSize: 28, fontWeight: 700 }}>--</div>
+        </div>
+        <div style={{ background: "#fff", borderRadius: 10, border: "0.5px solid #EDEBE6", padding: 16 }}>
+          <div style={{ fontSize: 11, color: "#9E9A90", marginBottom: 6 }}>משוב</div>
+          <div style={{ fontSize: 28, fontWeight: 700 }}>--</div>
+        </div>
+      </div>
+      <div style={{ background: "#fff", borderRadius: 12, border: "0.5px solid #EDEBE6", padding: 20, marginBottom: 16 }}>
+        <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 12 }}>תוכנית אימון</div>
+        <div style={{ fontSize: 14, color: "#9E9A90" }}>אין תוכנית עדיין</div>
+      </div>
+      <div style={{ background: "#fff", borderRadius: 12, border: "0.5px solid #EDEBE6", padding: 20, marginBottom: 16 }}>
+        <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 12 }}>רשימת תרגילים</div>
+        <div style={{ fontSize: 14, color: "#9E9A90" }}>אין תרגילים להצגה</div>
+      </div>
+      <div style={{ background: "#fff", borderRadius: 12, border: "0.5px solid #EDEBE6", padding: 20 }}>
+        <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 8 }}>משוב והערות</div>
+        <div style={{ fontSize: 14, color: "#9E9A90" }}>אין משוב עדיין</div>
+      </div>
+    </div>
+  );
+}
+
 export default function AppFullMigration() {
   const [view, setView] = useState("dashboard");
   const [role, setRole] = useState("admin");
@@ -192,13 +230,14 @@ export default function AppFullMigration() {
           {view === "revenue" && <Screen title="הכנסות" />}
           {view === "settings" && <Screen title="הגדרות" />}
           {view === "trainee-home" && <TraineeHome />}
-          {view === "workout" && <Screen title="האימון שלי" />}
+          {view === "workout" && <Workout />}
           {view === "progress" && <Screen title="ההתקדמות שלי" />}
         </div>
       </div>
     </div>
   );
 }
+
 
 
 

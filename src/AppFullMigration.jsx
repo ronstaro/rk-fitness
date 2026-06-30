@@ -265,6 +265,44 @@ function Reviews() {
   );
 }
 
+
+function Schedule() {
+  return (
+    <div>
+      <div style={{ marginBottom: 20 }}>
+        <h2 style={{ margin: 0, fontSize: 20, color: "#1E1C19" }}>לו"ז</h2>
+        <p>ניהול אימונים, זמינות ומעקב יומי</p>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16, marginBottom: 24 }}>
+        <div style={{ background: "#fff", borderRadius: 10, border: "0.5px solid #EDEBE6", padding: 16 }}>
+          <div style={{ fontSize: 11, color: "#9E9A90", marginBottom: 6 }}>אימונים היום</div>
+          <div style={{ fontSize: 28, fontWeight: 700 }}>--</div>
+        </div>
+        <div style={{ background: "#fff", borderRadius: 10, border: "0.5px solid #EDEBE6", padding: 16 }}>
+          <div style={{ fontSize: 11, color: "#9E9A90", marginBottom: 6 }}>זמינות</div>
+          <div style={{ fontSize: 28, fontWeight: 700 }}>--</div>
+        </div>
+        <div style={{ background: "#fff", borderRadius: 10, border: "0.5px solid #EDEBE6", padding: 16 }}>
+          <div style={{ fontSize: 11, color: "#9E9A90", marginBottom: 6 }}>דורשים תיאום</div>
+          <div style={{ fontSize: 28, fontWeight: 700 }}>--</div>
+        </div>
+      </div>
+      <div style={{ background: "#fff", borderRadius: 12, border: "0.5px solid #EDEBE6", padding: 20, marginBottom: 16 }}>
+        <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 12 }}>לוח יומי</div>
+        <div style={{ fontSize: 14, color: "#9E9A90" }}>אין אימונים מתוזמנים היום</div>
+      </div>
+      <div style={{ background: "#fff", borderRadius: 12, border: "0.5px solid #EDEBE6", padding: 20, marginBottom: 16 }}>
+        <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 12 }}>זמינות</div>
+        <div style={{ fontSize: 14, color: "#9E9A90" }}>אין נתוני זמינות עדיין</div>
+      </div>
+      <div style={{ background: "#fff", borderRadius: 12, border: "0.5px solid #EDEBE6", padding: 20 }}>
+        <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 8 }}>משימות תיאום</div>
+        <div style={{ fontSize: 14, color: "#9E9A90" }}>אין משימות פתוחות</div>
+      </div>
+    </div>
+  );
+}
+
 export default function AppFullMigration() {
   const [view, setView] = useState("dashboard");
   const [role, setRole] = useState("admin");
@@ -302,7 +340,7 @@ export default function AppFullMigration() {
           {view === "leads" && <Leads />}
           {view === "trainees" && <Trainees />}
           {view === "reviews" && <Reviews />}
-          {view === "schedule" && <Screen title="לוח זמנים" />}
+          {view === "schedule" && <Schedule />}
           {view === "revenue" && <Screen title="הכנסות" />}
           {view === "settings" && <Screen title="הגדרות" />}
           {view === "trainee-home" && <TraineeHome />}
@@ -313,6 +351,7 @@ export default function AppFullMigration() {
     </div>
   );
 }
+
 
 
 

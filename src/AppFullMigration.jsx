@@ -79,6 +79,40 @@ function Leads() {
   );
 }
 
+
+function Trainees() {
+  return (
+    <div>
+      <div style={{ marginBottom: 20 }}>
+        <h2 style={{ margin: 0, fontSize: 20, color: "#1E1C19" }}>מתאמנים</h2>
+        <p style={{ margin: "4px 0 0", fontSize: 13, color: "#9E9A90" }}>ניהול מתאמנים, סטטוס ותוכניות</p>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16, marginBottom: 24 }}>
+        <div style={{ background: "#fff", borderRadius: 10, border: "0.5px solid #EDEBE6", padding: 16 }}>
+          <div style={{ fontSize: 11, textTransform: "uppercase", color: "#9E9A90", marginBottom: 6 }}>מתאמנים פעילים</div>
+          <div style={{ fontSize: 28, fontWeight: 700 }}>—</div>
+        </div>
+        <div style={{ background: "#fff", borderRadius: 10, border: "0.5px solid #EDEBE6", padding: 16 }}>
+          <div style={{ fontSize: 11, textTransform: "uppercase", color: "#9E9A90", marginBottom: 6 }}>אונליין / פרונטלי</div>
+          <div style={{ fontSize: 28, fontWeight: 700 }}>—</div>
+        </div>
+        <div style={{ background: "#fff", borderRadius: 10, border: "0.5px solid #EDEBE6", padding: 16 }}>
+          <div style={{ fontSize: 11, textTransform: "uppercase", color: "#9E9A90", marginBottom: 6 }}>דורשים מעקב</div>
+          <div style={{ fontSize: 28, fontWeight: 700 }}>—</div>
+        </div>
+      </div>
+      <div style={{ background: "#fff", borderRadius: 12, border: "0.5px solid #EDEBE6", padding: 20 }}>
+        <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+          <div style={{ fontSize: 13, padding: "6px 14px", borderRadius: 20, background: "#F9F0F2", color: "#7C2D3E", fontWeight: 600 }}>הכל</div>
+          <div style={{ fontSize: 13, padding: "6px 14px", borderRadius: 20, color: "#615E57" }}>פעילים</div>
+          <div style={{ fontSize: 13, padding: "6px 14px", borderRadius: 20, color: "#615E57" }}>מעקב</div>
+        </div>
+        <div style={{ fontSize: 14, color: "#9E9A90", textAlign: "center", padding: "24px 0" }}>אין מתאמנים להצגה עדיין</div>
+      </div>
+    </div>
+  );
+}
+
 export default function AppFullMigration() {
   const [view, setView] = useState("dashboard");
   const [role, setRole] = useState("admin");
@@ -114,7 +148,7 @@ export default function AppFullMigration() {
         <div style={{ flex: 1, overflow: "auto", padding: 24 }}>
           {view === "dashboard" && <Dashboard />}
           {view === "leads" && <Leads />}
-          {view === "trainees" && <Screen title="מתאמנים" />}
+          {view === "trainees" && <Trainees />}
           {view === "reviews" && <Screen title="סקירת אימונים" />}
           {view === "schedule" && <Screen title="לוח זמנים" />}
           {view === "revenue" && <Screen title="הכנסות" />}
@@ -127,5 +161,6 @@ export default function AppFullMigration() {
     </div>
   );
 }
+
 
 

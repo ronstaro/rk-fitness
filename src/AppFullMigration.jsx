@@ -42,6 +42,43 @@ function Dashboard() {
   );
 }
 
+
+function Leads() {
+  return (
+    <div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+        <div>
+          <h2 style={{ margin: 0, fontSize: 20, color: "#1E1C19" }}>לידים</h2>
+          <p style={{ margin: "4px 0 0", fontSize: 13, color: "#9E9A90" }}>ניהול פניות ומעקב</p>
+        </div>
+        <button style={{ fontSize: 13, padding: "8px 16px", borderRadius: 8, border: "none", background: "#7C2D3E", color: "#fff", cursor: "pointer" }}>+ הוסף ליד</button>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16, marginBottom: 24 }}>
+        <div style={{ background: "#fff", borderRadius: 10, border: "0.5px solid #EDEBE6", padding: 16 }}>
+          <div style={{ fontSize: 11, textTransform: "uppercase", color: "#9E9A90", marginBottom: 6 }}>לידים חדשים</div>
+          <div style={{ fontSize: 28, fontWeight: 700 }}>—</div>
+        </div>
+        <div style={{ background: "#fff", borderRadius: 10, border: "0.5px solid #EDEBE6", padding: 16 }}>
+          <div style={{ fontSize: 11, textTransform: "uppercase", color: "#9E9A90", marginBottom: 6 }}>למעקב</div>
+          <div style={{ fontSize: 28, fontWeight: 700 }}>—</div>
+        </div>
+        <div style={{ background: "#fff", borderRadius: 10, border: "0.5px solid #EDEBE6", padding: 16 }}>
+          <div style={{ fontSize: 11, textTransform: "uppercase", color: "#9E9A90", marginBottom: 6 }}>הומרו למתאמנים</div>
+          <div style={{ fontSize: 28, fontWeight: 700 }}>—</div>
+        </div>
+      </div>
+      <div style={{ background: "#fff", borderRadius: 12, border: "0.5px solid #EDEBE6", padding: 20, marginBottom: 16 }}>
+        <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 12 }}>רשימת לידים</div>
+        <div style={{ fontSize: 14, color: "#9E9A90", textAlign: "center", padding: "24px 0" }}>אין לידים להצגה עדיין</div>
+      </div>
+      <div style={{ background: "#fff", borderRadius: 12, border: "0.5px solid #EDEBE6", padding: 20 }}>
+        <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 8 }}>תזכורות מעקב</div>
+        <div style={{ fontSize: 14, color: "#9E9A90" }}>אין תזכורות פעילות</div>
+      </div>
+    </div>
+  );
+}
+
 export default function AppFullMigration() {
   const [view, setView] = useState("dashboard");
   const [role, setRole] = useState("admin");
@@ -76,7 +113,7 @@ export default function AppFullMigration() {
         </div>
         <div style={{ flex: 1, overflow: "auto", padding: 24 }}>
           {view === "dashboard" && <Dashboard />}
-          {view === "leads" && <Screen title="לידים" />}
+          {view === "leads" && <Leads />}
           {view === "trainees" && <Screen title="מתאמנים" />}
           {view === "reviews" && <Screen title="סקירת אימונים" />}
           {view === "schedule" && <Screen title="לוח זמנים" />}
@@ -90,4 +127,5 @@ export default function AppFullMigration() {
     </div>
   );
 }
+
 

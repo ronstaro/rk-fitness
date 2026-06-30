@@ -113,6 +113,44 @@ function Trainees() {
   );
 }
 
+
+function TraineeHome() {
+  return (
+    <div>
+      <div style={{ marginBottom: 20 }}>
+        <h2 style={{ margin: 0, fontSize: 20, color: "#1E1C19" }}>אזור מתאמן</h2>
+        <p style={{ margin: "4px 0 0", fontSize: 13, color: "#9E9A90" }}>תוכנית שבועית, התקדמות ומשימות</p>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16, marginBottom: 24 }}>
+        <div style={{ background: "#fff", borderRadius: 10, border: "0.5px solid #EDEBE6", padding: 16 }}>
+          <div style={{ fontSize: 11, textTransform: "uppercase", color: "#9E9A90", marginBottom: 6 }}>אימוני השבוע</div>
+          <div style={{ fontSize: 28, fontWeight: 700 }}>—</div>
+        </div>
+        <div style={{ background: "#fff", borderRadius: 10, border: "0.5px solid #EDEBE6", padding: 16 }}>
+          <div style={{ fontSize: 11, textTransform: "uppercase", color: "#9E9A90", marginBottom: 6 }}>יעד נוכחי</div>
+          <div style={{ fontSize: 28, fontWeight: 700 }}>—</div>
+        </div>
+        <div style={{ background: "#fff", borderRadius: 10, border: "0.5px solid #EDEBE6", padding: 16 }}>
+          <div style={{ fontSize: 11, textTransform: "uppercase", color: "#9E9A90", marginBottom: 6 }}>התקדמות</div>
+          <div style={{ fontSize: 28, fontWeight: 700 }}>—</div>
+        </div>
+      </div>
+      <div style={{ background: "#fff", borderRadius: 12, border: "0.5px solid #EDEBE6", padding: 20, marginBottom: 16 }}>
+        <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 12 }}>תוכנית שבועית</div>
+        <div style={{ fontSize: 14, color: "#9E9A90", textAlign: "center", padding: "24px 0" }}>אין תוכנית עדיין</div>
+      </div>
+      <div style={{ background: "#fff", borderRadius: 12, border: "0.5px solid #EDEBE6", padding: 20, marginBottom: 16 }}>
+        <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 12 }}>יעדים והתקדמות</div>
+        <div style={{ fontSize: 14, color: "#9E9A90", textAlign: "center", padding: "24px 0" }}>אין נתונים עדיין</div>
+      </div>
+      <div style={{ background: "#fff", borderRadius: 12, border: "0.5px solid #EDEBE6", padding: 20 }}>
+        <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 8 }}>הודעה מהמאמן</div>
+        <div style={{ fontSize: 14, color: "#9E9A90" }}>אין הודעות</div>
+      </div>
+    </div>
+  );
+}
+
 export default function AppFullMigration() {
   const [view, setView] = useState("dashboard");
   const [role, setRole] = useState("admin");
@@ -153,7 +191,7 @@ export default function AppFullMigration() {
           {view === "schedule" && <Screen title="לוח זמנים" />}
           {view === "revenue" && <Screen title="הכנסות" />}
           {view === "settings" && <Screen title="הגדרות" />}
-          {view === "trainee-home" && <Screen title="הבית שלי" />}
+          {view === "trainee-home" && <TraineeHome />}
           {view === "workout" && <Screen title="האימון שלי" />}
           {view === "progress" && <Screen title="ההתקדמות שלי" />}
         </div>
@@ -161,6 +199,7 @@ export default function AppFullMigration() {
     </div>
   );
 }
+
 
 
 

@@ -189,6 +189,44 @@ function Workout() {
   );
 }
 
+
+function Progress() {
+  return (
+    <div>
+      <div style={{ marginBottom: 20 }}>
+        <h2 style={{ margin: 0, fontSize: 20, color: "#1E1C19" }}>התקדמות</h2>
+        <p style={{ margin: "4px 0 0", fontSize: 13, color: "#9E9A90" }}>יעדים, מדדים וסיכום התקדמות</p>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16, marginBottom: 24 }}>
+        <div style={{ background: "#fff", borderRadius: 10, border: "0.5px solid #EDEBE6", padding: 16 }}>
+          <div style={{ fontSize: 11, color: "#9E9A90", marginBottom: 6 }}>יעד פעיל</div>
+          <div style={{ fontSize: 28, fontWeight: 700 }}>--</div>
+        </div>
+        <div style={{ background: "#fff", borderRadius: 10, border: "0.5px solid #EDEBE6", padding: 16 }}>
+          <div style={{ fontSize: 11, color: "#9E9A90", marginBottom: 6 }}>מדדים</div>
+          <div style={{ fontSize: 28, fontWeight: 700 }}>--</div>
+        </div>
+        <div style={{ background: "#fff", borderRadius: 10, border: "0.5px solid #EDEBE6", padding: 16 }}>
+          <div style={{ fontSize: 11, color: "#9E9A90", marginBottom: 6 }}>הישגים</div>
+          <div style={{ fontSize: 28, fontWeight: 700 }}>--</div>
+        </div>
+      </div>
+      <div style={{ background: "#fff", borderRadius: 12, border: "0.5px solid #EDEBE6", padding: 20, marginBottom: 16 }}>
+        <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 12 }}>יעדים</div>
+        <div style={{ fontSize: 14, color: "#9E9A90" }}>אין יעדים עדיין</div>
+      </div>
+      <div style={{ background: "#fff", borderRadius: 12, border: "0.5px solid #EDEBE6", padding: 20, marginBottom: 16 }}>
+        <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 12 }}>מדדים</div>
+        <div style={{ fontSize: 14, color: "#9E9A90" }}>אין מדדים להצגה</div>
+      </div>
+      <div style={{ background: "#fff", borderRadius: 12, border: "0.5px solid #EDEBE6", padding: 20 }}>
+        <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 8 }}>סיכום התקדמות</div>
+        <div style={{ fontSize: 14, color: "#9E9A90" }}>אין נתונים עדיין</div>
+      </div>
+    </div>
+  );
+}
+
 export default function AppFullMigration() {
   const [view, setView] = useState("dashboard");
   const [role, setRole] = useState("admin");
@@ -231,12 +269,13 @@ export default function AppFullMigration() {
           {view === "settings" && <Screen title="הגדרות" />}
           {view === "trainee-home" && <TraineeHome />}
           {view === "workout" && <Workout />}
-          {view === "progress" && <Screen title="ההתקדמות שלי" />}
+          {view === "progress" && <Progress />}
         </div>
       </div>
     </div>
   );
 }
+
 
 
 

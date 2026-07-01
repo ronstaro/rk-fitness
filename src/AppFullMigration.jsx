@@ -303,6 +303,44 @@ function Schedule() {
   );
 }
 
+
+function Revenue() {
+  return (
+    <div>
+      <div style={{ marginBottom: 20 }}>
+        <h2 style={{ margin: 0, fontSize: 20, color: "#1E1C19" }}>Revenue</h2>
+        <div style={{ fontSize: 13, color: "#9E9A90", marginTop: 4 }}>Monthly tracking, expenses and financial summary</div>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16, marginBottom: 24 }}>
+        <div style={{ background: "#fff", borderRadius: 10, border: "0.5px solid #EDEBE6", padding: 16 }}>
+          <div style={{ fontSize: 11, color: "#9E9A90", marginBottom: 6 }}>Monthly Revenue</div>
+          <div style={{ fontSize: 28, fontWeight: 700 }}>--</div>
+        </div>
+        <div style={{ background: "#fff", borderRadius: 10, border: "0.5px solid #EDEBE6", padding: 16 }}>
+          <div style={{ fontSize: 11, color: "#9E9A90", marginBottom: 6 }}>Expenses</div>
+          <div style={{ fontSize: 28, fontWeight: 700 }}>--</div>
+        </div>
+        <div style={{ background: "#fff", borderRadius: 10, border: "0.5px solid #EDEBE6", padding: 16 }}>
+          <div style={{ fontSize: 11, color: "#9E9A90", marginBottom: 6 }}>Estimated Net</div>
+          <div style={{ fontSize: 28, fontWeight: 700 }}>--</div>
+        </div>
+      </div>
+      <div style={{ background: "#fff", borderRadius: 12, border: "0.5px solid #EDEBE6", padding: 20, marginBottom: 16 }}>
+        <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 12 }}>Monthly Revenue</div>
+        <div style={{ fontSize: 14, color: "#9E9A90" }}>Data will appear after connection.</div>
+      </div>
+      <div style={{ background: "#fff", borderRadius: 12, border: "0.5px solid #EDEBE6", padding: 20, marginBottom: 16 }}>
+        <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 12 }}>Expenses</div>
+        <div style={{ fontSize: 14, color: "#9E9A90" }}>Data will appear after connection.</div>
+      </div>
+      <div style={{ background: "#fff", borderRadius: 12, border: "0.5px solid #EDEBE6", padding: 20 }}>
+        <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 8 }}>Financial Summary</div>
+        <div style={{ fontSize: 14, color: "#9E9A90" }}>Data will appear after connection.</div>
+      </div>
+    </div>
+  );
+}
+
 export default function AppFullMigration() {
   const [view, setView] = useState("dashboard");
   const [role, setRole] = useState("admin");
@@ -341,7 +379,7 @@ export default function AppFullMigration() {
           {view === "trainees" && <Trainees />}
           {view === "reviews" && <Reviews />}
           {view === "schedule" && <Schedule />}
-          {view === "revenue" && <Screen title="הכנסות" />}
+          {view === "revenue" && <Revenue />}
           {view === "settings" && <Screen title="הגדרות" />}
           {view === "trainee-home" && <TraineeHome />}
           {view === "workout" && <Workout />}

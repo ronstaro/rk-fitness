@@ -353,20 +353,21 @@ export default function AppFullMigration() {
   const a = { background: "#F9F0F2", color: "#7C2D3E", fontWeight: 600 };
   const s = (id) => view === id ? { ...n, ...a } : n;
   const adminNav = [
-    ["dashboard", "Dashboard"],
-    ["leads", "Leads"],
-    ["trainees", "Trainees"],
-    ["reviews", "Reviews"],
-    ["schedule", "Schedule"],
-    ["revenue", "Revenue"],
-    ["settings", "Settings"],
+    ["dashboard", "לוח בקרה"],
+    ["leads", "לידים"],
+    ["trainees", "מתאמנים"],
+    ["reviews", "סקירות"],
+    ["schedule", "לוח זמנים"],
+    ["revenue", "הכנסות"],
+    ["settings", "הגדרות"],
   ];
   const traineeNav = [
-    ["trainee-home", "Trainee Home"],
-    ["workout", "Workout"],
-    ["progress", "Progress"],
+    ["trainee-home", "בית"],
+    ["workout", "אימון"],
+    ["progress", "התקדמות"],
   ];
   const navItems = role === "admin" ? adminNav : traineeNav;
+  const viewTitles = Object.fromEntries([...adminNav, ...traineeNav]);
   return (
     <div dir="rtl" style={{ display: "flex", height: "100vh", fontFamily: "sans-serif", background: "#FAF8F5" }}>
       <div style={{ width: 210, background: "#fff", borderLeft: "0.5px solid #EDEBE6", display: "flex", flexDirection: "column" }}>
@@ -379,22 +380,22 @@ export default function AppFullMigration() {
       </div>
       <div style={{ flex: 1, overflow: "auto", display: "flex", flexDirection: "column" }}>
         <div style={{ height: 56, background: "#fff", borderBottom: "0.5px solid #EDEBE6", display: "flex", alignItems: "center", padding: "0 24px", justifyContent: "space-between" }}>
-          <b style={{ fontSize: 16 }}>{view}</b>
+          <b style={{ fontSize: 16 }}>{viewTitles[view] || view}</b>
           <button onClick={toggleRole} style={{ fontSize: 12, padding: "5px 12px", borderRadius: 20, border: "1.5px solid #7C2D3E", background: "transparent", color: "#7C2D3E", cursor: "pointer" }}>
             {role === "admin" ? "מעבר למתאמן" : "מעבר למנהלת"}
           </button>
         </div>
         <div style={{ flex: 1, overflow: "auto", padding: 24 }}>
-          {view === "dashboard" && <Dashboard />}
-          {view === "leads" && <Leads />}
-          {view === "trainees" && <Trainees />}
-          {view === "reviews" && <Reviews />}
-          {view === "schedule" && <Schedule />}
-          {view === "revenue" && <Revenue />}
-          {view === "settings" && <Screen title="הגדרות" />}
+          {view === "לוח בקרה" && <Dashboard />}
+          {view === "לידים" && <Leads />}
+          {view === "מתאמנים" && <Trainees />}
+          {view === "סקירות" && <Reviews />}
+          {view === "לוח זמנים" && <Schedule />}
+          {view === "הכנסות" && <Revenue />}
+          {view === "הגדרות" && <Screen title="הגדרות" />}
           {view === "trainee-home" && <TraineeHome />}
-          {view === "workout" && <Workout />}
-          {view === "progress" && <Progress />}
+          {view === "אימון" && <Workout />}
+          {view === "התקדמות" && <Progress />}
         </div>
       </div>
     </div>

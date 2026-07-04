@@ -341,6 +341,92 @@ function Revenue() {
   );
 }
 
+function Settings() {
+  const [lang, setLang] = useState("he");
+  const [checks, setChecks] = useState({ personal: false, online: false, group: false, reminders: false, leads: false, birthdays: false, renewals: false });
+  const toggle = (k) => setChecks(p => ({ ...p, [k]: !p[k] }));
+  const pill = (on) => ({ fontSize: 11, padding: "3px 10px", borderRadius: 10, cursor: "pointer", background: on ? "#7C2D3E" : "#EDEBE6", color: on ? "#fff" : "#9E9A90" });
+  return (
+    <div>
+      <div style={{ marginBottom: 20 }}>
+        <h2 style={{ margin: 0, fontSize: 20, color: "#1E1C19" }}>הגדרות</h2>
+        <div style={{ fontSize: 13, color: "#9E9A90", marginTop: 4 }}>פרטי עסק, העדפות ואינטגרציות</div>
+      </div>
+      <div style={{ background: "#fff", borderRadius: 12, border: "0.5px solid #EDEBE6", padding: 20, marginBottom: 16 }}>
+        <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 12 }}>פרטי עסק</div>
+        <div style={{ marginBottom: 12 }}>
+          <div style={{ fontSize: 12, color: "#9E9A90", marginBottom: 4 }}>שם העסק</div>
+          <div style={{ fontSize: 14, color: "#9E9A90", padding: "8px 12px", borderRadius: 8, border: "0.5px solid #EDEBE6", background: "#FAF8F5" }}>יתמלא לאחר חיבור נתונים</div>
+        </div>
+        <div>
+          <div style={{ fontSize: 12, color: "#9E9A90", marginBottom: 4 }}>תיאור קצר</div>
+          <div style={{ fontSize: 14, color: "#9E9A90", padding: "8px 12px", borderRadius: 8, border: "0.5px solid #EDEBE6", background: "#FAF8F5" }}>יתמלא לאחר חיבור נתונים</div>
+        </div>
+      </div>
+      <div style={{ background: "#fff", borderRadius: 12, border: "0.5px solid #EDEBE6", padding: 20, marginBottom: 16 }}>
+        <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 12 }}>שפה</div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <div onClick={() => setLang("he")} style={{ fontSize: 13, padding: "6px 16px", borderRadius: 20, cursor: "pointer", background: lang === "he" ? "#F9F0F2" : "#fff", color: lang === "he" ? "#7C2D3E" : "#615E57", fontWeight: lang === "he" ? 600 : 400 }}>עברית</div>
+          <div onClick={() => setLang("en")} style={{ fontSize: 13, padding: "6px 16px", borderRadius: 20, cursor: "pointer", background: lang === "en" ? "#F9F0F2" : "#fff", color: lang === "en" ? "#7C2D3E" : "#615E57", fontWeight: lang === "en" ? 600 : 400 }}>English</div>
+        </div>
+      </div>
+      <div style={{ background: "#fff", borderRadius: 12, border: "0.5px solid #EDEBE6", padding: 20, marginBottom: 16 }}>
+        <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 12 }}>סוגי אימון</div>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 0", borderBottom: "0.5px solid #EDEBE6" }}>
+          <div style={{ fontSize: 14 }}>אימון אישי</div>
+          <div onClick={() => toggle("personal")} style={pill(checks.personal)}>{checks.personal ? "פעיל" : "כבוי"}</div>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 0", borderBottom: "0.5px solid #EDEBE6" }}>
+          <div style={{ fontSize: 14 }}>אימון אונליין</div>
+          <div onClick={() => toggle("online")} style={pill(checks.online)}>{checks.online ? "פעיל" : "כבוי"}</div>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 0" }}>
+          <div style={{ fontSize: 14 }}>אימון קבוצתי</div>
+          <div onClick={() => toggle("group")} style={pill(checks.group)}>{checks.group ? "פעיל" : "כבוי"}</div>
+        </div>
+      </div>
+      <div style={{ background: "#fff", borderRadius: 12, border: "0.5px solid #EDEBE6", padding: 20, marginBottom: 16 }}>
+        <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 12 }}>התראות</div>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 0", borderBottom: "0.5px solid #EDEBE6" }}>
+          <div style={{ fontSize: 14 }}>תזכורות אימון</div>
+          <div onClick={() => toggle("reminders")} style={pill(checks.reminders)}>{checks.reminders ? "פעיל" : "כבוי"}</div>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 0", borderBottom: "0.5px solid #EDEBE6" }}>
+          <div style={{ fontSize: 14 }}>מעקב לידים</div>
+          <div onClick={() => toggle("leads")} style={pill(checks.leads)}>{checks.leads ? "פעיל" : "כבוי"}</div>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 0", borderBottom: "0.5px solid #EDEBE6" }}>
+          <div style={{ fontSize: 14 }}>ימי הולדת</div>
+          <div onClick={() => toggle("birthdays")} style={pill(checks.birthdays)}>{checks.birthdays ? "פעיל" : "כבוי"}</div>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 0" }}>
+          <div style={{ fontSize: 14 }}>חידוש מנויים</div>
+          <div onClick={() => toggle("renewals")} style={pill(checks.renewals)}>{checks.renewals ? "פעיל" : "כבוי"}</div>
+        </div>
+      </div>
+      <div style={{ background: "#fff", borderRadius: 12, border: "0.5px solid #EDEBE6", padding: 20 }}>
+        <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 4 }}>אינטגרציות עתידיות</div>
+        <div style={{ fontSize: 12, color: "#9E9A90", marginBottom: 12 }}>חיבורים שיהיו זמינים בקרוב</div>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 0", borderBottom: "0.5px solid #EDEBE6" }}>
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 500 }}>📅 Google Calendar</div>
+            <div style={{ fontSize: 12, color: "#9E9A90" }}>סנכרון אוטומטי של אימונים</div>
+          </div>
+          <div style={{ fontSize: 11, color: "#9E9A90", background: "#FAF8F5", padding: "3px 8px", borderRadius: 10, border: "0.5px solid #EDEBE6" }}>בקרוב</div>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 0" }}>
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 500 }}>💬 WhatsApp</div>
+            <div style={{ fontSize: 12, color: "#9E9A90" }}>שליחת תזכורות אוטומטיות</div>
+          </div>
+          <div style={{ fontSize: 11, color: "#9E9A90", background: "#FAF8F5", padding: "3px 8px", borderRadius: 10, border: "0.5px solid #EDEBE6" }}>בקרוב</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
 export default function AppFullMigration() {
   const [view, setView] = useState("dashboard");
   const [role, setRole] = useState("admin");
@@ -392,7 +478,7 @@ export default function AppFullMigration() {
           {view === "reviews" && <Reviews />}
           {view === "schedule" && <Schedule />}
           {view === "revenue" && <Revenue />}
-          {view === "settings" && <Screen title="הגדרות" />}
+          {view === "settings" && <Settings />}
           {view === "trainee-home" && <TraineeHome />}
           {view === "workout" && <Workout />}
           {view === "progress" && <Progress />}

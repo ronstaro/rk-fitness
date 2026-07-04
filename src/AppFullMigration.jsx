@@ -386,26 +386,18 @@ export default function AppFullMigration() {
           </button>
         </div>
         <div style={{ flex: 1, overflow: "auto", padding: 24 }}>
-          {view === "לוח בקרה" && <Dashboard />}
-          {view === "לידים" && <Leads />}
-          {view === "מתאמנים" && <Trainees />}
-          {view === "סקירות" && <Reviews />}
-          {view === "לוח זמנים" && <Schedule />}
-          {view === "הכנסות" && <Revenue />}
-          {view === "הגדרות" && <Screen title="הגדרות" />}
+          {view === "dashboard" && <Dashboard />}
+          {view === "leads" && <Leads />}
+          {view === "trainees" && <Trainees />}
+          {view === "reviews" && <Reviews />}
+          {view === "schedule" && <Schedule />}
+          {view === "revenue" && <Revenue />}
+          {view === "settings" && <Screen title="הגדרות" />}
           {view === "trainee-home" && <TraineeHome />}
-          {view === "אימון" && <Workout />}
-          {view === "התקדמות" && <Progress />}
+          {view === "workout" && <Workout />}
+          {view === "progress" && <Progress />}
         </div>
       </div>
     </div>
   );
 }
-
-
-
-
-
-
-
-

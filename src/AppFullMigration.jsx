@@ -649,37 +649,330 @@ function Reviews() {
 
 
 function Schedule() {
+  const SCHED_KEY = "rk-fitness-schedule";
+  const TRAIN_KEY = "rk-fitness-trainees";
+
+  function loadSessions() {
+    try {
+      const raw = localStorage.getItem(SCHED_KEY);
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch { return []; }
+  }
+
+  function loadTrainees() {
+    try {
+      const raw = localStorage.getItem(TRAIN_KEY);
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch { return []; }
+  }
+
+  const [sessions, setSessions] = useState(loadSessions);
+  const [trainees] = useState(loadTrainees);
+  const [showForm, setShowForm] = useState(false);
+  const [formError, setFormError] = useState("");
+  const [form, setForm] = useState({
+    traineeId: "",
+    traineeName: "",
+    date: "",
+    startTime: "",
+    durationMinutes: "",
+    trainingType: "אישי",
+    location: "",
+    status: "מתוכנן",
+    notes: "",
+  });
+
+  useEffect(() => {
+    localStorage.setItem(SCHED_KEY, JSON.stringify(sessions));
+  }, [sessions]);
+
+  function handleField(key, value) {
+    setForm((f) => ({ ...f, [key]: value }));
+  }
+
+  function handleTraineeSelect(traineeId) {
+    const t = trainees.find((tr) => tr.id === traineeId);
+    setForm((f) => ({ ...f, traineeId, traineeName: t ? t.fullName : "" }));
+  }
+
+  function toMinutes(timeStr) {
+    const [h, m] = timeStr.split(":").map(Number);
+    return h * 60 + m;
+  }
+
+  function addMinutes(timeStr, mins) {
+    const total = toMinutes(timeStr) + Number(mins);
+    const h = Math.floor(total / 60) % 24;
+    const m = total % 60;
+    return String(h).padStart(2, "0") + ":" + String(m).padStart(2, "0");
+  }
+
+  function hasOverlap(newDate, newStart, newDur, existingSessions) {
+    const newStartM = toMinutes(newStart);
+    const newEndM = newStartM + Number(newDur);
+    return existingSessions.some((s) => {
+      if (s.date !== newDate || s.status === "בוטל") return false;
+      const sStartM = toMinutes(s.startTime);
+      const sEndM = sStartM + Number(s.durationMinutes);
+      return newStartM < sEndM && newEndM > sStartM;
+    });
+  }
+
+  function handleSave() {
+    const traineeId = form.traineeId;
+    const date = form.date.trim();
+    const startTime = form.startTime.trim();
+    const dur = Number(form.durationMinutes);
+    const location = form.location.trim();
+    if (!traineeId || !date || !startTime || !form.durationMinutes || !location) {
+      setFormError("מתאמן, תאריך, שעת התחלה, משך ומיקום הם שדות חובה");
+      return;
+    }
+    if (dur <= 0) {
+      setFormError("משך האימון חייב להיות גדול מ-0");
+      return;
+    }
+    if (hasOverlap(date, startTime, dur, sessions)) {
+      setFormError("קיים אימון חופף בשעה שנבחרה");
+      return;
+    }
+    const session = {
+      id: Date.now().toString(),
+      traineeId,
+      traineeName: form.traineeName,
+      date,
+      startTime,
+      durationMinutes: dur,
+      trainingType: form.trainingType,
+      location,
+      status: form.status,
+      notes: form.notes.trim(),
+      createdAt: new Date().toLocaleDateString("he-IL"),
+    };
+    setSessions((prev) => [...prev, session]);
+    setForm({ traineeId: "", traineeName: "", date: "", startTime: "", durationMinutes: "", trainingType: "אישי", location: "", status: "מתוכנן", notes: "" });
+    setFormError("");
+    setShowForm(false);
+  }
+
+  function handleStatusChange(id, newStatus) {
+    setSessions((prev) => prev.map((s) => s.id === id ? { ...s, status: newStatus } : s));
+  }
+
+  function handleDelete(id) {
+    if (window.confirm("למחוק אימון זה?")) {
+      setSessions((prev) => prev.filter((s) => s.id !== id));
+    }
+  }
+
+  function waLink(traineeId) {
+    const t = trainees.find((tr) => tr.id === traineeId);
+    if (!t || !t.phone) return null;
+    return "https://wa.me/" + t.phone.replace(/\D/g, "");
+  }
+
+  const todayStr = new Date().toISOString().split("T")[0];
+
+  const todaySessions = sessions
+    .filter((s) => s.date === todayStr && s.status !== "בוטל")
+    .sort((a, b) => a.startTime.localeCompare(b.startTime));
+
+  const kpiToday = todaySessions.length;
+  const kpiCoord = sessions.filter((s) => s.status === "דורש תיאום").length;
+
+  function calcAvailWindows() {
+    const dayStart = 8 * 60;
+    const dayEnd = 21 * 60;
+    const sorted = [...todaySessions].sort((a, b) => a.startTime.localeCompare(b.startTime));
+    let windows = 0;
+    let cursor = dayStart;
+    for (const s of sorted) {
+      const sStart = toMinutes(s.startTime);
+      const sEnd = sStart + Number(s.durationMinutes);
+      if (sStart - cursor >= 60) windows++;
+      cursor = Math.max(cursor, sEnd);
+    }
+    if (dayEnd - cursor >= 60) windows++;
+    return windows;
+  }
+
+  const kpiAvail = calcAvailWindows();
+
+  const upcomingSessions = [...sessions]
+    .filter((s) => s.date > todayStr && s.status !== "בוטל")
+    .sort((a, b) => a.date !== b.date ? a.date.localeCompare(b.date) : a.startTime.localeCompare(b.startTime))
+    .slice(0, 10);
+
+  const coordSessions = sessions.filter((s) => s.status === "דורש תיאום");
+
+  const statusOptions = ["מתוכנן", "הושלם", "בוטל", "דורש תיאום"];
+  const trainingTypeOptions = ["אישי", "אונליין", "קבוצתי"];
+
+  const inp = {
+    width: "100%",
+    padding: "8px 10px",
+    borderRadius: 8,
+    border: "0.5px solid #EDEBE6",
+    fontSize: 14,
+    boxSizing: "border-box",
+    background: "#FAF8F5",
+  };
+
   return (
     <div>
-      <div style={{ marginBottom: 20 }}>
-        <h2 style={{ margin: 0, fontSize: 20, color: "#1E1C19" }}>לו"ז</h2>
-        <p>ניהול אימונים, זמינות ומעקב יומי</p>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+        <div>
+          <h2 style={{ margin: 0, fontSize: 20, color: "#1E1C19" }}>לו"ז</h2>
+          <p style={{ margin: "4px 0 0", fontSize: 13, color: "#9E9A90" }}>ניהול אימונים, זמינות ומעקב יומי</p>
+        </div>
+        <button onClick={() => { setShowForm(true); setFormError(""); }} style={{ fontSize: 13, padding: "8px 16px", borderRadius: 8, border: "none", background: "#7C2D3E", color: "#fff", cursor: "pointer" }}>+ הוסף אימון</button>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16, marginBottom: 24 }}>
         <div style={{ background: "#fff", borderRadius: 10, border: "0.5px solid #EDEBE6", padding: 16 }}>
           <div style={{ fontSize: 11, color: "#9E9A90", marginBottom: 6 }}>אימונים היום</div>
-          <div style={{ fontSize: 28, fontWeight: 700 }}>--</div>
+          <div style={{ fontSize: 28, fontWeight: 700 }}>{kpiToday}</div>
         </div>
         <div style={{ background: "#fff", borderRadius: 10, border: "0.5px solid #EDEBE6", padding: 16 }}>
           <div style={{ fontSize: 11, color: "#9E9A90", marginBottom: 6 }}>זמינות</div>
-          <div style={{ fontSize: 28, fontWeight: 700 }}>--</div>
+          <div style={{ fontSize: 20, fontWeight: 700 }}>{kpiAvail} חלונות</div>
         </div>
         <div style={{ background: "#fff", borderRadius: 10, border: "0.5px solid #EDEBE6", padding: 16 }}>
           <div style={{ fontSize: 11, color: "#9E9A90", marginBottom: 6 }}>דורשים תיאום</div>
-          <div style={{ fontSize: 28, fontWeight: 700 }}>--</div>
+          <div style={{ fontSize: 28, fontWeight: 700 }}>{kpiCoord}</div>
         </div>
       </div>
+      {showForm && (
+        <div style={{ background: "#fff", borderRadius: 12, border: "0.5px solid #EDEBE6", padding: 20, marginBottom: 16 }}>
+          <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 16 }}>הוספת אימון חדש</div>
+          <div style={{ marginBottom: 12 }}>
+            <div style={{ fontSize: 12, color: "#9E9A90", marginBottom: 4 }}>מתאמן *</div>
+            {trainees.length === 0 ? (
+              <div style={{ fontSize: 14, color: "#9E9A90", padding: "8px 10px", borderRadius: 8, border: "0.5px solid #EDEBE6", background: "#FAF8F5" }}>אין מתאמנים זמינים</div>
+            ) : (
+              <select value={form.traineeId} onChange={(e) => handleTraineeSelect(e.target.value)} style={inp}>
+                <option value="">בחר מתאמן</option>
+                {trainees.map((t) => <option key={t.id} value={t.id}>{t.fullName}</option>)}
+              </select>
+            )}
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+            <div>
+              <div style={{ fontSize: 12, color: "#9E9A90", marginBottom: 4 }}>תאריך *</div>
+              <input type="date" value={form.date} onChange={(e) => handleField("date", e.target.value)} style={inp} />
+            </div>
+            <div>
+              <div style={{ fontSize: 12, color: "#9E9A90", marginBottom: 4 }}>שעת התחלה *</div>
+              <input type="time" value={form.startTime} onChange={(e) => handleField("startTime", e.target.value)} style={inp} />
+            </div>
+            <div>
+              <div style={{ fontSize: 12, color: "#9E9A90", marginBottom: 4 }}>משך בדקות *</div>
+              <input type="number" min="1" value={form.durationMinutes} onChange={(e) => handleField("durationMinutes", e.target.value)} style={inp} placeholder="60" />
+            </div>
+            <div>
+              <div style={{ fontSize: 12, color: "#9E9A90", marginBottom: 4 }}>סוג אימון</div>
+              <select value={form.trainingType} onChange={(e) => handleField("trainingType", e.target.value)} style={inp}>
+                {trainingTypeOptions.map((o) => <option key={o}>{o}</option>)}
+              </select>
+            </div>
+          </div>
+          <div style={{ marginBottom: 12 }}>
+            <div style={{ fontSize: 12, color: "#9E9A90", marginBottom: 4 }}>מיקום *</div>
+            <input value={form.location} onChange={(e) => handleField("location", e.target.value)} style={inp} placeholder="מיקום האימון" />
+          </div>
+          <div style={{ marginBottom: 12 }}>
+            <div style={{ fontSize: 12, color: "#9E9A90", marginBottom: 4 }}>סטטוס</div>
+            <select value={form.status} onChange={(e) => handleField("status", e.target.value)} style={inp}>
+              {statusOptions.map((o) => <option key={o}>{o}</option>)}
+            </select>
+          </div>
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ fontSize: 12, color: "#9E9A90", marginBottom: 4 }}>הערות</div>
+            <textarea value={form.notes} onChange={(e) => handleField("notes", e.target.value)} style={{ ...inp, height: 72, resize: "vertical" }} placeholder="הערות נוספות" />
+          </div>
+          {formError && <div style={{ fontSize: 13, color: "#C0392B", marginBottom: 12 }}>{formError}</div>}
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={handleSave} style={{ fontSize: 13, padding: "8px 20px", borderRadius: 8, border: "none", background: "#7C2D3E", color: "#fff", cursor: "pointer" }}>שמור אימון</button>
+            <button onClick={() => { setShowForm(false); setFormError(""); }} style={{ fontSize: 13, padding: "8px 16px", borderRadius: 8, border: "0.5px solid #EDEBE6", background: "#fff", color: "#615E57", cursor: "pointer" }}>ביטול</button>
+          </div>
+        </div>
+      )}
       <div style={{ background: "#fff", borderRadius: 12, border: "0.5px solid #EDEBE6", padding: 20, marginBottom: 16 }}>
         <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 12 }}>לוח יומי</div>
-        <div style={{ fontSize: 14, color: "#9E9A90" }}>אין אימונים מתוזמנים היום</div>
+        {todaySessions.length === 0 ? (
+          <div style={{ fontSize: 14, color: "#9E9A90" }}>אין אימונים מתוזמנים היום</div>
+        ) : (
+          todaySessions.map((s) => {
+            const endTime = addMinutes(s.startTime, s.durationMinutes);
+            const wa = waLink(s.traineeId);
+            return (
+              <div key={s.id} style={{ padding: "12px 0", borderBottom: "0.5px solid #EDEBE6" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+                  <div>
+                    <div style={{ fontWeight: 600, fontSize: 14 }}>{s.traineeName}</div>
+                    <div style={{ fontSize: 12, color: "#9E9A90" }}>{s.startTime}–{endTime} ({s.durationMinutes} דק׳) · {s.trainingType}</div>
+                    <div style={{ fontSize: 12, color: "#9E9A90" }}>מיקום: {s.location}</div>
+                  </div>
+                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                    <select value={s.status} onChange={(e) => handleStatusChange(s.id, e.target.value)} style={{ fontSize: 12, padding: "4px 8px", borderRadius: 6, border: "0.5px solid #EDEBE6", background: "#FAF8F5", cursor: "pointer" }}>
+                      {statusOptions.map((o) => <option key={o}>{o}</option>)}
+                    </select>
+                    {wa && <a href={wa} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: "#25D366", textDecoration: "none" }}>WA</a>}
+                    <button onClick={() => handleDelete(s.id)} style={{ fontSize: 12, padding: "4px 8px", borderRadius: 6, border: "none", background: "#FAF8F5", color: "#C0392B", cursor: "pointer" }}>מחק</button>
+                  </div>
+                </div>
+                {s.notes && <div style={{ fontSize: 12, color: "#9E9A90", marginTop: 2 }}>{s.notes}</div>}
+              </div>
+            );
+          })
+        )}
       </div>
       <div style={{ background: "#fff", borderRadius: 12, border: "0.5px solid #EDEBE6", padding: 20, marginBottom: 16 }}>
-        <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 12 }}>זמינות</div>
-        <div style={{ fontSize: 14, color: "#9E9A90" }}>אין נתוני זמינות עדיין</div>
+        <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 8 }}>אימונים קרובים</div>
+        {upcomingSessions.length === 0 ? (
+          <div style={{ fontSize: 14, color: "#9E9A90" }}>אין אימונים קרובים</div>
+        ) : (
+          upcomingSessions.map((s) => {
+            const endTime = addMinutes(s.startTime, s.durationMinutes);
+            const wa = waLink(s.traineeId);
+            return (
+              <div key={s.id} style={{ padding: "12px 0", borderBottom: "0.5px solid #EDEBE6" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+                  <div>
+                    <div style={{ fontWeight: 600, fontSize: 14 }}>{s.traineeName}</div>
+                    <div style={{ fontSize: 12, color: "#9E9A90" }}>{s.date} · {s.startTime}–{endTime} ({s.durationMinutes} דק׳) · {s.trainingType}</div>
+                    <div style={{ fontSize: 12, color: "#9E9A90" }}>מיקום: {s.location}</div>
+                  </div>
+                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                    <select value={s.status} onChange={(e) => handleStatusChange(s.id, e.target.value)} style={{ fontSize: 12, padding: "4px 8px", borderRadius: 6, border: "0.5px solid #EDEBE6", background: "#FAF8F5", cursor: "pointer" }}>
+                      {statusOptions.map((o) => <option key={o}>{o}</option>)}
+                    </select>
+                    {wa && <a href={wa} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: "#25D366", textDecoration: "none" }}>WA</a>}
+                    <button onClick={() => handleDelete(s.id)} style={{ fontSize: 12, padding: "4px 8px", borderRadius: 6, border: "none", background: "#FAF8F5", color: "#C0392B", cursor: "pointer" }}>מחק</button>
+                  </div>
+                </div>
+                {s.notes && <div style={{ fontSize: 12, color: "#9E9A90", marginTop: 2 }}>{s.notes}</div>}
+              </div>
+            );
+          })
+        )}
       </div>
       <div style={{ background: "#fff", borderRadius: 12, border: "0.5px solid #EDEBE6", padding: 20 }}>
         <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 8 }}>משימות תיאום</div>
-        <div style={{ fontSize: 14, color: "#9E9A90" }}>אין משימות פתוחות</div>
+        {coordSessions.length === 0 ? (
+          <div style={{ fontSize: 14, color: "#9E9A90" }}>אין משימות פתוחות</div>
+        ) : (
+          coordSessions.map((s) => (
+            <div key={s.id} style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: "0.5px solid #EDEBE6" }}>
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 500 }}>{s.traineeName}</div>
+                <div style={{ fontSize: 12, color: "#9E9A90" }}>{s.location}</div>
+              </div>
+              <div style={{ fontSize: 13, color: "#7C2D3E" }}>{s.date} · {s.startTime}</div>
+            </div>
+          ))
+        )}
       </div>
     </div>
   );

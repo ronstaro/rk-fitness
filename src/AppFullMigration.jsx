@@ -20,15 +20,15 @@ function Dashboard() {
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16, marginBottom: 24 }}>
         <div style={{ background: "#fff", borderRadius: 10, border: "0.5px solid #EDEBE6", padding: 16 }}>
           <div style={{ fontSize: 11, textTransform: "uppercase", color: "#9E9A90", marginBottom: 6 }}>מתאמנים פעילים</div>
-          <div style={{ fontSize: 28, fontWeight: 700 }}>4</div>
+          <div style={{ fontSize: 28, fontWeight: 700 }}>—</div>
         </div>
         <div style={{ background: "#fff", borderRadius: 10, border: "0.5px solid #EDEBE6", padding: 16 }}>
           <div style={{ fontSize: 11, textTransform: "uppercase", color: "#9E9A90", marginBottom: 6 }}>לידים חדשים</div>
-          <div style={{ fontSize: 28, fontWeight: 700 }}>2</div>
+          <div style={{ fontSize: 28, fontWeight: 700 }}>—</div>
         </div>
         <div style={{ background: "#fff", borderRadius: 10, border: "0.5px solid #EDEBE6", padding: 16 }}>
           <div style={{ fontSize: 11, textTransform: "uppercase", color: "#9E9A90", marginBottom: 6 }}>הכנסה חודשית</div>
-          <div style={{ fontSize: 28, fontWeight: 700 }}>₪3,400</div>
+          <div style={{ fontSize: 28, fontWeight: 700 }}>—</div>
         </div>
       </div>
       <div style={{ background: "#fff", borderRadius: 12, border: "0.5px solid #EDEBE6", padding: 20 }}>
@@ -69,11 +69,11 @@ function Leads() {
       </div>
       <div style={{ background: "#fff", borderRadius: 12, border: "0.5px solid #EDEBE6", padding: 20, marginBottom: 16 }}>
         <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 12 }}>רשימת לידים</div>
-        <div style={{ fontSize: 14, color: "#9E9A90", textAlign: "center", padding: "24px 0" }}>אין לידים להצגה עדיין</div>
+        <div style={{ fontSize: 14, color: "#9E9A90", textAlign: "center", padding: "24px 0" }}>כאן יוצגו לידים לאחר חיבור נתונים</div>
       </div>
       <div style={{ background: "#fff", borderRadius: 12, border: "0.5px solid #EDEBE6", padding: 20 }}>
         <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 8 }}>תזכורות מעקב</div>
-        <div style={{ fontSize: 14, color: "#9E9A90" }}>אין תזכורות פעילות</div>
+        <div style={{ fontSize: 14, color: "#9E9A90" }}>כאן יוצגו תזכורות מעקב לאחר חיבור נתונים</div>
       </div>
     </div>
   );
@@ -487,3 +487,6 @@ export default function AppFullMigration() {
     </div>
   );
 }
+
+
+

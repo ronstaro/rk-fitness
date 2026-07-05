@@ -254,33 +254,242 @@ function Leads() {
 
 
 function Trainees() {
+  const STORAGE_KEY = "rk-fitness-trainees";
+
+  function loadTrainees() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+
+  const [trainees, setTrainees] = useState(loadTrainees);
+  const [showForm, setShowForm] = useState(false);
+  const [formError, setFormError] = useState("");
+  const [filter, setFilter] = useState("הכל");
+  const [form, setForm] = useState({
+    fullName: "",
+    phone: "",
+    birthDate: "",
+    startDate: "",
+    trainingType: "אישי",
+    status: "פעיל",
+    mainGoal: "",
+    successMetric: "",
+    notes: "",
+  });
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(trainees));
+  }, [trainees]);
+
+  function handleField(key, value) {
+    setForm((f) => ({ ...f, [key]: value }));
+  }
+
+  function handleSave() {
+    const fullName = form.fullName.trim();
+    const phone = form.phone.trim();
+    const startDate = form.startDate.trim();
+    const mainGoal = form.mainGoal.trim();
+    if (!fullName || !phone || !startDate || !mainGoal) {
+      setFormError("שם מלא, טלפון, תאריך התחלה ויעד מרכזי הם שדות חובה");
+      return;
+    }
+    const trainee = {
+      id: Date.now().toString(),
+      fullName,
+      phone,
+      birthDate: form.birthDate,
+      startDate,
+      trainingType: form.trainingType,
+      status: form.status,
+      mainGoal,
+      successMetric: form.successMetric.trim(),
+      notes: form.notes.trim(),
+      createdAt: new Date().toLocaleDateString("he-IL"),
+    };
+    setTrainees((prev) => [trainee, ...prev]);
+    setForm({ fullName: "", phone: "", birthDate: "", startDate: "", trainingType: "אישי", status: "פעיל", mainGoal: "", successMetric: "", notes: "" });
+    setFormError("");
+    setShowForm(false);
+  }
+
+  function handleStatusChange(id, newStatus) {
+    setTrainees((prev) => prev.map((t) => t.id === id ? { ...t, status: newStatus } : t));
+  }
+
+  function handleDelete(id) {
+    if (window.confirm("למחוק מתאמן זה?")) {
+      setTrainees((prev) => prev.filter((t) => t.id !== id));
+    }
+  }
+
+  function waLink(phone) {
+    return "https://wa.me/" + phone.replace(/\D/g, "");
+  }
+
+  function trainingYears(startDate) {
+    if (!startDate) return 0;
+    const start = new Date(startDate);
+    const now = new Date();
+    let years = now.getFullYear() - start.getFullYear();
+    const m = now.getMonth() - start.getMonth();
+    if (m < 0 || (m === 0 && now.getDate() < start.getDate())) years--;
+    return years;
+  }
+
+  const kpiActive = trainees.filter((t) => t.status === "פעיל").length;
+  const kpiOnline = trainees.filter((t) => t.trainingType === "אונליין").length;
+  const kpiPersonal = trainees.filter((t) => t.trainingType === "אישי").length;
+  const kpiFollowUp = trainees.filter((t) => t.status === "דורש מעקב").length;
+
+  const filteredTrainees = filter === "פעילים"
+    ? trainees.filter((t) => t.status === "פעיל")
+    : filter === "מעקב"
+    ? trainees.filter((t) => t.status === "דורש מעקב")
+    : trainees;
+
+  const statusOptions = ["פעיל", "בהקפאה", "דורש מעקב", "הסתיים"];
+  const trainingTypeOptions = ["אישי", "אונליין", "קבוצתי"];
+
+  const inp = {
+    width: "100%",
+    padding: "8px 10px",
+    borderRadius: 8,
+    border: "0.5px solid #EDEBE6",
+    fontSize: 14,
+    boxSizing: "border-box",
+    background: "#FAF8F5",
+  };
+
+  const pillStyle = (active) => ({
+    fontSize: 13,
+    padding: "6px 14px",
+    borderRadius: 20,
+    cursor: "pointer",
+    background: active ? "#F9F0F2" : "#fff",
+    color: active ? "#7C2D3E" : "#615E57",
+    fontWeight: active ? 600 : 400,
+  });
+
   return (
     <div>
-      <div style={{ marginBottom: 20 }}>
-        <h2 style={{ margin: 0, fontSize: 20, color: "#1E1C19" }}>מתאמנים</h2>
-        <p style={{ margin: "4px 0 0", fontSize: 13, color: "#9E9A90" }}>ניהול מתאמנים, סטטוס ותוכניות</p>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+        <div>
+          <h2 style={{ margin: 0, fontSize: 20, color: "#1E1C19" }}>מתאמנים</h2>
+          <p style={{ margin: "4px 0 0", fontSize: 13, color: "#9E9A90" }}>ניהול מתאמנים, סטטוס ותוכניות</p>
+        </div>
+        <button onClick={() => { setShowForm(true); setFormError(""); }} style={{ fontSize: 13, padding: "8px 16px", borderRadius: 8, border: "none", background: "#7C2D3E", color: "#fff", cursor: "pointer" }}>+ הוסף מתאמן</button>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16, marginBottom: 24 }}>
         <div style={{ background: "#fff", borderRadius: 10, border: "0.5px solid #EDEBE6", padding: 16 }}>
           <div style={{ fontSize: 11, textTransform: "uppercase", color: "#9E9A90", marginBottom: 6 }}>מתאמנים פעילים</div>
-          <div style={{ fontSize: 28, fontWeight: 700 }}>—</div>
+          <div style={{ fontSize: 28, fontWeight: 700 }}>{kpiActive}</div>
         </div>
         <div style={{ background: "#fff", borderRadius: 10, border: "0.5px solid #EDEBE6", padding: 16 }}>
           <div style={{ fontSize: 11, textTransform: "uppercase", color: "#9E9A90", marginBottom: 6 }}>אונליין / פרונטלי</div>
-          <div style={{ fontSize: 28, fontWeight: 700 }}>—</div>
+          <div style={{ fontSize: 20, fontWeight: 700 }}>{kpiOnline} אונליין / {kpiPersonal} אישי</div>
         </div>
         <div style={{ background: "#fff", borderRadius: 10, border: "0.5px solid #EDEBE6", padding: 16 }}>
           <div style={{ fontSize: 11, textTransform: "uppercase", color: "#9E9A90", marginBottom: 6 }}>דורשים מעקב</div>
-          <div style={{ fontSize: 28, fontWeight: 700 }}>—</div>
+          <div style={{ fontSize: 28, fontWeight: 700 }}>{kpiFollowUp}</div>
         </div>
       </div>
+      {showForm && (
+        <div style={{ background: "#fff", borderRadius: 12, border: "0.5px solid #EDEBE6", padding: 20, marginBottom: 16 }}>
+          <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 16 }}>הוספת מתאמן חדש</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+            <div>
+              <div style={{ fontSize: 12, color: "#9E9A90", marginBottom: 4 }}>שם מלא *</div>
+              <input value={form.fullName} onChange={(e) => handleField("fullName", e.target.value)} style={inp} placeholder="שם מלא" />
+            </div>
+            <div>
+              <div style={{ fontSize: 12, color: "#9E9A90", marginBottom: 4 }}>טלפון *</div>
+              <input value={form.phone} onChange={(e) => handleField("phone", e.target.value)} style={inp} placeholder="05X-XXXXXXX" />
+            </div>
+            <div>
+              <div style={{ fontSize: 12, color: "#9E9A90", marginBottom: 4 }}>תאריך לידה</div>
+              <input type="date" value={form.birthDate} onChange={(e) => handleField("birthDate", e.target.value)} style={inp} />
+            </div>
+            <div>
+              <div style={{ fontSize: 12, color: "#9E9A90", marginBottom: 4 }}>תאריך התחלה *</div>
+              <input type="date" value={form.startDate} onChange={(e) => handleField("startDate", e.target.value)} style={inp} />
+            </div>
+            <div>
+              <div style={{ fontSize: 12, color: "#9E9A90", marginBottom: 4 }}>סוג אימון</div>
+              <select value={form.trainingType} onChange={(e) => handleField("trainingType", e.target.value)} style={inp}>
+                {trainingTypeOptions.map((o) => <option key={o}>{o}</option>)}
+              </select>
+            </div>
+            <div>
+              <div style={{ fontSize: 12, color: "#9E9A90", marginBottom: 4 }}>סטטוס</div>
+              <select value={form.status} onChange={(e) => handleField("status", e.target.value)} style={inp}>
+                {statusOptions.map((o) => <option key={o}>{o}</option>)}
+              </select>
+            </div>
+          </div>
+          <div style={{ marginBottom: 12 }}>
+            <div style={{ fontSize: 12, color: "#9E9A90", marginBottom: 4 }}>יעד מרכזי *</div>
+            <input value={form.mainGoal} onChange={(e) => handleField("mainGoal", e.target.value)} style={inp} placeholder="יעד מרכזי" />
+          </div>
+          <div style={{ marginBottom: 12 }}>
+            <div style={{ fontSize: 12, color: "#9E9A90", marginBottom: 4 }}>מדד הצלחה</div>
+            <input value={form.successMetric} onChange={(e) => handleField("successMetric", e.target.value)} style={inp} placeholder="מדד הצלחה" />
+          </div>
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ fontSize: 12, color: "#9E9A90", marginBottom: 4 }}>הערות</div>
+            <textarea value={form.notes} onChange={(e) => handleField("notes", e.target.value)} style={{ ...inp, height: 72, resize: "vertical" }} placeholder="הערות נוספות" />
+          </div>
+          {formError && <div style={{ fontSize: 13, color: "#C0392B", marginBottom: 12 }}>{formError}</div>}
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={handleSave} style={{ fontSize: 13, padding: "8px 20px", borderRadius: 8, border: "none", background: "#7C2D3E", color: "#fff", cursor: "pointer" }}>שמור מתאמן</button>
+            <button onClick={() => { setShowForm(false); setFormError(""); }} style={{ fontSize: 13, padding: "8px 16px", borderRadius: 8, border: "0.5px solid #EDEBE6", background: "#fff", color: "#615E57", cursor: "pointer" }}>ביטול</button>
+          </div>
+        </div>
+      )}
       <div style={{ background: "#fff", borderRadius: 12, border: "0.5px solid #EDEBE6", padding: 20 }}>
         <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-          <div style={{ fontSize: 13, padding: "6px 14px", borderRadius: 20, background: "#F9F0F2", color: "#7C2D3E", fontWeight: 600 }}>הכל</div>
-          <div style={{ fontSize: 13, padding: "6px 14px", borderRadius: 20, color: "#615E57" }}>פעילים</div>
-          <div style={{ fontSize: 13, padding: "6px 14px", borderRadius: 20, color: "#615E57" }}>מעקב</div>
+          <div onClick={() => setFilter("הכל")} style={pillStyle(filter === "הכל")}>הכל</div>
+          <div onClick={() => setFilter("פעילים")} style={pillStyle(filter === "פעילים")}>פעילים</div>
+          <div onClick={() => setFilter("מעקב")} style={pillStyle(filter === "מעקב")}>מעקב</div>
         </div>
-        <div style={{ fontSize: 14, color: "#9E9A90", textAlign: "center", padding: "24px 0" }}>אין מתאמנים להצגה עדיין</div>
+        {filteredTrainees.length === 0 ? (
+          <div style={{ fontSize: 14, color: "#9E9A90", textAlign: "center", padding: "24px 0" }}>אין מתאמנים להצגה עדיין</div>
+        ) : (
+          filteredTrainees.map((t) => {
+            const years = trainingYears(t.startDate);
+            return (
+              <div key={t.id} style={{ padding: "12px 0", borderBottom: "0.5px solid #EDEBE6" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+                  <div>
+                    <div style={{ fontWeight: 600, fontSize: 14 }}>{t.fullName}</div>
+                    <div style={{ fontSize: 12, color: "#9E9A90" }}>{t.phone} · {t.trainingType} · התחיל {t.startDate}</div>
+                  </div>
+                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                    <select value={t.status} onChange={(e) => handleStatusChange(t.id, e.target.value)} style={{ fontSize: 12, padding: "4px 8px", borderRadius: 6, border: "0.5px solid #EDEBE6", background: "#FAF8F5", cursor: "pointer" }}>
+                      {statusOptions.map((o) => <option key={o}>{o}</option>)}
+                    </select>
+                    <a href={waLink(t.phone)} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: "#25D366", textDecoration: "none" }}>WA</a>
+                    <button onClick={() => handleDelete(t.id)} style={{ fontSize: 12, padding: "4px 8px", borderRadius: 6, border: "none", background: "#FAF8F5", color: "#C0392B", cursor: "pointer" }}>מחק</button>
+                  </div>
+                </div>
+                <div style={{ fontSize: 12, color: "#615E57", marginBottom: 2 }}>יעד: {t.mainGoal}</div>
+                {t.successMetric && <div style={{ fontSize: 12, color: "#9E9A90" }}>מדד: {t.successMetric}</div>}
+                {t.notes && <div style={{ fontSize: 12, color: "#9E9A90", marginTop: 2 }}>{t.notes}</div>}
+                {years >= 1 && (
+                  <div style={{ fontSize: 12, color: "#7C2D3E", marginTop: 4 }}>
+                    {years === 1 ? "השלימו שנת אימונים" : `השלימו ${years} שנות אימונים`}
+                  </div>
+                )}
+                <div style={{ fontSize: 11, color: "#C4C0B8", marginTop: 4 }}>נוסף: {t.createdAt}</div>
+              </div>
+            );
+          })
+        )}
       </div>
     </div>
   );

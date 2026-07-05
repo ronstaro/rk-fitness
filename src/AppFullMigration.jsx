@@ -1,4 +1,4 @@
-﻿import { useState } from "react";
+﻿import { useEffect, useState } from "react";
 
 function Screen({ title }) {
   return (
@@ -44,6 +44,98 @@ function Dashboard() {
 
 
 function Leads() {
+  const STORAGE_KEY = "rk-fitness-leads";
+
+  function loadLeads() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+
+  const [leads, setLeads] = useState(loadLeads);
+  const [showForm, setShowForm] = useState(false);
+  const [formError, setFormError] = useState("");
+  const [form, setForm] = useState({
+    fullName: "",
+    phone: "",
+    source: "המלצה מחבר",
+    customSource: "",
+    status: "חדש",
+    followUpDate: "",
+    notes: "",
+  });
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(leads));
+  }, [leads]);
+
+  function handleField(key, value) {
+    setForm((f) => ({ ...f, [key]: value }));
+  }
+
+  function handleSave() {
+    const name = form.fullName.trim();
+    const phone = form.phone.trim();
+    if (!name || !phone) {
+      setFormError("שם מלא וטלפון הם שדות חובה");
+      return;
+    }
+    const lead = {
+      id: Date.now().toString(),
+      fullName: name,
+      phone,
+      source: form.source,
+      customSource: form.source === "אחר" ? form.customSource.trim() : "",
+      status: form.status,
+      followUpDate: form.followUpDate,
+      notes: form.notes.trim(),
+      createdAt: new Date().toLocaleDateString("he-IL"),
+    };
+    setLeads((prev) => [lead, ...prev]);
+    setForm({ fullName: "", phone: "", source: "המלצה מחבר", customSource: "", status: "חדש", followUpDate: "", notes: "" });
+    setFormError("");
+    setShowForm(false);
+  }
+
+  function handleStatusChange(id, newStatus) {
+    setLeads((prev) => prev.map((l) => l.id === id ? { ...l, status: newStatus } : l));
+  }
+
+  function handleDelete(id) {
+    if (window.confirm("למחוק ליד זה?")) {
+      setLeads((prev) => prev.filter((l) => l.id !== id));
+    }
+  }
+
+  function waLink(phone) {
+    return "https://wa.me/" + phone.replace(/\D/g, "");
+  }
+
+  const kpiNew = leads.filter((l) => l.status === "חדש").length;
+  const kpiFollowUp = leads.filter((l) => l.status === "מעקב").length;
+  const kpiConverted = leads.filter((l) => l.status === "הומר למתאמן").length;
+
+  const reminders = leads
+    .filter((l) => l.followUpDate && l.status !== "הומר למתאמן" && l.status !== "לא רלוונטי")
+    .sort((a, b) => a.followUpDate.localeCompare(b.followUpDate));
+
+  const statusOptions = ["חדש", "נוצר קשר", "מעקב", "הומר למתאמן", "לא רלוונטי"];
+  const sourceOptions = ["המלצה מחבר", "Instagram", "Facebook", "אחר"];
+
+  const inp = {
+    width: "100%",
+    padding: "8px 10px",
+    borderRadius: 8,
+    border: "0.5px solid #EDEBE6",
+    fontSize: 14,
+    boxSizing: "border-box",
+    background: "#FAF8F5",
+  };
+
   return (
     <div>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
@@ -51,29 +143,110 @@ function Leads() {
           <h2 style={{ margin: 0, fontSize: 20, color: "#1E1C19" }}>לידים</h2>
           <p style={{ margin: "4px 0 0", fontSize: 13, color: "#9E9A90" }}>ניהול פניות ומעקב</p>
         </div>
-        <button style={{ fontSize: 13, padding: "8px 16px", borderRadius: 8, border: "none", background: "#7C2D3E", color: "#fff", cursor: "pointer" }}>+ הוסף ליד</button>
+        <button onClick={() => { setShowForm(true); setFormError(""); }} style={{ fontSize: 13, padding: "8px 16px", borderRadius: 8, border: "none", background: "#7C2D3E", color: "#fff", cursor: "pointer" }}>+ הוסף ליד</button>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16, marginBottom: 24 }}>
         <div style={{ background: "#fff", borderRadius: 10, border: "0.5px solid #EDEBE6", padding: 16 }}>
           <div style={{ fontSize: 11, textTransform: "uppercase", color: "#9E9A90", marginBottom: 6 }}>לידים חדשים</div>
-          <div style={{ fontSize: 28, fontWeight: 700 }}>—</div>
+          <div style={{ fontSize: 28, fontWeight: 700 }}>{kpiNew}</div>
         </div>
         <div style={{ background: "#fff", borderRadius: 10, border: "0.5px solid #EDEBE6", padding: 16 }}>
           <div style={{ fontSize: 11, textTransform: "uppercase", color: "#9E9A90", marginBottom: 6 }}>למעקב</div>
-          <div style={{ fontSize: 28, fontWeight: 700 }}>—</div>
+          <div style={{ fontSize: 28, fontWeight: 700 }}>{kpiFollowUp}</div>
         </div>
         <div style={{ background: "#fff", borderRadius: 10, border: "0.5px solid #EDEBE6", padding: 16 }}>
           <div style={{ fontSize: 11, textTransform: "uppercase", color: "#9E9A90", marginBottom: 6 }}>הומרו למתאמנים</div>
-          <div style={{ fontSize: 28, fontWeight: 700 }}>—</div>
+          <div style={{ fontSize: 28, fontWeight: 700 }}>{kpiConverted}</div>
         </div>
       </div>
+      {showForm && (
+        <div style={{ background: "#fff", borderRadius: 12, border: "0.5px solid #EDEBE6", padding: 20, marginBottom: 16 }}>
+          <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 16 }}>הוספת ליד חדש</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+            <div>
+              <div style={{ fontSize: 12, color: "#9E9A90", marginBottom: 4 }}>שם מלא *</div>
+              <input value={form.fullName} onChange={(e) => handleField("fullName", e.target.value)} style={inp} placeholder="שם מלא" />
+            </div>
+            <div>
+              <div style={{ fontSize: 12, color: "#9E9A90", marginBottom: 4 }}>טלפון *</div>
+              <input value={form.phone} onChange={(e) => handleField("phone", e.target.value)} style={inp} placeholder="05X-XXXXXXX" />
+            </div>
+            <div>
+              <div style={{ fontSize: 12, color: "#9E9A90", marginBottom: 4 }}>מקור הגעה</div>
+              <select value={form.source} onChange={(e) => handleField("source", e.target.value)} style={inp}>
+                {sourceOptions.map((o) => <option key={o}>{o}</option>)}
+              </select>
+            </div>
+            <div>
+              <div style={{ fontSize: 12, color: "#9E9A90", marginBottom: 4 }}>סטטוס</div>
+              <select value={form.status} onChange={(e) => handleField("status", e.target.value)} style={inp}>
+                {statusOptions.map((o) => <option key={o}>{o}</option>)}
+              </select>
+            </div>
+          </div>
+          {form.source === "אחר" && (
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ fontSize: 12, color: "#9E9A90", marginBottom: 4 }}>פרט מקור אחר</div>
+              <input value={form.customSource} onChange={(e) => handleField("customSource", e.target.value)} style={inp} placeholder="מקור הגעה" />
+            </div>
+          )}
+          <div style={{ marginBottom: 12 }}>
+            <div style={{ fontSize: 12, color: "#9E9A90", marginBottom: 4 }}>תאריך מעקב</div>
+            <input type="date" value={form.followUpDate} onChange={(e) => handleField("followUpDate", e.target.value)} style={inp} />
+          </div>
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ fontSize: 12, color: "#9E9A90", marginBottom: 4 }}>הערות</div>
+            <textarea value={form.notes} onChange={(e) => handleField("notes", e.target.value)} style={{ ...inp, height: 72, resize: "vertical" }} placeholder="הערות נוספות" />
+          </div>
+          {formError && <div style={{ fontSize: 13, color: "#C0392B", marginBottom: 12 }}>{formError}</div>}
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={handleSave} style={{ fontSize: 13, padding: "8px 20px", borderRadius: 8, border: "none", background: "#7C2D3E", color: "#fff", cursor: "pointer" }}>שמור ליד</button>
+            <button onClick={() => { setShowForm(false); setFormError(""); }} style={{ fontSize: 13, padding: "8px 16px", borderRadius: 8, border: "0.5px solid #EDEBE6", background: "#fff", color: "#615E57", cursor: "pointer" }}>ביטול</button>
+          </div>
+        </div>
+      )}
       <div style={{ background: "#fff", borderRadius: 12, border: "0.5px solid #EDEBE6", padding: 20, marginBottom: 16 }}>
         <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 12 }}>רשימת לידים</div>
-        <div style={{ fontSize: 14, color: "#9E9A90", textAlign: "center", padding: "24px 0" }}>כאן יוצגו לידים לאחר חיבור נתונים</div>
+        {leads.length === 0 ? (
+          <div style={{ fontSize: 14, color: "#9E9A90", textAlign: "center", padding: "24px 0" }}>כאן יוצגו לידים לאחר חיבור נתונים</div>
+        ) : (
+          leads.map((lead) => (
+            <div key={lead.id} style={{ padding: "12px 0", borderBottom: "0.5px solid #EDEBE6" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+                <div>
+                  <div style={{ fontWeight: 600, fontSize: 14 }}>{lead.fullName}</div>
+                  <div style={{ fontSize: 12, color: "#9E9A90" }}>{lead.phone} · {lead.source === "אחר" && lead.customSource ? lead.customSource : lead.source}</div>
+                </div>
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <select value={lead.status} onChange={(e) => handleStatusChange(lead.id, e.target.value)} style={{ fontSize: 12, padding: "4px 8px", borderRadius: 6, border: "0.5px solid #EDEBE6", background: "#FAF8F5", cursor: "pointer" }}>
+                    {statusOptions.map((o) => <option key={o}>{o}</option>)}
+                  </select>
+                  <a href={waLink(lead.phone)} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: "#25D366", textDecoration: "none" }}>WA</a>
+                  <button onClick={() => handleDelete(lead.id)} style={{ fontSize: 12, padding: "4px 8px", borderRadius: 6, border: "none", background: "#FAF8F5", color: "#C0392B", cursor: "pointer" }}>מחק</button>
+                </div>
+              </div>
+              {lead.followUpDate && <div style={{ fontSize: 12, color: "#7C2D3E" }}>מעקב: {lead.followUpDate}</div>}
+              {lead.notes && <div style={{ fontSize: 12, color: "#9E9A90", marginTop: 2 }}>{lead.notes}</div>}
+              <div style={{ fontSize: 11, color: "#C4C0B8", marginTop: 4 }}>נוסף: {lead.createdAt}</div>
+            </div>
+          ))
+        )}
       </div>
       <div style={{ background: "#fff", borderRadius: 12, border: "0.5px solid #EDEBE6", padding: 20 }}>
         <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 8 }}>תזכורות מעקב</div>
-        <div style={{ fontSize: 14, color: "#9E9A90" }}>כאן יוצגו תזכורות מעקב לאחר חיבור נתונים</div>
+        {reminders.length === 0 ? (
+          <div style={{ fontSize: 14, color: "#9E9A90" }}>אין תזכורות מעקב פעילות</div>
+        ) : (
+          reminders.map((lead) => (
+            <div key={lead.id} style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: "0.5px solid #EDEBE6" }}>
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 500 }}>{lead.fullName}</div>
+                <div style={{ fontSize: 12, color: "#9E9A90" }}>{lead.status}</div>
+              </div>
+              <div style={{ fontSize: 13, color: "#7C2D3E" }}>{lead.followUpDate}</div>
+            </div>
+          ))
+        )}
       </div>
     </div>
   );

@@ -1102,66 +1102,158 @@ function Settings() {
 }
 
 
-export default function AppFullMigration() {
+const VIEW_TITLES = {
+  dashboard:      "לוח בקרה",
+  leads:          "לידים",
+  trainees:       "מתאמנים",
+  reviews:        "סקירות אימונים",
+  schedule:       "לוח זמנים",
+  revenue:        "הכנסות",
+  settings:       "הגדרות",
+  "trainee-home": "בית",
+  workout:        "האימון שלי",
+  progress:       "ההתקדמות שלי",
+};
+
+const ADMIN_GROUPS = [
+  {
+    label: "מרכז פיקוד",
+    items: [
+      { id: "dashboard", icon: "📊", label: "לוח בקרה" },
+    ],
+  },
+  {
+    label: "ניהול",
+    items: [
+      { id: "leads",    icon: "👥", label: "לידים" },
+      { id: "trainees", icon: "💪", label: "מתאמנים" },
+      { id: null,       icon: "📈", label: "התקדמות מתאמנים", disabled: true },
+      { id: "reviews",  icon: "📋", label: "סקירות אימונים" },
+      { id: null,       icon: "📝", label: "תוכניות אימון",   disabled: true },
+    ],
+  },
+  {
+    label: 'פיננסי ולו"ז',
+    items: [
+      { id: "schedule", icon: "📅", label: "לוח זמנים" },
+      { id: "revenue",  icon: "💰", label: "הכנסות" },
+    ],
+  },
+  {
+    label: "כללי",
+    items: [
+      { id: null,       icon: "🔔", label: "התראות", disabled: true },
+      { id: "settings", icon: "⚙️",  label: "הגדרות" },
+    ],
+  },
+];
+
+const TRAINEE_GROUPS = [
+  {
+    label: "תפריט",
+    items: [
+      { id: "trainee-home", icon: "🏠", label: "בית" },
+      { id: "workout",      icon: "🏋️",  label: "האימון שלי" },
+      { id: "progress",     icon: "📈", label: "ההתקדמות שלי" },
+    ],
+  },
+];
+
+function NavItem({ item, active, onClick }) {
+  if (item.disabled) {
+    return (
+      <div className="slink" style={{ opacity: 0.38, cursor: "default", pointerEvents: "none" }}>
+        <span style={{ fontSize: 15 }}>{item.icon}</span>
+        <span>{item.label}</span>
+        <span style={{ marginRight: "auto", fontSize: 10, color: "#9E9A90", background: "#F7F6F3", padding: "2px 7px", borderRadius: 8, border: "0.5px solid #EDEBE6" }}>בקרוב</span>
+      </div>
+    );
+  }
+  return (
+    <div className={`slink${active ? " active" : ""}`} onClick={onClick}>
+      <span style={{ fontSize: 15 }}>{item.icon}</span>
+      <span>{item.label}</span>
+    </div>
+  );
+}
+
+export default function AppFullMigration({ onLogout, signingOut = false, signOutError = "" }) {
   const [view, setView] = useState("dashboard");
   const [role, setRole] = useState("admin");
+
   function toggleRole() {
     const next = role === "admin" ? "trainee" : "admin";
     setRole(next);
     setView(next === "admin" ? "dashboard" : "trainee-home");
   }
-  const n = { padding: "9px 16px", margin: "2px 8px", borderRadius: 8, cursor: "pointer", color: "#615E57" };
-  const a = { background: "#F9F0F2", color: "#7C2D3E", fontWeight: 600 };
-  const s = (id) => view === id ? { ...n, ...a } : n;
-  const adminNav = [
-    ["dashboard", "לוח בקרה"],
-    ["leads", "לידים"],
-    ["trainees", "מתאמנים"],
-    ["reviews", "סקירות"],
-    ["schedule", "לוח זמנים"],
-    ["revenue", "הכנסות"],
-    ["settings", "הגדרות"],
-  ];
-  const traineeNav = [
-    ["trainee-home", "בית"],
-    ["workout", "אימון"],
-    ["progress", "התקדמות"],
-  ];
-  const navItems = role === "admin" ? adminNav : traineeNav;
-  const viewTitles = Object.fromEntries([...adminNav, ...traineeNav]);
+
+  const groups = role === "admin" ? ADMIN_GROUPS : TRAINEE_GROUPS;
+
   return (
-    <div dir="rtl" style={{ display: "flex", height: "100vh", fontFamily: "sans-serif", background: "#FAF8F5" }}>
-      <div style={{ width: 210, background: "#fff", borderLeft: "0.5px solid #EDEBE6", display: "flex", flexDirection: "column" }}>
-        <div style={{ padding: "20px 16px", fontSize: 18, fontWeight: 700, color: "#7C2D3E", borderBottom: "0.5px solid #EDEBE6" }}>R.K Fitness</div>
-        <div style={{ padding: "8px 0", flex: 1 }}>
-          {navItems.map(([id, label]) => (
-            <div key={id} onClick={() => setView(id)} style={s(id)}>{label}</div>
+    <div className="app" dir="rtl">
+
+      {/* Sidebar */}
+      <div className="sidebar">
+        <div className="sidebar-brand">
+          <div className="sidebar-logo">R.K Fitness</div>
+          <div className="sidebar-sub">RONI KALISKER</div>
+        </div>
+
+        <div style={{ flex: 1, overflowY: "auto", paddingBottom: 8 }}>
+          {groups.map(group => (
+            <div key={group.label}>
+              <div className="sidebar-section">{group.label}</div>
+              {group.items.map(item => (
+                <NavItem
+                  key={item.label}
+                  item={item}
+                  active={view === item.id}
+                  onClick={item.disabled ? undefined : () => setView(item.id)}
+                />
+              ))}
+            </div>
           ))}
         </div>
-      </div>
-      <div style={{ flex: 1, overflow: "auto", display: "flex", flexDirection: "column" }}>
-        <div style={{ height: 56, background: "#fff", borderBottom: "0.5px solid #EDEBE6", display: "flex", alignItems: "center", padding: "0 24px", justifyContent: "space-between" }}>
-          <b style={{ fontSize: 16 }}>{viewTitles[view] || view}</b>
-          <button onClick={toggleRole} style={{ fontSize: 12, padding: "5px 12px", borderRadius: 20, border: "1.5px solid #7C2D3E", background: "transparent", color: "#7C2D3E", cursor: "pointer" }}>
-            {role === "admin" ? "מעבר למתאמן" : "מעבר למנהלת"}
+
+        <div className="sidebar-bottom">
+          <button className="nav-role-btn" style={{ width: "100%" }} onClick={toggleRole}>
+            {role === "admin" ? "מעבר לתצוגת מתאמן" : "מעבר לתצוגת מנהל"}
           </button>
         </div>
-        <div style={{ flex: 1, overflow: "auto", padding: 24 }}>
-          {view === "dashboard" && <Dashboard />}
-          {view === "leads" && <Leads />}
-          {view === "trainees" && <Trainees />}
-          {view === "reviews" && <Reviews />}
-          {view === "schedule" && <Schedule />}
-          {view === "revenue" && <Revenue />}
-          {view === "settings" && <Settings />}
+      </div>
+
+      {/* Main */}
+      <div className="main">
+        <div className="topbar">
+          <span className="topbar-title">{VIEW_TITLES[view] || view}</span>
+          <div className="topbar-right">
+            <button className="btn btn-ghost btn-sm">EN</button>
+            <button className="btn btn-ghost btn-sm">🔔</button>
+            {signOutError && (
+              <span style={{ fontSize: 12, color: "#991B1B" }}>{signOutError}</span>
+            )}
+            {onLogout && (
+              <button onClick={onLogout} disabled={signingOut} className="btn btn-outline btn-sm">
+                {signingOut ? "מתנתק..." : "התנתקות"}
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="page">
+          {view === "dashboard"    && <Dashboard />}
+          {view === "leads"        && <Leads />}
+          {view === "trainees"     && <Trainees />}
+          {view === "reviews"      && <Reviews />}
+          {view === "schedule"     && <Schedule />}
+          {view === "revenue"      && <Revenue />}
+          {view === "settings"     && <Settings />}
           {view === "trainee-home" && <TraineeHome />}
-          {view === "workout" && <Workout />}
-          {view === "progress" && <Progress />}
+          {view === "workout"      && <Workout />}
+          {view === "progress"     && <Progress />}
         </div>
       </div>
+
     </div>
   );
 }
-
-
-

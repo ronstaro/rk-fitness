@@ -1,4 +1,5 @@
 ﻿import { useEffect, useState } from "react";
+import { fetchLeads, createLead, updateLeadStatus, deleteLead } from "./services/leadsService.js";
 
 function Screen({ title }) {
   return (
@@ -44,19 +45,9 @@ function Dashboard() {
 
 
 function Leads() {
-  const STORAGE_KEY = "rk-fitness-leads";
-
-  function loadLeads() {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      const parsed = JSON.parse(raw);
-      return Array.isArray(parsed) ? parsed : [];
-    } catch {
-      return [];
-    }
-  }
-
-  const [leads, setLeads] = useState(loadLeads);
+  const [leads, setLeads] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [formError, setFormError] = useState("");
   const [form, setForm] = useState({
@@ -68,46 +59,143 @@ function Leads() {
     followUpDate: "",
     notes: "",
   });
+  const [saving, setSaving] = useState(false);
+  const [rowActionId, setRowActionId] = useState(null);
+  const [rowError, setRowError] = useState("");
+
+  async function handleRetry() {
+    setLoading(true);
+    setLoadError("");
+
+    try {
+      const data = await fetchLeads();
+      setLeads(data);
+    } catch (err) {
+      console.error("Leads fetch error:", err);
+      setLoadError("לא ניתן לטעון את הלידים כרגע.");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(leads));
-  }, [leads]);
+    let active = true;
+
+    async function load() {
+      try {
+        const data = await fetchLeads();
+        if (active) {
+          setLeads(data);
+          setLoadError("");
+        }
+      } catch (err) {
+        console.error("Leads fetch error:", err);
+        if (active) {
+          setLoadError("לא ניתן לטעון את הלידים כרגע.");
+        }
+      } finally {
+        if (active) {
+          setLoading(false);
+        }
+      }
+    }
+
+    load();
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   function handleField(key, value) {
     setForm((f) => ({ ...f, [key]: value }));
   }
 
-  function handleSave() {
+  async function handleSave() {
+    if (saving) return;
+
     const name = form.fullName.trim();
     const phone = form.phone.trim();
+
     if (!name || !phone) {
       setFormError("שם מלא וטלפון הם שדות חובה");
       return;
     }
-    const lead = {
-      id: Date.now().toString(),
-      fullName: name,
-      phone,
-      source: form.source,
-      customSource: form.source === "אחר" ? form.customSource.trim() : "",
-      status: form.status,
-      followUpDate: form.followUpDate,
-      notes: form.notes.trim(),
-      createdAt: new Date().toLocaleDateString("he-IL"),
-    };
-    setLeads((prev) => [lead, ...prev]);
-    setForm({ fullName: "", phone: "", source: "המלצה מחבר", customSource: "", status: "חדש", followUpDate: "", notes: "" });
+
+    setSaving(true);
     setFormError("");
-    setShowForm(false);
+
+    try {
+      const row = await createLead({
+        full_name: name,
+        phone,
+        source: form.source,
+        custom_source:
+          form.source === "אחר"
+            ? form.customSource.trim() || null
+            : null,
+        status: form.status,
+        follow_up_date: form.followUpDate || null,
+        notes: form.notes.trim() || null,
+      });
+
+      setLeads((prev) => [row, ...prev]);
+      setForm({
+        fullName: "",
+        phone: "",
+        source: "המלצה מחבר",
+        customSource: "",
+        status: "חדש",
+        followUpDate: "",
+        notes: "",
+      });
+      setShowForm(false);
+    } catch (err) {
+      console.error("Lead create error:", err);
+      setFormError("לא ניתן לשמור את הליד. נסה שוב.");
+    } finally {
+      setSaving(false);
+    }
   }
 
-  function handleStatusChange(id, newStatus) {
-    setLeads((prev) => prev.map((l) => l.id === id ? { ...l, status: newStatus } : l));
+  async function handleStatusChange(id, newStatus) {
+    if (rowActionId) return;
+
+    setRowActionId(id);
+    setRowError("");
+
+    try {
+      const updated = await updateLeadStatus(id, newStatus);
+
+      setLeads((prev) =>
+        prev.map((lead) => (lead.id === id ? updated : lead))
+      );
+    } catch (err) {
+      console.error("Lead status update error:", err);
+      setRowError("לא ניתן לעדכן את הסטטוס.");
+    } finally {
+      setRowActionId(null);
+    }
   }
 
-  function handleDelete(id) {
-    if (window.confirm("למחוק ליד זה?")) {
-      setLeads((prev) => prev.filter((l) => l.id !== id));
+  async function handleDelete(id) {
+    if (rowActionId) return;
+
+    if (!window.confirm("למחוק ליד זה?")) {
+      return;
+    }
+
+    setRowActionId(id);
+    setRowError("");
+
+    try {
+      await deleteLead(id);
+      setLeads((prev) => prev.filter((lead) => lead.id !== id));
+    } catch (err) {
+      console.error("Lead delete error:", err);
+      setRowError("לא ניתן למחוק את הליד.");
+    } finally {
+      setRowActionId(null);
     }
   }
 
@@ -120,8 +208,8 @@ function Leads() {
   const kpiConverted = leads.filter((l) => l.status === "הומר למתאמן").length;
 
   const reminders = leads
-    .filter((l) => l.followUpDate && l.status !== "הומר למתאמן" && l.status !== "לא רלוונטי")
-    .sort((a, b) => a.followUpDate.localeCompare(b.followUpDate));
+    .filter((l) => l.follow_up_date && l.status !== "הומר למתאמן" && l.status !== "לא רלוונטי")
+    .sort((a, b) => a.follow_up_date.localeCompare(b.follow_up_date));
 
   const statusOptions = ["חדש", "נוצר קשר", "מעקב", "הומר למתאמן", "לא רלוונטי"];
   const sourceOptions = ["המלצה מחבר", "Instagram", "Facebook", "אחר"];
@@ -135,6 +223,38 @@ function Leads() {
     boxSizing: "border-box",
     background: "#FAF8F5",
   };
+
+  if (loading) {
+    return (
+      <div style={{ textAlign: "center", padding: "40px 0", color: "#9E9A90" }}>
+        טוען לידים...
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div style={{ textAlign: "center", padding: "40px 0" }}>
+        <div style={{ color: "#C0392B", marginBottom: 12 }}>
+          {loadError}
+        </div>
+        <button
+          onClick={handleRetry}
+          style={{
+            fontSize: 13,
+            padding: "8px 16px",
+            borderRadius: 8,
+            border: "none",
+            background: "#7C2D3E",
+            color: "#fff",
+            cursor: "pointer",
+          }}
+        >
+          נסה שוב
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -200,36 +320,79 @@ function Leads() {
           </div>
           {formError && <div style={{ fontSize: 13, color: "#C0392B", marginBottom: 12 }}>{formError}</div>}
           <div style={{ display: "flex", gap: 8 }}>
-            <button onClick={handleSave} style={{ fontSize: 13, padding: "8px 20px", borderRadius: 8, border: "none", background: "#7C2D3E", color: "#fff", cursor: "pointer" }}>שמור ליד</button>
-            <button onClick={() => { setShowForm(false); setFormError(""); }} style={{ fontSize: 13, padding: "8px 16px", borderRadius: 8, border: "0.5px solid #EDEBE6", background: "#fff", color: "#615E57", cursor: "pointer" }}>ביטול</button>
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              style={{
+                fontSize: 13,
+                padding: "8px 20px",
+                borderRadius: 8,
+                border: "none",
+                background: saving ? "#9E9A90" : "#7C2D3E",
+                color: "#fff",
+                cursor: saving ? "not-allowed" : "pointer",
+              }}
+            >
+              {saving ? "שומר..." : "שמור ליד"}
+            </button>
+
+            <button
+              onClick={() => {
+                setShowForm(false);
+                setFormError("");
+              }}
+              disabled={saving}
+              style={{
+                fontSize: 13,
+                padding: "8px 16px",
+                borderRadius: 8,
+                border: "0.5px solid #EDEBE6",
+                background: "#fff",
+                color: "#615E57",
+                cursor: saving ? "not-allowed" : "pointer",
+              }}
+            >
+              ביטול
+            </button>
           </div>
         </div>
       )}
       <div style={{ background: "#fff", borderRadius: 12, border: "0.5px solid #EDEBE6", padding: 20, marginBottom: 16 }}>
         <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 12 }}>רשימת לידים</div>
+        {rowError && (
+          <div style={{ fontSize: 13, color: "#C0392B", marginBottom: 8 }}>
+            {rowError}
+          </div>
+        )}
         {leads.length === 0 ? (
-          <div style={{ fontSize: 14, color: "#9E9A90", textAlign: "center", padding: "24px 0" }}>כאן יוצגו לידים לאחר חיבור נתונים</div>
+          <div style={{ fontSize: 14, color: "#9E9A90", textAlign: "center", padding: "24px 0" }}>
+            אין לידים עדיין. הוסף ליד חדש.
+          </div>
         ) : (
-          leads.map((lead) => (
-            <div key={lead.id} style={{ padding: "12px 0", borderBottom: "0.5px solid #EDEBE6" }}>
+          leads.map((lead) => {
+            const busy = rowActionId === lead.id;
+
+            return (
+            <div key={lead.id} style={{ padding: "12px 0", borderBottom: "0.5px solid #EDEBE6", opacity: busy ? 0.65 : 1 }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
                 <div>
-                  <div style={{ fontWeight: 600, fontSize: 14 }}>{lead.fullName}</div>
-                  <div style={{ fontSize: 12, color: "#9E9A90" }}>{lead.phone} · {lead.source === "אחר" && lead.customSource ? lead.customSource : lead.source}</div>
+                  <div style={{ fontWeight: 600, fontSize: 14 }}>{lead.full_name}</div>
+                  <div style={{ fontSize: 12, color: "#9E9A90" }}>{lead.phone} · {lead.source === "אחר" && lead.custom_source ? lead.custom_source : lead.source}</div>
                 </div>
                 <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                  <select value={lead.status} onChange={(e) => handleStatusChange(lead.id, e.target.value)} style={{ fontSize: 12, padding: "4px 8px", borderRadius: 6, border: "0.5px solid #EDEBE6", background: "#FAF8F5", cursor: "pointer" }}>
+                  <select value={lead.status} onChange={(event) => handleStatusChange(lead.id, event.target.value)} disabled={busy} style={{ fontSize: 12, padding: "4px 8px", borderRadius: 6, border: "0.5px solid #EDEBE6", background: "#FAF8F5", cursor: "pointer" }}>
                     {statusOptions.map((o) => <option key={o}>{o}</option>)}
                   </select>
                   <a href={waLink(lead.phone)} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: "#25D366", textDecoration: "none" }}>WA</a>
-                  <button onClick={() => handleDelete(lead.id)} style={{ fontSize: 12, padding: "4px 8px", borderRadius: 6, border: "none", background: "#FAF8F5", color: "#C0392B", cursor: "pointer" }}>מחק</button>
+                  <button onClick={() => handleDelete(lead.id)} disabled={busy} style={{ fontSize: 12, padding: "4px 8px", borderRadius: 6, border: "none", background: "#FAF8F5", color: "#C0392B", cursor: "pointer" }}>מחק</button>
                 </div>
               </div>
-              {lead.followUpDate && <div style={{ fontSize: 12, color: "#7C2D3E" }}>מעקב: {lead.followUpDate}</div>}
+              {lead.follow_up_date && <div style={{ fontSize: 12, color: "#7C2D3E" }}>מעקב: {lead.follow_up_date}</div>}
               {lead.notes && <div style={{ fontSize: 12, color: "#9E9A90", marginTop: 2 }}>{lead.notes}</div>}
-              <div style={{ fontSize: 11, color: "#C4C0B8", marginTop: 4 }}>נוסף: {lead.createdAt}</div>
+              <div style={{ fontSize: 11, color: "#C4C0B8", marginTop: 4 }}>נוסף: {new Date(lead.created_at).toLocaleDateString("he-IL")}</div>
             </div>
-          ))
+            );
+          })
         )}
       </div>
       <div style={{ background: "#fff", borderRadius: 12, border: "0.5px solid #EDEBE6", padding: 20 }}>
@@ -240,10 +403,10 @@ function Leads() {
           reminders.map((lead) => (
             <div key={lead.id} style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: "0.5px solid #EDEBE6" }}>
               <div>
-                <div style={{ fontSize: 14, fontWeight: 500 }}>{lead.fullName}</div>
+                <div style={{ fontSize: 14, fontWeight: 500 }}>{lead.full_name}</div>
                 <div style={{ fontSize: 12, color: "#9E9A90" }}>{lead.status}</div>
               </div>
-              <div style={{ fontSize: 13, color: "#7C2D3E" }}>{lead.followUpDate}</div>
+              <div style={{ fontSize: 13, color: "#7C2D3E" }}>{lead.follow_up_date}</div>
             </div>
           ))
         )}

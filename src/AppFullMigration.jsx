@@ -1,5 +1,6 @@
 ﻿import { useEffect, useState } from "react";
 import { fetchLeads, createLead, updateLead, updateLeadStatus, deleteLead } from "./services/leadsService.js";
+import { fetchTrainees, createTrainee, updateTrainee, updateTraineeStatus, deleteTrainee } from "./services/traineesService.js";
 
 function Screen({ title }) {
   return (
@@ -456,17 +457,9 @@ function Leads() {
 function Trainees() {
   const STORAGE_KEY = "rk-fitness-trainees";
 
-  function loadTrainees() {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      const parsed = JSON.parse(raw);
-      return Array.isArray(parsed) ? parsed : [];
-    } catch {
-      return [];
-    }
-  }
-
-  const [trainees, setTrainees] = useState(loadTrainees);
+  const [trainees, setTrainees] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [formError, setFormError] = useState("");
   const [filter, setFilter] = useState("הכל");
@@ -482,16 +475,81 @@ function Trainees() {
     notes: "",
   });
   const [editingTraineeId, setEditingTraineeId] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [rowActionId, setRowActionId] = useState(null);
+  const [rowError, setRowError] = useState("");
+
+  async function handleRetry() {
+    setLoading(true);
+    setLoadError("");
+
+    try {
+      const data = await fetchTrainees();
+      setTrainees(data);
+    } catch (err) {
+      console.error("Trainees fetch error:", err);
+      setLoadError("לא ניתן לטעון את המתאמנים כרגע.");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(trainees));
+    let active = true;
+
+    async function load() {
+      try {
+        const data = await fetchTrainees();
+        if (active) {
+          setTrainees(data);
+          setLoadError("");
+        }
+      } catch (err) {
+        console.error("Trainees fetch error:", err);
+        if (active) {
+          setLoadError("לא ניתן לטעון את המתאמנים כרגע.");
+        }
+      } finally {
+        if (active) {
+          setLoading(false);
+        }
+      }
+    }
+
+    load();
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    // Temporary compatibility mirror: Schedule() still reads trainees from
+    // this localStorage key in the legacy camelCase shape. Remove this once
+    // Schedule is migrated to Supabase directly.
+    const legacyShape = trainees.map((t) => ({
+      id: t.id,
+      fullName: t.full_name,
+      phone: t.phone,
+      birthDate: t.birth_date,
+      startDate: t.start_date,
+      trainingType: t.training_type,
+      status: t.status,
+      mainGoal: t.main_goal,
+      successMetric: t.success_metric,
+      notes: t.notes,
+      createdAt: t.created_at,
+    }));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(legacyShape));
   }, [trainees]);
 
   function handleField(key, value) {
     setForm((f) => ({ ...f, [key]: value }));
   }
 
-  function handleSave() {
+  async function handleSave() {
+    if (saving) return;
+
     const fullName = form.fullName.trim();
     const phone = form.phone.trim();
     const startDate = form.startDate.trim();
@@ -501,72 +559,97 @@ function Trainees() {
       return;
     }
 
-    if (editingTraineeId) {
-      setTrainees((prev) =>
-        prev.map((t) =>
-          t.id === editingTraineeId
-            ? {
-                ...t,
-                fullName,
-                phone,
-                birthDate: form.birthDate,
-                startDate,
-                trainingType: form.trainingType,
-                status: form.status,
-                mainGoal,
-                successMetric: form.successMetric.trim(),
-                notes: form.notes.trim(),
-              }
-            : t
-        )
-      );
-    } else {
-      const trainee = {
-        id: Date.now().toString(),
-        fullName,
-        phone,
-        birthDate: form.birthDate,
-        startDate,
-        trainingType: form.trainingType,
-        status: form.status,
-        mainGoal,
-        successMetric: form.successMetric.trim(),
-        notes: form.notes.trim(),
-        createdAt: new Date().toLocaleDateString("he-IL"),
-      };
-      setTrainees((prev) => [trainee, ...prev]);
-    }
-
-    setForm({ fullName: "", phone: "", birthDate: "", startDate: "", trainingType: "אישי", status: "פעיל", mainGoal: "", successMetric: "", notes: "" });
+    setSaving(true);
     setFormError("");
-    setShowForm(false);
-    setEditingTraineeId(null);
+
+    const payload = {
+      full_name: fullName,
+      phone,
+      birth_date: form.birthDate || null,
+      start_date: startDate,
+      training_type: form.trainingType,
+      status: form.status,
+      main_goal: mainGoal,
+      success_metric: form.successMetric.trim() || null,
+      notes: form.notes.trim() || null,
+    };
+
+    try {
+      if (editingTraineeId) {
+        const row = await updateTrainee(editingTraineeId, payload);
+        setTrainees((prev) =>
+          prev.map((t) => (t.id === editingTraineeId ? row : t))
+        );
+      } else {
+        const row = await createTrainee(payload);
+        setTrainees((prev) => [row, ...prev]);
+      }
+
+      setForm({ fullName: "", phone: "", birthDate: "", startDate: "", trainingType: "אישי", status: "פעיל", mainGoal: "", successMetric: "", notes: "" });
+      setEditingTraineeId(null);
+      setShowForm(false);
+    } catch (err) {
+      console.error(editingTraineeId ? "Trainee update error:" : "Trainee create error:", err);
+      setFormError(editingTraineeId ? "לא ניתן לשמור את השינויים. נסה שוב." : "לא ניתן לשמור את המתאמן. נסה שוב.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   function handleEdit(trainee) {
     setEditingTraineeId(trainee.id);
     setForm({
-      fullName: trainee.fullName,
+      fullName: trainee.full_name,
       phone: trainee.phone,
-      birthDate: trainee.birthDate || "",
-      startDate: trainee.startDate,
-      trainingType: trainee.trainingType,
+      birthDate: trainee.birth_date || "",
+      startDate: trainee.start_date,
+      trainingType: trainee.training_type,
       status: trainee.status,
-      mainGoal: trainee.mainGoal,
-      successMetric: trainee.successMetric || "",
+      mainGoal: trainee.main_goal,
+      successMetric: trainee.success_metric || "",
       notes: trainee.notes || "",
     });
     setShowForm(true);
     setFormError("");
   }
 
-  function handleStatusChange(id, newStatus) {
-    setTrainees((prev) => prev.map((t) => t.id === id ? { ...t, status: newStatus } : t));
+  async function handleStatusChange(id, newStatus) {
+    if (rowActionId) return;
+
+    setRowActionId(id);
+    setRowError("");
+
+    try {
+      const updated = await updateTraineeStatus(id, newStatus);
+      setTrainees((prev) =>
+        prev.map((t) => (t.id === id ? updated : t))
+      );
+    } catch (err) {
+      console.error("Trainee status update error:", err);
+      setRowError("לא ניתן לעדכן את הסטטוס.");
+    } finally {
+      setRowActionId(null);
+    }
   }
 
-  function handleDelete(id) {
-    if (window.confirm("למחוק מתאמן זה?")) {
+  async function handleDelete(id) {
+    if (rowActionId) return;
+
+    if (!window.confirm("למחוק מתאמן זה?")) {
+      return;
+    }
+
+    setRowActionId(id);
+    setRowError("");
+
+    try {
+      await deleteTrainee(id);
       setTrainees((prev) => prev.filter((t) => t.id !== id));
+    } catch (err) {
+      console.error("Trainee delete error:", err);
+      setRowError("לא ניתן למחוק את המתאמן.");
+    } finally {
+      setRowActionId(null);
     }
   }
 
@@ -585,8 +668,8 @@ function Trainees() {
   }
 
   const kpiActive = trainees.filter((t) => t.status === "פעיל").length;
-  const kpiOnline = trainees.filter((t) => t.trainingType === "אונליין").length;
-  const kpiPersonal = trainees.filter((t) => t.trainingType === "אישי").length;
+  const kpiOnline = trainees.filter((t) => t.training_type === "אונליין").length;
+  const kpiPersonal = trainees.filter((t) => t.training_type === "אישי").length;
   const kpiFollowUp = trainees.filter((t) => t.status === "דורש מעקב").length;
 
   const filteredTrainees = filter === "פעילים"
@@ -617,6 +700,38 @@ function Trainees() {
     color: active ? "#7C2D3E" : "#615E57",
     fontWeight: active ? 600 : 400,
   });
+
+  if (loading) {
+    return (
+      <div style={{ textAlign: "center", padding: "40px 0", color: "#9E9A90" }}>
+        טוען מתאמנים...
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div style={{ textAlign: "center", padding: "40px 0" }}>
+        <div style={{ color: "#C0392B", marginBottom: 12 }}>
+          {loadError}
+        </div>
+        <button
+          onClick={handleRetry}
+          style={{
+            fontSize: 13,
+            padding: "8px 16px",
+            borderRadius: 8,
+            border: "none",
+            background: "#7C2D3E",
+            color: "#fff",
+            cursor: "pointer",
+          }}
+        >
+          נסה שוב
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -688,8 +803,8 @@ function Trainees() {
           </div>
           {formError && <div style={{ fontSize: 13, color: "#C0392B", marginBottom: 12 }}>{formError}</div>}
           <div style={{ display: "flex", gap: 8 }}>
-            <button onClick={handleSave} style={{ fontSize: 13, padding: "8px 20px", borderRadius: 8, border: "none", background: "#7C2D3E", color: "#fff", cursor: "pointer" }}>{editingTraineeId ? "שמור שינויים" : "שמור מתאמן"}</button>
-            <button onClick={() => { setShowForm(false); setFormError(""); setEditingTraineeId(null); setForm({ fullName: "", phone: "", birthDate: "", startDate: "", trainingType: "אישי", status: "פעיל", mainGoal: "", successMetric: "", notes: "" }); }} style={{ fontSize: 13, padding: "8px 16px", borderRadius: 8, border: "0.5px solid #EDEBE6", background: "#fff", color: "#615E57", cursor: "pointer" }}>ביטול</button>
+            <button onClick={handleSave} disabled={saving} style={{ fontSize: 13, padding: "8px 20px", borderRadius: 8, border: "none", background: saving ? "#9E9A90" : "#7C2D3E", color: "#fff", cursor: saving ? "not-allowed" : "pointer" }}>{saving ? "שומר..." : editingTraineeId ? "שמור שינויים" : "שמור מתאמן"}</button>
+            <button onClick={() => { setShowForm(false); setFormError(""); setEditingTraineeId(null); setForm({ fullName: "", phone: "", birthDate: "", startDate: "", trainingType: "אישי", status: "פעיל", mainGoal: "", successMetric: "", notes: "" }); }} disabled={saving} style={{ fontSize: 13, padding: "8px 16px", borderRadius: 8, border: "0.5px solid #EDEBE6", background: "#fff", color: "#615E57", cursor: saving ? "not-allowed" : "pointer" }}>ביטול</button>
           </div>
         </div>
       )}
@@ -699,36 +814,42 @@ function Trainees() {
           <div onClick={() => setFilter("פעילים")} style={pillStyle(filter === "פעילים")}>פעילים</div>
           <div onClick={() => setFilter("מעקב")} style={pillStyle(filter === "מעקב")}>מעקב</div>
         </div>
+        {rowError && (
+          <div style={{ fontSize: 13, color: "#C0392B", marginBottom: 8 }}>
+            {rowError}
+          </div>
+        )}
         {filteredTrainees.length === 0 ? (
           <div style={{ fontSize: 14, color: "#9E9A90", textAlign: "center", padding: "24px 0" }}>אין מתאמנים להצגה עדיין</div>
         ) : (
           filteredTrainees.map((t) => {
-            const years = trainingYears(t.startDate);
+            const years = trainingYears(t.start_date);
+            const busy = rowActionId === t.id;
             return (
-              <div key={t.id} style={{ padding: "12px 0", borderBottom: "0.5px solid #EDEBE6" }}>
+              <div key={t.id} style={{ padding: "12px 0", borderBottom: "0.5px solid #EDEBE6", opacity: busy ? 0.65 : 1 }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
                   <div>
-                    <div style={{ fontWeight: 600, fontSize: 14 }}>{t.fullName}</div>
-                    <div style={{ fontSize: 12, color: "#9E9A90" }}>{t.phone} · {t.trainingType} · התחיל {t.startDate}</div>
+                    <div style={{ fontWeight: 600, fontSize: 14 }}>{t.full_name}</div>
+                    <div style={{ fontSize: 12, color: "#9E9A90" }}>{t.phone} · {t.training_type} · התחיל {t.start_date}</div>
                   </div>
                   <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                    <select value={t.status} onChange={(e) => handleStatusChange(t.id, e.target.value)} style={{ fontSize: 12, padding: "4px 8px", borderRadius: 6, border: "0.5px solid #EDEBE6", background: "#FAF8F5", cursor: "pointer" }}>
+                    <select value={t.status} onChange={(e) => handleStatusChange(t.id, e.target.value)} disabled={busy} style={{ fontSize: 12, padding: "4px 8px", borderRadius: 6, border: "0.5px solid #EDEBE6", background: "#FAF8F5", cursor: "pointer" }}>
                       {statusOptions.map((o) => <option key={o}>{o}</option>)}
                     </select>
                     <a href={waLink(t.phone)} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: "#25D366", textDecoration: "none" }}>WA</a>
-                    <button onClick={() => handleEdit(t)} style={{ fontSize: 12, padding: "4px 8px", borderRadius: 6, border: "none", background: "#FAF8F5", color: "#615E57", cursor: "pointer" }}>ערוך</button>
-                    <button onClick={() => handleDelete(t.id)} style={{ fontSize: 12, padding: "4px 8px", borderRadius: 6, border: "none", background: "#FAF8F5", color: "#C0392B", cursor: "pointer" }}>מחק</button>
+                    <button onClick={() => handleEdit(t)} disabled={busy} style={{ fontSize: 12, padding: "4px 8px", borderRadius: 6, border: "none", background: "#FAF8F5", color: "#615E57", cursor: "pointer" }}>ערוך</button>
+                    <button onClick={() => handleDelete(t.id)} disabled={busy} style={{ fontSize: 12, padding: "4px 8px", borderRadius: 6, border: "none", background: "#FAF8F5", color: "#C0392B", cursor: "pointer" }}>מחק</button>
                   </div>
                 </div>
-                <div style={{ fontSize: 12, color: "#615E57", marginBottom: 2 }}>יעד: {t.mainGoal}</div>
-                {t.successMetric && <div style={{ fontSize: 12, color: "#9E9A90" }}>מדד: {t.successMetric}</div>}
+                <div style={{ fontSize: 12, color: "#615E57", marginBottom: 2 }}>יעד: {t.main_goal}</div>
+                {t.success_metric && <div style={{ fontSize: 12, color: "#9E9A90" }}>מדד: {t.success_metric}</div>}
                 {t.notes && <div style={{ fontSize: 12, color: "#9E9A90", marginTop: 2 }}>{t.notes}</div>}
                 {years >= 1 && (
                   <div style={{ fontSize: 12, color: "#7C2D3E", marginTop: 4 }}>
                     {years === 1 ? "השלימו שנת אימונים" : `השלימו ${years} שנות אימונים`}
                   </div>
                 )}
-                <div style={{ fontSize: 11, color: "#C4C0B8", marginTop: 4 }}>נוסף: {t.createdAt}</div>
+                <div style={{ fontSize: 11, color: "#C4C0B8", marginTop: 4 }}>נוסף: {new Date(t.created_at).toLocaleDateString("he-IL")}</div>
               </div>
             );
           })

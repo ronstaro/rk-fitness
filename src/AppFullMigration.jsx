@@ -1,5 +1,5 @@
 ﻿import { useEffect, useState } from "react";
-import { fetchLeads, createLead, updateLeadStatus, deleteLead } from "./services/leadsService.js";
+import { fetchLeads, createLead, updateLead, updateLeadStatus, deleteLead } from "./services/leadsService.js";
 
 function Screen({ title }) {
   return (
@@ -62,6 +62,7 @@ function Leads() {
   const [saving, setSaving] = useState(false);
   const [rowActionId, setRowActionId] = useState(null);
   const [rowError, setRowError] = useState("");
+  const [editingLeadId, setEditingLeadId] = useState(null);
 
   async function handleRetry() {
     setLoading(true);
@@ -125,21 +126,30 @@ function Leads() {
     setSaving(true);
     setFormError("");
 
-    try {
-      const row = await createLead({
-        full_name: name,
-        phone,
-        source: form.source,
-        custom_source:
-          form.source === "אחר"
-            ? form.customSource.trim() || null
-            : null,
-        status: form.status,
-        follow_up_date: form.followUpDate || null,
-        notes: form.notes.trim() || null,
-      });
+    const payload = {
+      full_name: name,
+      phone,
+      source: form.source,
+      custom_source:
+        form.source === "אחר"
+          ? form.customSource.trim() || null
+          : null,
+      status: form.status,
+      follow_up_date: form.followUpDate || null,
+      notes: form.notes.trim() || null,
+    };
 
-      setLeads((prev) => [row, ...prev]);
+    try {
+      if (editingLeadId) {
+        const row = await updateLead(editingLeadId, payload);
+        setLeads((prev) =>
+          prev.map((lead) => (lead.id === editingLeadId ? row : lead))
+        );
+      } else {
+        const row = await createLead(payload);
+        setLeads((prev) => [row, ...prev]);
+      }
+
       setForm({
         fullName: "",
         phone: "",
@@ -149,13 +159,29 @@ function Leads() {
         followUpDate: "",
         notes: "",
       });
+      setEditingLeadId(null);
       setShowForm(false);
     } catch (err) {
-      console.error("Lead create error:", err);
-      setFormError("לא ניתן לשמור את הליד. נסה שוב.");
+      console.error(editingLeadId ? "Lead update error:" : "Lead create error:", err);
+      setFormError(editingLeadId ? "לא ניתן לשמור את השינויים. נסה שוב." : "לא ניתן לשמור את הליד. נסה שוב.");
     } finally {
       setSaving(false);
     }
+  }
+
+  function handleEdit(lead) {
+    setEditingLeadId(lead.id);
+    setForm({
+      fullName: lead.full_name,
+      phone: lead.phone,
+      source: lead.source,
+      customSource: lead.custom_source || "",
+      status: lead.status,
+      followUpDate: lead.follow_up_date || "",
+      notes: lead.notes || "",
+    });
+    setShowForm(true);
+    setFormError("");
   }
 
   async function handleStatusChange(id, newStatus) {
@@ -263,7 +289,7 @@ function Leads() {
           <h2 style={{ margin: 0, fontSize: 20, color: "#1E1C19" }}>לידים</h2>
           <p style={{ margin: "4px 0 0", fontSize: 13, color: "#9E9A90" }}>ניהול פניות ומעקב</p>
         </div>
-        <button onClick={() => { setShowForm(true); setFormError(""); }} style={{ fontSize: 13, padding: "8px 16px", borderRadius: 8, border: "none", background: "#7C2D3E", color: "#fff", cursor: "pointer" }}>+ הוסף ליד</button>
+        <button onClick={() => { setEditingLeadId(null); setForm({ fullName: "", phone: "", source: "המלצה מחבר", customSource: "", status: "חדש", followUpDate: "", notes: "" }); setShowForm(true); setFormError(""); }} style={{ fontSize: 13, padding: "8px 16px", borderRadius: 8, border: "none", background: "#7C2D3E", color: "#fff", cursor: "pointer" }}>+ הוסף ליד</button>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16, marginBottom: 24 }}>
         <div style={{ background: "#fff", borderRadius: 10, border: "0.5px solid #EDEBE6", padding: 16 }}>
@@ -281,7 +307,7 @@ function Leads() {
       </div>
       {showForm && (
         <div style={{ background: "#fff", borderRadius: 12, border: "0.5px solid #EDEBE6", padding: 20, marginBottom: 16 }}>
-          <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 16 }}>הוספת ליד חדש</div>
+          <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 16 }}>{editingLeadId ? "עריכת ליד" : "הוספת ליד חדש"}</div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
             <div>
               <div style={{ fontSize: 12, color: "#9E9A90", marginBottom: 4 }}>שם מלא *</div>
@@ -333,13 +359,23 @@ function Leads() {
                 cursor: saving ? "not-allowed" : "pointer",
               }}
             >
-              {saving ? "שומר..." : "שמור ליד"}
+              {saving ? "שומר..." : editingLeadId ? "שמור שינויים" : "שמור ליד"}
             </button>
 
             <button
               onClick={() => {
                 setShowForm(false);
                 setFormError("");
+                setEditingLeadId(null);
+                setForm({
+                  fullName: "",
+                  phone: "",
+                  source: "המלצה מחבר",
+                  customSource: "",
+                  status: "חדש",
+                  followUpDate: "",
+                  notes: "",
+                });
               }}
               disabled={saving}
               style={{
@@ -384,6 +420,7 @@ function Leads() {
                     {statusOptions.map((o) => <option key={o}>{o}</option>)}
                   </select>
                   <a href={waLink(lead.phone)} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: "#25D366", textDecoration: "none" }}>WA</a>
+                  <button onClick={() => handleEdit(lead)} disabled={busy} style={{ fontSize: 12, padding: "4px 8px", borderRadius: 6, border: "none", background: "#FAF8F5", color: "#615E57", cursor: "pointer" }}>ערוך</button>
                   <button onClick={() => handleDelete(lead.id)} disabled={busy} style={{ fontSize: 12, padding: "4px 8px", borderRadius: 6, border: "none", background: "#FAF8F5", color: "#C0392B", cursor: "pointer" }}>מחק</button>
                 </div>
               </div>
@@ -444,6 +481,7 @@ function Trainees() {
     successMetric: "",
     notes: "",
   });
+  const [editingTraineeId, setEditingTraineeId] = useState(null);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(trainees));
@@ -462,23 +500,64 @@ function Trainees() {
       setFormError("שם מלא, טלפון, תאריך התחלה ויעד מרכזי הם שדות חובה");
       return;
     }
-    const trainee = {
-      id: Date.now().toString(),
-      fullName,
-      phone,
-      birthDate: form.birthDate,
-      startDate,
-      trainingType: form.trainingType,
-      status: form.status,
-      mainGoal,
-      successMetric: form.successMetric.trim(),
-      notes: form.notes.trim(),
-      createdAt: new Date().toLocaleDateString("he-IL"),
-    };
-    setTrainees((prev) => [trainee, ...prev]);
+
+    if (editingTraineeId) {
+      setTrainees((prev) =>
+        prev.map((t) =>
+          t.id === editingTraineeId
+            ? {
+                ...t,
+                fullName,
+                phone,
+                birthDate: form.birthDate,
+                startDate,
+                trainingType: form.trainingType,
+                status: form.status,
+                mainGoal,
+                successMetric: form.successMetric.trim(),
+                notes: form.notes.trim(),
+              }
+            : t
+        )
+      );
+    } else {
+      const trainee = {
+        id: Date.now().toString(),
+        fullName,
+        phone,
+        birthDate: form.birthDate,
+        startDate,
+        trainingType: form.trainingType,
+        status: form.status,
+        mainGoal,
+        successMetric: form.successMetric.trim(),
+        notes: form.notes.trim(),
+        createdAt: new Date().toLocaleDateString("he-IL"),
+      };
+      setTrainees((prev) => [trainee, ...prev]);
+    }
+
     setForm({ fullName: "", phone: "", birthDate: "", startDate: "", trainingType: "אישי", status: "פעיל", mainGoal: "", successMetric: "", notes: "" });
     setFormError("");
     setShowForm(false);
+    setEditingTraineeId(null);
+  }
+
+  function handleEdit(trainee) {
+    setEditingTraineeId(trainee.id);
+    setForm({
+      fullName: trainee.fullName,
+      phone: trainee.phone,
+      birthDate: trainee.birthDate || "",
+      startDate: trainee.startDate,
+      trainingType: trainee.trainingType,
+      status: trainee.status,
+      mainGoal: trainee.mainGoal,
+      successMetric: trainee.successMetric || "",
+      notes: trainee.notes || "",
+    });
+    setShowForm(true);
+    setFormError("");
   }
 
   function handleStatusChange(id, newStatus) {
@@ -546,7 +625,7 @@ function Trainees() {
           <h2 style={{ margin: 0, fontSize: 20, color: "#1E1C19" }}>מתאמנים</h2>
           <p style={{ margin: "4px 0 0", fontSize: 13, color: "#9E9A90" }}>ניהול מתאמנים, סטטוס ותוכניות</p>
         </div>
-        <button onClick={() => { setShowForm(true); setFormError(""); }} style={{ fontSize: 13, padding: "8px 16px", borderRadius: 8, border: "none", background: "#7C2D3E", color: "#fff", cursor: "pointer" }}>+ הוסף מתאמן</button>
+        <button onClick={() => { setEditingTraineeId(null); setForm({ fullName: "", phone: "", birthDate: "", startDate: "", trainingType: "אישי", status: "פעיל", mainGoal: "", successMetric: "", notes: "" }); setShowForm(true); setFormError(""); }} style={{ fontSize: 13, padding: "8px 16px", borderRadius: 8, border: "none", background: "#7C2D3E", color: "#fff", cursor: "pointer" }}>+ הוסף מתאמן</button>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16, marginBottom: 24 }}>
         <div style={{ background: "#fff", borderRadius: 10, border: "0.5px solid #EDEBE6", padding: 16 }}>
@@ -564,7 +643,7 @@ function Trainees() {
       </div>
       {showForm && (
         <div style={{ background: "#fff", borderRadius: 12, border: "0.5px solid #EDEBE6", padding: 20, marginBottom: 16 }}>
-          <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 16 }}>הוספת מתאמן חדש</div>
+          <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 16 }}>{editingTraineeId ? "עריכת מתאמן" : "הוספת מתאמן חדש"}</div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
             <div>
               <div style={{ fontSize: 12, color: "#9E9A90", marginBottom: 4 }}>שם מלא *</div>
@@ -609,8 +688,8 @@ function Trainees() {
           </div>
           {formError && <div style={{ fontSize: 13, color: "#C0392B", marginBottom: 12 }}>{formError}</div>}
           <div style={{ display: "flex", gap: 8 }}>
-            <button onClick={handleSave} style={{ fontSize: 13, padding: "8px 20px", borderRadius: 8, border: "none", background: "#7C2D3E", color: "#fff", cursor: "pointer" }}>שמור מתאמן</button>
-            <button onClick={() => { setShowForm(false); setFormError(""); }} style={{ fontSize: 13, padding: "8px 16px", borderRadius: 8, border: "0.5px solid #EDEBE6", background: "#fff", color: "#615E57", cursor: "pointer" }}>ביטול</button>
+            <button onClick={handleSave} style={{ fontSize: 13, padding: "8px 20px", borderRadius: 8, border: "none", background: "#7C2D3E", color: "#fff", cursor: "pointer" }}>{editingTraineeId ? "שמור שינויים" : "שמור מתאמן"}</button>
+            <button onClick={() => { setShowForm(false); setFormError(""); setEditingTraineeId(null); setForm({ fullName: "", phone: "", birthDate: "", startDate: "", trainingType: "אישי", status: "פעיל", mainGoal: "", successMetric: "", notes: "" }); }} style={{ fontSize: 13, padding: "8px 16px", borderRadius: 8, border: "0.5px solid #EDEBE6", background: "#fff", color: "#615E57", cursor: "pointer" }}>ביטול</button>
           </div>
         </div>
       )}
@@ -637,6 +716,7 @@ function Trainees() {
                       {statusOptions.map((o) => <option key={o}>{o}</option>)}
                     </select>
                     <a href={waLink(t.phone)} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: "#25D366", textDecoration: "none" }}>WA</a>
+                    <button onClick={() => handleEdit(t)} style={{ fontSize: 12, padding: "4px 8px", borderRadius: 6, border: "none", background: "#FAF8F5", color: "#615E57", cursor: "pointer" }}>ערוך</button>
                     <button onClick={() => handleDelete(t.id)} style={{ fontSize: 12, padding: "4px 8px", borderRadius: 6, border: "none", background: "#FAF8F5", color: "#C0392B", cursor: "pointer" }}>מחק</button>
                   </div>
                 </div>

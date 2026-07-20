@@ -34,6 +34,26 @@ export async function createLead(input) {
   return data;
 }
 
+export async function updateLead(id, input) {
+  const { data, error } = await supabase
+    .from("leads")
+    .update({
+      full_name: input.full_name,
+      phone: input.phone,
+      source: input.source,
+      custom_source: input.custom_source ?? null,
+      status: input.status,
+      follow_up_date: input.follow_up_date ?? null,
+      notes: input.notes ?? null,
+    })
+    .eq("id", id)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
 export async function updateLeadStatus(id, status) {
   const { data, error } = await supabase
     .from("leads")

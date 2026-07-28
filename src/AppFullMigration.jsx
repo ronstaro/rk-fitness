@@ -1,6 +1,7 @@
 ﻿import { useEffect, useState } from "react";
 import { fetchLeads, createLead, updateLead, updateLeadStatus, deleteLead } from "./services/leadsService.js";
 import { fetchTrainees, createTrainee, updateTrainee, updateTraineeStatus, deleteTrainee } from "./services/traineesService.js";
+import { fetchSessions, createSession, updateSessionStatus, deleteSession } from "./services/sessionsService.js";
 
 function Screen({ title }) {
   return (
@@ -1013,27 +1014,8 @@ function Reviews() {
 
 
 function Schedule() {
-  const SCHED_KEY = "rk-fitness-schedule";
-  const TRAIN_KEY = "rk-fitness-trainees";
-
-  function loadSessions() {
-    try {
-      const raw = localStorage.getItem(SCHED_KEY);
-      const parsed = JSON.parse(raw);
-      return Array.isArray(parsed) ? parsed : [];
-    } catch { return []; }
-  }
-
-  function loadTrainees() {
-    try {
-      const raw = localStorage.getItem(TRAIN_KEY);
-      const parsed = JSON.parse(raw);
-      return Array.isArray(parsed) ? parsed : [];
-    } catch { return []; }
-  }
-
-  const [sessions, setSessions] = useState(loadSessions);
-  const [trainees] = useState(loadTrainees);
+  const [sessions, setSessions] = useState([]);
+  const [trainees, setTrainees] = useState([]);
   const [showForm, setShowForm] = useState(false);
   const [formError, setFormError] = useState("");
   const [form, setForm] = useState({
@@ -1048,9 +1030,44 @@ function Schedule() {
     notes: "",
   });
 
+  function mapSessionRow(row, traineesList) {
+    const trainee = traineesList.find((t) => t.id === row.trainee_id);
+    return {
+      id: row.id,
+      traineeId: row.trainee_id,
+      traineeName: trainee ? trainee.full_name : "מתאמן לא ידוע",
+      date: row.session_date,
+      startTime: row.start_time ? row.start_time.slice(0, 5) : "",
+      durationMinutes: row.duration_minutes,
+      trainingType: row.training_type,
+      location: row.location,
+      status: row.status,
+      notes: row.notes ?? "",
+      createdAt: row.created_at,
+    };
+  }
+
   useEffect(() => {
-    localStorage.setItem(SCHED_KEY, JSON.stringify(sessions));
-  }, [sessions]);
+    let active = true;
+
+    async function load() {
+      try {
+        const [sessionRows, traineeRows] = await Promise.all([fetchSessions(), fetchTrainees()]);
+        if (active) {
+          setTrainees(traineeRows);
+          setSessions(sessionRows.map((row) => mapSessionRow(row, traineeRows)));
+        }
+      } catch (err) {
+        console.error("Schedule fetch error:", err);
+      }
+    }
+
+    load();
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   function handleField(key, value) {
     setForm((f) => ({ ...f, [key]: value }));
@@ -1058,7 +1075,7 @@ function Schedule() {
 
   function handleTraineeSelect(traineeId) {
     const t = trainees.find((tr) => tr.id === traineeId);
-    setForm((f) => ({ ...f, traineeId, traineeName: t ? t.fullName : "" }));
+    setForm((f) => ({ ...f, traineeId, traineeName: t ? t.full_name : "" }));
   }
 
   function toMinutes(timeStr) {
@@ -1084,7 +1101,7 @@ function Schedule() {
     });
   }
 
-  function handleSave() {
+  async function handleSave() {
     const traineeId = form.traineeId;
     const date = form.date.trim();
     const startTime = form.startTime.trim();
@@ -1102,32 +1119,47 @@ function Schedule() {
       setFormError("קיים אימון חופף בשעה שנבחרה");
       return;
     }
-    const session = {
-      id: Date.now().toString(),
-      traineeId,
-      traineeName: form.traineeName,
-      date,
-      startTime,
-      durationMinutes: dur,
-      trainingType: form.trainingType,
-      location,
-      status: form.status,
-      notes: form.notes.trim(),
-      createdAt: new Date().toLocaleDateString("he-IL"),
-    };
-    setSessions((prev) => [...prev, session]);
-    setForm({ traineeId: "", traineeName: "", date: "", startTime: "", durationMinutes: "", trainingType: "אישי", location: "", status: "מתוכנן", notes: "" });
-    setFormError("");
-    setShowForm(false);
+
+    try {
+      const row = await createSession({
+        traineeId,
+        date,
+        startTime,
+        durationMinutes: dur,
+        trainingType: form.trainingType,
+        location,
+        status: form.status,
+        notes: form.notes.trim(),
+      });
+      setSessions((prev) => [...prev, mapSessionRow(row, trainees)]);
+      setForm({ traineeId: "", traineeName: "", date: "", startTime: "", durationMinutes: "", trainingType: "אישי", location: "", status: "מתוכנן", notes: "" });
+      setFormError("");
+      setShowForm(false);
+    } catch (err) {
+      console.error("Session create error:", err);
+      setFormError("לא ניתן לשמור את האימון. נסה שוב.");
+    }
   }
 
-  function handleStatusChange(id, newStatus) {
-    setSessions((prev) => prev.map((s) => s.id === id ? { ...s, status: newStatus } : s));
+  async function handleStatusChange(id, newStatus) {
+    try {
+      const row = await updateSessionStatus(id, newStatus);
+      setSessions((prev) => prev.map((s) => s.id === id ? mapSessionRow(row, trainees) : s));
+    } catch (err) {
+      console.error("Session status update error:", err);
+    }
   }
 
-  function handleDelete(id) {
-    if (window.confirm("למחוק אימון זה?")) {
+  async function handleDelete(id) {
+    if (!window.confirm("למחוק אימון זה?")) {
+      return;
+    }
+
+    try {
+      await deleteSession(id);
       setSessions((prev) => prev.filter((s) => s.id !== id));
+    } catch (err) {
+      console.error("Session delete error:", err);
     }
   }
 
@@ -1217,7 +1249,7 @@ function Schedule() {
             ) : (
               <select value={form.traineeId} onChange={(e) => handleTraineeSelect(e.target.value)} style={inp}>
                 <option value="">בחר מתאמן</option>
-                {trainees.map((t) => <option key={t.id} value={t.id}>{t.fullName}</option>)}
+                {trainees.map((t) => <option key={t.id} value={t.id}>{t.full_name}</option>)}
               </select>
             )}
           </div>

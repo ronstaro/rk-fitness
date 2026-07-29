@@ -1,17 +1,20 @@
-﻿import { useEffect, useState } from "react";
+﻿import { useEffect, useRef, useState } from "react";
 import { fetchLeads, createLead, updateLead, updateLeadStatus, deleteLead } from "./services/leadsService.js";
 import { fetchTrainees, createTrainee, updateTrainee, updateTraineeStatus, deleteTrainee } from "./services/traineesService.js";
-import { fetchSessions, createSession, updateSessionStatus, deleteSession } from "./services/sessionsService.js";
 
-function Screen({ title }) {
-  return (
-    <div>
-      <h2 style={{ marginBottom: 8, color: "#1E1C19" }}>{title}</h2>
-      <p style={{ color: "#9E9A90", marginTop: 8 }}>בפיתוח</p>
-    </div>
-  );
+function whatsappLink(phone) {
+  let digits = phone.replace(/\D/g, "");
+
+  if (digits.startsWith("00")) {
+    digits = digits.slice(2);
+  }
+
+  if (digits.startsWith("0")) {
+    digits = `972${digits.slice(1)}`;
+  }
+
+  return `https://wa.me/${digits}`;
 }
-
 
 function Dashboard() {
   return (
@@ -65,6 +68,7 @@ function Leads() {
   const [rowActionId, setRowActionId] = useState(null);
   const [rowError, setRowError] = useState("");
   const [editingLeadId, setEditingLeadId] = useState(null);
+  const actionLockRef = useRef(false);
 
   async function handleRetry() {
     setLoading(true);
@@ -115,7 +119,7 @@ function Leads() {
   }
 
   async function handleSave() {
-    if (saving) return;
+    if (actionLockRef.current || saving || rowActionId) return;
 
     const name = form.fullName.trim();
     const phone = form.phone.trim();
@@ -125,6 +129,7 @@ function Leads() {
       return;
     }
 
+    actionLockRef.current = true;
     setSaving(true);
     setFormError("");
 
@@ -167,11 +172,14 @@ function Leads() {
       console.error(editingLeadId ? "Lead update error:" : "Lead create error:", err);
       setFormError(editingLeadId ? "לא ניתן לשמור את השינויים. נסה שוב." : "לא ניתן לשמור את הליד. נסה שוב.");
     } finally {
+      actionLockRef.current = false;
       setSaving(false);
     }
   }
 
   function handleEdit(lead) {
+    if (actionLockRef.current || saving || rowActionId) return;
+
     setEditingLeadId(lead.id);
     setForm({
       fullName: lead.full_name,
@@ -187,8 +195,9 @@ function Leads() {
   }
 
   async function handleStatusChange(id, newStatus) {
-    if (rowActionId) return;
+    if (actionLockRef.current || saving || rowActionId) return;
 
+    actionLockRef.current = true;
     setRowActionId(id);
     setRowError("");
 
@@ -202,17 +211,19 @@ function Leads() {
       console.error("Lead status update error:", err);
       setRowError("לא ניתן לעדכן את הסטטוס.");
     } finally {
+      actionLockRef.current = false;
       setRowActionId(null);
     }
   }
 
   async function handleDelete(id) {
-    if (rowActionId) return;
+    if (actionLockRef.current || saving || rowActionId) return;
 
     if (!window.confirm("למחוק ליד זה?")) {
       return;
     }
 
+    actionLockRef.current = true;
     setRowActionId(id);
     setRowError("");
 
@@ -223,17 +234,15 @@ function Leads() {
       console.error("Lead delete error:", err);
       setRowError("לא ניתן למחוק את הליד.");
     } finally {
+      actionLockRef.current = false;
       setRowActionId(null);
     }
-  }
-
-  function waLink(phone) {
-    return "https://wa.me/" + phone.replace(/\D/g, "");
   }
 
   const kpiNew = leads.filter((l) => l.status === "חדש").length;
   const kpiFollowUp = leads.filter((l) => l.status === "מעקב").length;
   const kpiConverted = leads.filter((l) => l.status === "הומר למתאמן").length;
+  const actionsLocked = saving || rowActionId !== null;
 
   const reminders = leads
     .filter((l) => l.follow_up_date && l.status !== "הומר למתאמן" && l.status !== "לא רלוונטי")
@@ -291,7 +300,7 @@ function Leads() {
           <h2 style={{ margin: 0, fontSize: 20, color: "#1E1C19" }}>לידים</h2>
           <p style={{ margin: "4px 0 0", fontSize: 13, color: "#9E9A90" }}>ניהול פניות ומעקב</p>
         </div>
-        <button onClick={() => { setEditingLeadId(null); setForm({ fullName: "", phone: "", source: "המלצה מחבר", customSource: "", status: "חדש", followUpDate: "", notes: "" }); setShowForm(true); setFormError(""); }} style={{ fontSize: 13, padding: "8px 16px", borderRadius: 8, border: "none", background: "#7C2D3E", color: "#fff", cursor: "pointer" }}>+ הוסף ליד</button>
+        <button onClick={() => { setEditingLeadId(null); setForm({ fullName: "", phone: "", source: "המלצה מחבר", customSource: "", status: "חדש", followUpDate: "", notes: "" }); setShowForm(true); setFormError(""); }} disabled={actionsLocked} style={{ fontSize: 13, padding: "8px 16px", borderRadius: 8, border: "none", background: actionsLocked ? "#9E9A90" : "#7C2D3E", color: "#fff", cursor: actionsLocked ? "not-allowed" : "pointer" }}>+ הוסף ליד</button>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16, marginBottom: 24 }}>
         <div style={{ background: "#fff", borderRadius: 10, border: "0.5px solid #EDEBE6", padding: 16 }}>
@@ -350,15 +359,15 @@ function Leads() {
           <div style={{ display: "flex", gap: 8 }}>
             <button
               onClick={handleSave}
-              disabled={saving}
+              disabled={actionsLocked}
               style={{
                 fontSize: 13,
                 padding: "8px 20px",
                 borderRadius: 8,
                 border: "none",
-                background: saving ? "#9E9A90" : "#7C2D3E",
+                background: actionsLocked ? "#9E9A90" : "#7C2D3E",
                 color: "#fff",
-                cursor: saving ? "not-allowed" : "pointer",
+                cursor: actionsLocked ? "not-allowed" : "pointer",
               }}
             >
               {saving ? "שומר..." : editingLeadId ? "שמור שינויים" : "שמור ליד"}
@@ -418,12 +427,12 @@ function Leads() {
                   <div style={{ fontSize: 12, color: "#9E9A90" }}>{lead.phone} · {lead.source === "אחר" && lead.custom_source ? lead.custom_source : lead.source}</div>
                 </div>
                 <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                  <select value={lead.status} onChange={(event) => handleStatusChange(lead.id, event.target.value)} disabled={busy} style={{ fontSize: 12, padding: "4px 8px", borderRadius: 6, border: "0.5px solid #EDEBE6", background: "#FAF8F5", cursor: "pointer" }}>
+                  <select value={lead.status} onChange={(event) => handleStatusChange(lead.id, event.target.value)} disabled={actionsLocked} style={{ fontSize: 12, padding: "4px 8px", borderRadius: 6, border: "0.5px solid #EDEBE6", background: "#FAF8F5", cursor: actionsLocked ? "not-allowed" : "pointer" }}>
                     {statusOptions.map((o) => <option key={o}>{o}</option>)}
                   </select>
-                  <a href={waLink(lead.phone)} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: "#25D366", textDecoration: "none" }}>WA</a>
-                  <button onClick={() => handleEdit(lead)} disabled={busy} style={{ fontSize: 12, padding: "4px 8px", borderRadius: 6, border: "none", background: "#FAF8F5", color: "#615E57", cursor: "pointer" }}>ערוך</button>
-                  <button onClick={() => handleDelete(lead.id)} disabled={busy} style={{ fontSize: 12, padding: "4px 8px", borderRadius: 6, border: "none", background: "#FAF8F5", color: "#C0392B", cursor: "pointer" }}>מחק</button>
+                  <a href={whatsappLink(lead.phone)} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: "#25D366", textDecoration: "none" }}>WA</a>
+                  <button onClick={() => handleEdit(lead)} disabled={actionsLocked} style={{ fontSize: 12, padding: "4px 8px", borderRadius: 6, border: "none", background: "#FAF8F5", color: "#615E57", cursor: actionsLocked ? "not-allowed" : "pointer" }}>ערוך</button>
+                  <button onClick={() => handleDelete(lead.id)} disabled={actionsLocked} style={{ fontSize: 12, padding: "4px 8px", borderRadius: 6, border: "none", background: "#FAF8F5", color: "#C0392B", cursor: actionsLocked ? "not-allowed" : "pointer" }}>מחק</button>
                 </div>
               </div>
               {lead.follow_up_date && <div style={{ fontSize: 12, color: "#7C2D3E" }}>מעקב: {lead.follow_up_date}</div>}
@@ -461,6 +470,7 @@ function Trainees() {
   const [trainees, setTrainees] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
+  const [hasLoadedTrainees, setHasLoadedTrainees] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [formError, setFormError] = useState("");
   const [filter, setFilter] = useState("הכל");
@@ -479,6 +489,7 @@ function Trainees() {
   const [saving, setSaving] = useState(false);
   const [rowActionId, setRowActionId] = useState(null);
   const [rowError, setRowError] = useState("");
+  const actionLockRef = useRef(false);
 
   async function handleRetry() {
     setLoading(true);
@@ -487,6 +498,7 @@ function Trainees() {
     try {
       const data = await fetchTrainees();
       setTrainees(data);
+      setHasLoadedTrainees(true);
     } catch (err) {
       console.error("Trainees fetch error:", err);
       setLoadError("לא ניתן לטעון את המתאמנים כרגע.");
@@ -504,6 +516,7 @@ function Trainees() {
         if (active) {
           setTrainees(data);
           setLoadError("");
+          setHasLoadedTrainees(true);
         }
       } catch (err) {
         console.error("Trainees fetch error:", err);
@@ -525,6 +538,8 @@ function Trainees() {
   }, []);
 
   useEffect(() => {
+    if (!hasLoadedTrainees) return;
+
     // Temporary compatibility mirror: Schedule() still reads trainees from
     // this localStorage key in the legacy camelCase shape. Remove this once
     // Schedule is migrated to Supabase directly.
@@ -542,14 +557,14 @@ function Trainees() {
       createdAt: t.created_at,
     }));
     localStorage.setItem(STORAGE_KEY, JSON.stringify(legacyShape));
-  }, [trainees]);
+  }, [hasLoadedTrainees, trainees]);
 
   function handleField(key, value) {
     setForm((f) => ({ ...f, [key]: value }));
   }
 
   async function handleSave() {
-    if (saving) return;
+    if (actionLockRef.current || saving || rowActionId) return;
 
     const fullName = form.fullName.trim();
     const phone = form.phone.trim();
@@ -560,6 +575,7 @@ function Trainees() {
       return;
     }
 
+    actionLockRef.current = true;
     setSaving(true);
     setFormError("");
 
@@ -593,11 +609,14 @@ function Trainees() {
       console.error(editingTraineeId ? "Trainee update error:" : "Trainee create error:", err);
       setFormError(editingTraineeId ? "לא ניתן לשמור את השינויים. נסה שוב." : "לא ניתן לשמור את המתאמן. נסה שוב.");
     } finally {
+      actionLockRef.current = false;
       setSaving(false);
     }
   }
 
   function handleEdit(trainee) {
+    if (actionLockRef.current || saving || rowActionId) return;
+
     setEditingTraineeId(trainee.id);
     setForm({
       fullName: trainee.full_name,
@@ -615,8 +634,9 @@ function Trainees() {
   }
 
   async function handleStatusChange(id, newStatus) {
-    if (rowActionId) return;
+    if (actionLockRef.current || saving || rowActionId) return;
 
+    actionLockRef.current = true;
     setRowActionId(id);
     setRowError("");
 
@@ -629,17 +649,19 @@ function Trainees() {
       console.error("Trainee status update error:", err);
       setRowError("לא ניתן לעדכן את הסטטוס.");
     } finally {
+      actionLockRef.current = false;
       setRowActionId(null);
     }
   }
 
   async function handleDelete(id) {
-    if (rowActionId) return;
+    if (actionLockRef.current || saving || rowActionId) return;
 
     if (!window.confirm("למחוק מתאמן זה?")) {
       return;
     }
 
+    actionLockRef.current = true;
     setRowActionId(id);
     setRowError("");
 
@@ -650,12 +672,9 @@ function Trainees() {
       console.error("Trainee delete error:", err);
       setRowError("לא ניתן למחוק את המתאמן.");
     } finally {
+      actionLockRef.current = false;
       setRowActionId(null);
     }
-  }
-
-  function waLink(phone) {
-    return "https://wa.me/" + phone.replace(/\D/g, "");
   }
 
   function trainingYears(startDate) {
@@ -672,6 +691,7 @@ function Trainees() {
   const kpiOnline = trainees.filter((t) => t.training_type === "אונליין").length;
   const kpiPersonal = trainees.filter((t) => t.training_type === "אישי").length;
   const kpiFollowUp = trainees.filter((t) => t.status === "דורש מעקב").length;
+  const actionsLocked = saving || rowActionId !== null;
 
   const filteredTrainees = filter === "פעילים"
     ? trainees.filter((t) => t.status === "פעיל")
@@ -741,7 +761,7 @@ function Trainees() {
           <h2 style={{ margin: 0, fontSize: 20, color: "#1E1C19" }}>מתאמנים</h2>
           <p style={{ margin: "4px 0 0", fontSize: 13, color: "#9E9A90" }}>ניהול מתאמנים, סטטוס ותוכניות</p>
         </div>
-        <button onClick={() => { setEditingTraineeId(null); setForm({ fullName: "", phone: "", birthDate: "", startDate: "", trainingType: "אישי", status: "פעיל", mainGoal: "", successMetric: "", notes: "" }); setShowForm(true); setFormError(""); }} style={{ fontSize: 13, padding: "8px 16px", borderRadius: 8, border: "none", background: "#7C2D3E", color: "#fff", cursor: "pointer" }}>+ הוסף מתאמן</button>
+        <button onClick={() => { setEditingTraineeId(null); setForm({ fullName: "", phone: "", birthDate: "", startDate: "", trainingType: "אישי", status: "פעיל", mainGoal: "", successMetric: "", notes: "" }); setShowForm(true); setFormError(""); }} disabled={actionsLocked} style={{ fontSize: 13, padding: "8px 16px", borderRadius: 8, border: "none", background: actionsLocked ? "#9E9A90" : "#7C2D3E", color: "#fff", cursor: actionsLocked ? "not-allowed" : "pointer" }}>+ הוסף מתאמן</button>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16, marginBottom: 24 }}>
         <div style={{ background: "#fff", borderRadius: 10, border: "0.5px solid #EDEBE6", padding: 16 }}>
@@ -804,7 +824,7 @@ function Trainees() {
           </div>
           {formError && <div style={{ fontSize: 13, color: "#C0392B", marginBottom: 12 }}>{formError}</div>}
           <div style={{ display: "flex", gap: 8 }}>
-            <button onClick={handleSave} disabled={saving} style={{ fontSize: 13, padding: "8px 20px", borderRadius: 8, border: "none", background: saving ? "#9E9A90" : "#7C2D3E", color: "#fff", cursor: saving ? "not-allowed" : "pointer" }}>{saving ? "שומר..." : editingTraineeId ? "שמור שינויים" : "שמור מתאמן"}</button>
+            <button onClick={handleSave} disabled={actionsLocked} style={{ fontSize: 13, padding: "8px 20px", borderRadius: 8, border: "none", background: actionsLocked ? "#9E9A90" : "#7C2D3E", color: "#fff", cursor: actionsLocked ? "not-allowed" : "pointer" }}>{saving ? "שומר..." : editingTraineeId ? "שמור שינויים" : "שמור מתאמן"}</button>
             <button onClick={() => { setShowForm(false); setFormError(""); setEditingTraineeId(null); setForm({ fullName: "", phone: "", birthDate: "", startDate: "", trainingType: "אישי", status: "פעיל", mainGoal: "", successMetric: "", notes: "" }); }} disabled={saving} style={{ fontSize: 13, padding: "8px 16px", borderRadius: 8, border: "0.5px solid #EDEBE6", background: "#fff", color: "#615E57", cursor: saving ? "not-allowed" : "pointer" }}>ביטול</button>
           </div>
         </div>
@@ -834,12 +854,12 @@ function Trainees() {
                     <div style={{ fontSize: 12, color: "#9E9A90" }}>{t.phone} · {t.training_type} · התחיל {t.start_date}</div>
                   </div>
                   <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                    <select value={t.status} onChange={(e) => handleStatusChange(t.id, e.target.value)} disabled={busy} style={{ fontSize: 12, padding: "4px 8px", borderRadius: 6, border: "0.5px solid #EDEBE6", background: "#FAF8F5", cursor: "pointer" }}>
+                    <select value={t.status} onChange={(e) => handleStatusChange(t.id, e.target.value)} disabled={actionsLocked} style={{ fontSize: 12, padding: "4px 8px", borderRadius: 6, border: "0.5px solid #EDEBE6", background: "#FAF8F5", cursor: actionsLocked ? "not-allowed" : "pointer" }}>
                       {statusOptions.map((o) => <option key={o}>{o}</option>)}
                     </select>
-                    <a href={waLink(t.phone)} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: "#25D366", textDecoration: "none" }}>WA</a>
-                    <button onClick={() => handleEdit(t)} disabled={busy} style={{ fontSize: 12, padding: "4px 8px", borderRadius: 6, border: "none", background: "#FAF8F5", color: "#615E57", cursor: "pointer" }}>ערוך</button>
-                    <button onClick={() => handleDelete(t.id)} disabled={busy} style={{ fontSize: 12, padding: "4px 8px", borderRadius: 6, border: "none", background: "#FAF8F5", color: "#C0392B", cursor: "pointer" }}>מחק</button>
+                    <a href={whatsappLink(t.phone)} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: "#25D366", textDecoration: "none" }}>WA</a>
+                    <button onClick={() => handleEdit(t)} disabled={actionsLocked} style={{ fontSize: 12, padding: "4px 8px", borderRadius: 6, border: "none", background: "#FAF8F5", color: "#615E57", cursor: actionsLocked ? "not-allowed" : "pointer" }}>ערוך</button>
+                    <button onClick={() => handleDelete(t.id)} disabled={actionsLocked} style={{ fontSize: 12, padding: "4px 8px", borderRadius: 6, border: "none", background: "#FAF8F5", color: "#C0392B", cursor: actionsLocked ? "not-allowed" : "pointer" }}>מחק</button>
                   </div>
                 </div>
                 <div style={{ fontSize: 12, color: "#615E57", marginBottom: 2 }}>יעד: {t.main_goal}</div>
@@ -1605,11 +1625,18 @@ function NavItem({ item, active, onClick }) {
 export default function AppFullMigration({ onLogout, signingOut = false, signOutError = "" }) {
   const [view, setView] = useState("dashboard");
   const [role, setRole] = useState("admin");
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   function toggleRole() {
     const next = role === "admin" ? "trainee" : "admin";
     setRole(next);
     setView(next === "admin" ? "dashboard" : "trainee-home");
+    setSidebarOpen(false);
+  }
+
+  function selectView(nextView) {
+    setView(nextView);
+    setSidebarOpen(false);
   }
 
   const groups = role === "admin" ? ADMIN_GROUPS : TRAINEE_GROUPS;
@@ -1618,7 +1645,7 @@ export default function AppFullMigration({ onLogout, signingOut = false, signOut
     <div className="app" dir="rtl">
 
       {/* Sidebar */}
-      <div className="sidebar">
+      <div className={`sidebar${sidebarOpen ? " open" : ""}`}>
         <div className="sidebar-brand">
           <div className="sidebar-logo">R.K Fitness</div>
           <div className="sidebar-sub">RONI KALISKER</div>
@@ -1633,7 +1660,7 @@ export default function AppFullMigration({ onLogout, signingOut = false, signOut
                   key={item.label}
                   item={item}
                   active={view === item.id}
-                  onClick={item.disabled ? undefined : () => setView(item.id)}
+                  onClick={item.disabled ? undefined : () => selectView(item.id)}
                 />
               ))}
             </div>
@@ -1646,10 +1673,27 @@ export default function AppFullMigration({ onLogout, signingOut = false, signOut
           </button>
         </div>
       </div>
+      {sidebarOpen && (
+        <button
+          type="button"
+          className="sidebar-overlay"
+          aria-label="סגירת תפריט"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
 
       {/* Main */}
       <div className="main">
         <div className="topbar">
+          <button
+            type="button"
+            className="mobile-menu-btn"
+            aria-label={sidebarOpen ? "סגירת תפריט" : "פתיחת תפריט"}
+            aria-expanded={sidebarOpen}
+            onClick={() => setSidebarOpen((open) => !open)}
+          >
+            {sidebarOpen ? "✕" : "☰"}
+          </button>
           <span className="topbar-title">{VIEW_TITLES[view] || view}</span>
           <div className="topbar-right">
             <button className="btn btn-ghost btn-sm">EN</button>

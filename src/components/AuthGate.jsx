@@ -29,12 +29,28 @@ export default function AuthGate({ children }) {
 
     let active = true;
 
-    supabase.auth.getSession().then(({ data }) => {
-      if (active) {
-        setSession(data.session);
-        setLoading(false);
+    async function loadSession() {
+      try {
+        const { data, error: sessionError } = await supabase.auth.getSession();
+        if (sessionError) throw sessionError;
+
+        if (active) {
+          setSession(data.session);
+        }
+      } catch (sessionError) {
+        console.warn("Session check failed:", sessionError?.name);
+        if (active) {
+          setSession(null);
+          setError("לא ניתן לבדוק את מצב ההתחברות. נסה להתחבר מחדש.");
+        }
+      } finally {
+        if (active) {
+          setLoading(false);
+        }
       }
-    });
+    }
+
+    loadSession();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, newSession) => {
       if (active) setSession(newSession);
@@ -57,31 +73,44 @@ export default function AuthGate({ children }) {
     }
 
     setSubmitting(true);
-    const { error: authError } = await supabase.auth.signInWithPassword({
-      email: trimmedEmail,
-      password,
-    });
-    setSubmitting(false);
+    try {
+      const { error: authError } = await supabase.auth.signInWithPassword({
+        email: trimmedEmail,
+        password,
+      });
 
-    if (authError) {
-      // Log sanitized info for development — no credentials
-      console.warn("Login failed:", authError.status, authError.name);
-      if (authError.status === 400 || authError.message?.toLowerCase().includes("invalid")) {
-        setError("האימייל או הסיסמה אינם נכונים");
-      } else {
-        setError("לא ניתן להתחבר כרגע. נסה שוב.");
+      if (authError) {
+        // Log sanitized info for development — no credentials
+        console.warn("Login failed:", authError.status, authError.name);
+        if (authError.status === 400 || authError.message?.toLowerCase().includes("invalid")) {
+          setError("האימייל או הסיסמה אינם נכונים");
+        } else {
+          setError("לא ניתן להתחבר כרגע. נסה שוב.");
+        }
       }
+    } catch (authError) {
+      console.warn("Login request failed:", authError?.name);
+      setError("לא ניתן להתחבר כרגע. בדוק את החיבור ונסה שוב.");
+    } finally {
+      setSubmitting(false);
     }
   }
 
   async function handleLogout() {
     setSignOutError("");
     setSigningOut(true);
-    const { error: signOutErr } = await supabase.auth.signOut();
-    setSigningOut(false);
-    if (signOutErr) {
-      console.warn("Sign-out failed:", signOutErr.name);
-      setSignOutError("לא ניתן להתנתק כרגע. נסה שוב.");
+
+    try {
+      const { error: signOutErr } = await supabase.auth.signOut();
+      if (signOutErr) {
+        console.warn("Sign-out failed:", signOutErr.name);
+        setSignOutError("לא ניתן להתנתק כרגע. נסה שוב.");
+      }
+    } catch (signOutErr) {
+      console.warn("Sign-out request failed:", signOutErr?.name);
+      setSignOutError("לא ניתן להתנתק כרגע. בדוק את החיבור ונסה שוב.");
+    } finally {
+      setSigningOut(false);
     }
   }
 
@@ -124,6 +153,7 @@ export default function AuthGate({ children }) {
         style={{
           width: "100%",
           maxWidth: 360,
+          boxSizing: "border-box",
           padding: "40px 32px",
           borderRadius: 16,
           border: "1px solid #E5E2DC",

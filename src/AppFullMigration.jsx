@@ -1016,6 +1016,7 @@ function Reviews() {
 function Schedule() {
   const [sessions, setSessions] = useState([]);
   const [trainees, setTrainees] = useState([]);
+  const [sessionsError, setSessionsError] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [formError, setFormError] = useState("");
   const [form, setForm] = useState({
@@ -1050,15 +1051,38 @@ function Schedule() {
   useEffect(() => {
     let active = true;
 
-    async function load() {
+    async function loadTraineesData() {
       try {
-        const [sessionRows, traineeRows] = await Promise.all([fetchSessions(), fetchTrainees()]);
+        const traineeRows = await fetchTrainees();
         if (active) {
           setTrainees(traineeRows);
+        }
+        return traineeRows;
+      } catch (err) {
+        console.error("Schedule trainees fetch error:", err);
+        return [];
+      }
+    }
+
+    async function loadSessionsData(traineeRows) {
+      try {
+        const sessionRows = await fetchSessions();
+        if (active) {
           setSessions(sessionRows.map((row) => mapSessionRow(row, traineeRows)));
+          setSessionsError("");
         }
       } catch (err) {
-        console.error("Schedule fetch error:", err);
+        console.error("Schedule sessions fetch error:", err);
+        if (active) {
+          setSessionsError("לא ניתן לטעון את האימונים כרגע.");
+        }
+      }
+    }
+
+    async function load() {
+      const traineeRows = await loadTraineesData();
+      if (active) {
+        await loadSessionsData(traineeRows);
       }
     }
 
@@ -1239,6 +1263,11 @@ function Schedule() {
           <div style={{ fontSize: 28, fontWeight: 700 }}>{kpiCoord}</div>
         </div>
       </div>
+      {sessionsError && (
+        <div style={{ fontSize: 13, color: "#C0392B", marginBottom: 16 }}>
+          {sessionsError}
+        </div>
+      )}
       {showForm && (
         <div style={{ background: "#fff", borderRadius: 12, border: "0.5px solid #EDEBE6", padding: 20, marginBottom: 16 }}>
           <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 16 }}>הוספת אימון חדש</div>

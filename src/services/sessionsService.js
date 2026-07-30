@@ -41,6 +41,27 @@ export async function createSession(input) {
   return data;
 }
 
+export async function updateSession(id, input) {
+  const { data, error } = await supabase
+    .from("training_sessions")
+    .update({
+      trainee_id: input.traineeId,
+      session_date: input.date,
+      start_time: input.startTime,
+      duration_minutes: input.durationMinutes,
+      training_type: input.trainingType,
+      location: input.location,
+      status: input.status,
+      notes: input.notes ?? null,
+    })
+    .eq("id", id)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
 export async function updateSessionStatus(id, status) {
   const { data, error } = await supabase
     .from("training_sessions")

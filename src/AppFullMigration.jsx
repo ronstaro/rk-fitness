@@ -493,6 +493,8 @@ function Trainees({ onOpenPrograms }) {
   const [rowActionId, setRowActionId] = useState(null);
   const [rowError, setRowError] = useState("");
   const [activeProgramsByTrainee, setActiveProgramsByTrainee] = useState({});
+  const [sessions, setSessions] = useState([]);
+  const [selectedTraineeId, setSelectedTraineeId] = useState("");
   const actionLockRef = useRef(false);
 
   async function handleRetry() {
@@ -500,11 +502,13 @@ function Trainees({ onOpenPrograms }) {
     setLoadError("");
 
     try {
-      const [traineeRows, activePrograms] = await Promise.all([
+      const [traineeRows, activePrograms, sessionRows] = await Promise.all([
         fetchTrainees(),
         fetchActivePrograms(),
+        fetchSessions(),
       ]);
       setTrainees(traineeRows);
+      setSessions(sessionRows);
       setActiveProgramsByTrainee(
         Object.fromEntries(
           activePrograms.map((program) => [program.trainee_id, program])
@@ -524,12 +528,14 @@ function Trainees({ onOpenPrograms }) {
 
     async function load() {
       try {
-        const [traineeRows, activePrograms] = await Promise.all([
+        const [traineeRows, activePrograms, sessionRows] = await Promise.all([
           fetchTrainees(),
           fetchActivePrograms(),
+          fetchSessions(),
         ]);
         if (active) {
           setTrainees(traineeRows);
+          setSessions(sessionRows);
           setActiveProgramsByTrainee(
             Object.fromEntries(
               activePrograms.map((program) => [program.trainee_id, program])
@@ -707,40 +713,106 @@ function Trainees({ onOpenPrograms }) {
     return years;
   }
 
-  const kpiActive = trainees.filter((t) => t.status === "פעיל").length;
-  const kpiOnline = trainees.filter((t) => t.training_type === "אונליין").length;
-  const kpiPersonal = trainees.filter((t) => t.training_type === "אישי").length;
-  const kpiFollowUp = trainees.filter((t) => t.status === "דורש מעקב").length;
   const actionsLocked = saving || rowActionId !== null;
 
-  const filteredTrainees = filter === "פעילים"
-    ? trainees.filter((t) => t.status === "פעיל")
-    : filter === "מעקב"
-    ? trainees.filter((t) => t.status === "דורש מעקב")
+  const filteredTrainees = filter === "אונליין"
+    ? trainees.filter((t) => t.training_type === "אונליין")
+    : filter === "אישי"
+    ? trainees.filter((t) => t.training_type === "אישי")
     : trainees;
 
   const statusOptions = ["פעיל", "בהקפאה", "דורש מעקב", "הסתיים"];
   const trainingTypeOptions = ["אישי", "אונליין", "קבוצתי"];
+  const selectedTrainee = trainees.find((trainee) => trainee.id === selectedTraineeId);
 
-  const inp = {
-    width: "100%",
-    padding: "8px 10px",
-    borderRadius: 8,
-    border: "0.5px solid #EDEBE6",
-    fontSize: 14,
-    boxSizing: "border-box",
-    background: "#FAF8F5",
-  };
+  function initials(fullName) {
+    return fullName
+      .trim()
+      .split(/\s+/)
+      .slice(0, 2)
+      .map((part) => part[0])
+      .join("");
+  }
 
-  const pillStyle = (active) => ({
-    fontSize: 13,
-    padding: "6px 14px",
-    borderRadius: 20,
-    cursor: "pointer",
-    background: active ? "#F9F0F2" : "#fff",
-    color: active ? "#7C2D3E" : "#615E57",
-    fontWeight: active ? 600 : 400,
-  });
+  function formatDate(value) {
+    if (!value) return "לא הוזן";
+    return new Date(`${value}T12:00:00`).toLocaleDateString("he-IL");
+  }
+
+  function ageFromBirthDate(value) {
+    if (!value) return null;
+    const birthDate = new Date(`${value}T12:00:00`);
+    const today = new Date();
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const monthDifference = today.getMonth() - birthDate.getMonth();
+    if (
+      monthDifference < 0 ||
+      (monthDifference === 0 && today.getDate() < birthDate.getDate())
+    ) {
+      age -= 1;
+    }
+    return age;
+  }
+
+  function localDateKey(date) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }
+
+  function sessionStats(traineeId) {
+    const today = new Date();
+    const weekStart = new Date(today);
+    weekStart.setHours(12, 0, 0, 0);
+    weekStart.setDate(today.getDate() - today.getDay());
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekStart.getDate() + 6);
+
+    const monthStart = new Date(today);
+    monthStart.setHours(12, 0, 0, 0);
+    monthStart.setDate(today.getDate() - 29);
+
+    const traineeSessions = sessions.filter(
+      (session) => session.trainee_id === traineeId && session.status !== "בוטל"
+    );
+    const weekly = traineeSessions.filter(
+      (session) =>
+        session.session_date >= localDateKey(weekStart) &&
+        session.session_date <= localDateKey(weekEnd)
+    );
+    const lastThirtyDays = traineeSessions.filter(
+      (session) =>
+        session.session_date >= localDateKey(monthStart) &&
+        session.session_date <= localDateKey(today)
+    );
+    const weeklyCompleted = weekly.filter(
+      (session) => session.status === "הושלם"
+    ).length;
+    const monthlyCompleted = lastThirtyDays.filter(
+      (session) => session.status === "הושלם"
+    ).length;
+
+    return {
+      weeklyPlanned: weekly.length,
+      weeklyCompleted,
+      weeklyPercent:
+        weekly.length === 0 ? 0 : Math.round((weeklyCompleted / weekly.length) * 100),
+      monthlyPlanned: lastThirtyDays.length,
+      monthlyCompleted,
+      monthlyPercent:
+        lastThirtyDays.length === 0
+          ? 0
+          : Math.round((monthlyCompleted / lastThirtyDays.length) * 100),
+    };
+  }
+
+  function statusClass(status) {
+    if (status === "פעיל") return "badge-active";
+    if (status === "דורש מעקב") return "badge-danger";
+    if (status === "בהקפאה") return "badge-warn";
+    return "badge-inactive";
+  }
 
   if (loading) {
     return (
@@ -774,163 +846,438 @@ function Trainees({ onOpenPrograms }) {
     );
   }
 
+  if (selectedTrainee) {
+    const activeProgram = activeProgramsByTrainee[selectedTrainee.id];
+    const stats = sessionStats(selectedTrainee.id);
+    const age = ageFromBirthDate(selectedTrainee.birth_date);
+    const years = trainingYears(selectedTrainee.start_date);
+    const busy = rowActionId === selectedTrainee.id;
+
+    return (
+      <div className="trainee-profile slide-in">
+        <button
+          type="button"
+          className="btn btn-ghost btn-sm trainee-back-button"
+          onClick={() => setSelectedTraineeId("")}
+        >
+          → חזרה למתאמנים
+        </button>
+
+        <section className="trainee-profile-hero">
+          <div className="trainee-profile-identity">
+            <div className="avatar avatar-lg">{initials(selectedTrainee.full_name)}</div>
+            <div>
+              <h2>{selectedTrainee.full_name}</h2>
+              <div className="trainee-card-badges">
+                <span className={`badge ${statusClass(selectedTrainee.status)}`}>
+                  {selectedTrainee.status}
+                </span>
+                <span className="badge badge-new">{selectedTrainee.training_type}</span>
+                {activeProgram && <span className="badge badge-burg">תוכנית פעילה</span>}
+                {years >= 1 && (
+                  <span className="badge badge-mustard">
+                    {years === 1 ? "שנת אימונים" : `${years} שנות אימונים`}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="trainee-profile-actions">
+            {selectedTrainee.phone && (
+              <a
+                href={whatsappLink(selectedTrainee.phone)}
+                target="_blank"
+                rel="noreferrer"
+                className="btn btn-whatsapp btn-sm"
+              >
+                WhatsApp
+              </a>
+            )}
+            <button
+              type="button"
+              className="btn btn-outline btn-sm"
+              onClick={() => handleEdit(selectedTrainee)}
+              disabled={actionsLocked}
+            >
+              עריכה
+            </button>
+            <select
+              value={selectedTrainee.status}
+              onChange={(event) =>
+                handleStatusChange(selectedTrainee.id, event.target.value)
+              }
+              disabled={actionsLocked}
+              className="form-select trainee-status-select"
+              aria-label="סטטוס מתאמן"
+            >
+              {statusOptions.map((status) => (
+                <option key={status}>{status}</option>
+              ))}
+            </select>
+          </div>
+        </section>
+
+        {selectedTrainee.status === "דורש מעקב" && (
+          <div className="alert-strip danger">
+            נדרש מעקב מול המתאמן. כדאי לבדוק את האימונים האחרונים וההערות.
+          </div>
+        )}
+
+        {rowError && <div className="alert-strip danger">{rowError}</div>}
+
+        {showForm && editingTraineeId === selectedTrainee.id && (
+          <section className="card trainee-edit-card">
+            <div className="section-title">עריכת מתאמן</div>
+            <div className="form-row">
+              <div className="form-group">
+                <label className="form-label">שם מלא *</label>
+                <input className="form-input" value={form.fullName} onChange={(event) => handleField("fullName", event.target.value)} />
+              </div>
+              <div className="form-group">
+                <label className="form-label">טלפון *</label>
+                <input className="form-input" value={form.phone} onChange={(event) => handleField("phone", event.target.value)} />
+              </div>
+              <div className="form-group">
+                <label className="form-label">תאריך לידה</label>
+                <input className="form-input" type="date" value={form.birthDate} onChange={(event) => handleField("birthDate", event.target.value)} />
+              </div>
+              <div className="form-group">
+                <label className="form-label">תאריך התחלה *</label>
+                <input className="form-input" type="date" value={form.startDate} onChange={(event) => handleField("startDate", event.target.value)} />
+              </div>
+            </div>
+            <div className="form-row">
+              <div className="form-group">
+                <label className="form-label">סוג אימון</label>
+                <select className="form-select" value={form.trainingType} onChange={(event) => handleField("trainingType", event.target.value)}>
+                  {trainingTypeOptions.map((type) => <option key={type}>{type}</option>)}
+                </select>
+              </div>
+              <div className="form-group">
+                <label className="form-label">יעד מרכזי *</label>
+                <input className="form-input" value={form.mainGoal} onChange={(event) => handleField("mainGoal", event.target.value)} />
+              </div>
+            </div>
+            <div className="form-group">
+              <label className="form-label">מדד הצלחה</label>
+              <input className="form-input" value={form.successMetric} onChange={(event) => handleField("successMetric", event.target.value)} />
+            </div>
+            <div className="form-group">
+              <label className="form-label">הערות</label>
+              <textarea className="form-textarea" value={form.notes} onChange={(event) => handleField("notes", event.target.value)} />
+            </div>
+            {formError && <div className="alert-strip danger">{formError}</div>}
+            <div className="flex-gap">
+              <button type="button" className="btn btn-primary btn-sm" onClick={handleSave} disabled={actionsLocked}>
+                {saving ? "שומר..." : "שמור שינויים"}
+              </button>
+              <button type="button" className="btn btn-outline btn-sm" onClick={() => { setShowForm(false); setEditingTraineeId(null); setFormError(""); }} disabled={saving}>
+                ביטול
+              </button>
+            </div>
+          </section>
+        )}
+
+        <div className="trainee-profile-grid">
+          <div className="trainee-profile-column">
+            <section className="card trainee-detail-card">
+              <div className="section-title">פרטים אישיים</div>
+              <dl className="trainee-detail-list">
+                <div><dt>טלפון</dt><dd>{selectedTrainee.phone || "לא הוזן"}</dd></div>
+                <div><dt>גיל</dt><dd>{age ?? "לא הוזן"}</dd></div>
+                <div><dt>תאריך לידה</dt><dd>{formatDate(selectedTrainee.birth_date)}</dd></div>
+                <div><dt>תחילת אימון</dt><dd>{formatDate(selectedTrainee.start_date)}</dd></div>
+                <div><dt>מסלול</dt><dd>{selectedTrainee.training_type}</dd></div>
+                <div><dt>יעד מרכזי</dt><dd>{selectedTrainee.main_goal || "לא הוזן"}</dd></div>
+                <div><dt>מדד הצלחה</dt><dd>{selectedTrainee.success_metric || "לא הוזן"}</dd></div>
+              </dl>
+            </section>
+
+            <section className="card trainee-detail-card">
+              <div className="section-title">חיוב ותשלום</div>
+              <div className="trainee-unavailable-state">
+                נתוני התשלום עדיין לא מחוברים לפרופיל המתאמן.
+              </div>
+            </section>
+
+            <section className="card trainee-detail-card">
+              <div className="section-title">כרטיסיית אימונים</div>
+              <div className="trainee-unavailable-state">
+                מעקב יתרה, מחיר לשיעור ותוקף יתווספו לאחר חיבור מודול החבילות.
+              </div>
+            </section>
+          </div>
+
+          <div className="trainee-profile-column">
+            <section className="card trainee-detail-card">
+              <div className="section-title">תוכנית אימון</div>
+              {activeProgram ? (
+                <>
+                  <div className="trainee-program-name">{activeProgram.name}</div>
+                  <div className="muted text-sm">התוכנית הפעילה של המתאמן</div>
+                  <button
+                    type="button"
+                    className="btn btn-outline btn-sm mt-16"
+                    onClick={() => onOpenPrograms(selectedTrainee.id)}
+                  >
+                    פתח תוכנית
+                  </button>
+                </>
+              ) : (
+                <>
+                  <div className="trainee-unavailable-state">אין תוכנית פעילה.</div>
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-sm mt-16"
+                    onClick={() => onOpenPrograms(selectedTrainee.id)}
+                  >
+                    צור תוכנית
+                  </button>
+                </>
+              )}
+            </section>
+
+            <section className="card trainee-detail-card">
+              <div className="section-title">התקדמות</div>
+              <div className="trainee-progress-row">
+                <div className="flex-between">
+                  <span className="muted text-sm">השלמה שבועית</span>
+                  <strong>{stats.weeklyCompleted}/{stats.weeklyPlanned}</strong>
+                </div>
+                <div className="progress-bar">
+                  <div
+                    className={`progress-fill ${stats.weeklyPercent >= 75 ? "green" : stats.weeklyPercent >= 40 ? "warn" : "danger"}`}
+                    style={{ width: `${stats.weeklyPercent}%` }}
+                  />
+                </div>
+              </div>
+              <div className="trainee-progress-row">
+                <div className="flex-between">
+                  <span className="muted text-sm">עקביות ב־30 הימים האחרונים</span>
+                  <strong>
+                    {stats.monthlyPlanned === 0 ? "אין נתונים" : `${stats.monthlyPercent}%`}
+                  </strong>
+                </div>
+                <div className="progress-bar">
+                  <div
+                    className={`progress-fill ${stats.monthlyPercent >= 75 ? "green" : stats.monthlyPercent >= 40 ? "warn" : "danger"}`}
+                    style={{ width: `${stats.monthlyPercent}%` }}
+                  />
+                </div>
+              </div>
+            </section>
+
+            <section className="card trainee-detail-card">
+              <div className="section-title">הערות</div>
+              <div className={selectedTrainee.notes ? "trainee-notes" : "trainee-unavailable-state"}>
+                {selectedTrainee.notes || "אין הערות עדיין."}
+              </div>
+            </section>
+          </div>
+        </div>
+
+        <div className="trainee-danger-zone">
+          <button
+            type="button"
+            className="btn btn-danger btn-sm"
+            onClick={() => handleDelete(selectedTrainee.id)}
+            disabled={actionsLocked || busy}
+          >
+            מחק מתאמן
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+    <div className="trainees-page slide-in">
+      <div className="trainees-page-header">
         <div>
-          <h2 style={{ margin: 0, fontSize: 20, color: "#1E1C19" }}>מתאמנים</h2>
-          <p style={{ margin: "4px 0 0", fontSize: 13, color: "#9E9A90" }}>ניהול מתאמנים, סטטוס ותוכניות</p>
+          <h2>מתאמנים</h2>
+          <p>{trainees.filter((trainee) => trainee.status === "פעיל").length} מתאמנים פעילים</p>
         </div>
-        <button onClick={() => { setEditingTraineeId(null); setForm({ fullName: "", phone: "", birthDate: "", startDate: "", trainingType: "אישי", status: "פעיל", mainGoal: "", successMetric: "", notes: "" }); setShowForm(true); setFormError(""); }} disabled={actionsLocked} style={{ fontSize: 13, padding: "8px 16px", borderRadius: 8, border: "none", background: actionsLocked ? "#9E9A90" : "#7C2D3E", color: "#fff", cursor: actionsLocked ? "not-allowed" : "pointer" }}>+ הוסף מתאמן</button>
+        <button
+          type="button"
+          className="btn btn-primary"
+          onClick={() => {
+            setEditingTraineeId(null);
+            setForm({ fullName: "", phone: "", birthDate: "", startDate: "", trainingType: "אישי", status: "פעיל", mainGoal: "", successMetric: "", notes: "" });
+            setShowForm(true);
+            setFormError("");
+          }}
+          disabled={actionsLocked}
+        >
+          + הוסף מתאמן
+        </button>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16, marginBottom: 24 }}>
-        <div style={{ background: "#fff", borderRadius: 10, border: "0.5px solid #EDEBE6", padding: 16 }}>
-          <div style={{ fontSize: 11, textTransform: "uppercase", color: "#9E9A90", marginBottom: 6 }}>מתאמנים פעילים</div>
-          <div style={{ fontSize: 28, fontWeight: 700 }}>{kpiActive}</div>
-        </div>
-        <div style={{ background: "#fff", borderRadius: 10, border: "0.5px solid #EDEBE6", padding: 16 }}>
-          <div style={{ fontSize: 11, textTransform: "uppercase", color: "#9E9A90", marginBottom: 6 }}>אונליין / פרונטלי</div>
-          <div style={{ fontSize: 20, fontWeight: 700 }}>{kpiOnline} אונליין / {kpiPersonal} אישי</div>
-        </div>
-        <div style={{ background: "#fff", borderRadius: 10, border: "0.5px solid #EDEBE6", padding: 16 }}>
-          <div style={{ fontSize: 11, textTransform: "uppercase", color: "#9E9A90", marginBottom: 6 }}>דורשים מעקב</div>
-          <div style={{ fontSize: 28, fontWeight: 700 }}>{kpiFollowUp}</div>
-        </div>
-      </div>
+
       {showForm && (
-        <div style={{ background: "#fff", borderRadius: 12, border: "0.5px solid #EDEBE6", padding: 20, marginBottom: 16 }}>
-          <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 16 }}>{editingTraineeId ? "עריכת מתאמן" : "הוספת מתאמן חדש"}</div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
-            <div>
-              <div style={{ fontSize: 12, color: "#9E9A90", marginBottom: 4 }}>שם מלא *</div>
-              <input value={form.fullName} onChange={(e) => handleField("fullName", e.target.value)} style={inp} placeholder="שם מלא" />
+        <div className="card trainees-form-card">
+          <div className="section-title">{editingTraineeId ? "עריכת מתאמן" : "הוספת מתאמן חדש"}</div>
+          <div className="form-row">
+            <div className="form-group">
+              <label className="form-label">שם מלא *</label>
+              <input value={form.fullName} onChange={(e) => handleField("fullName", e.target.value)} className="form-input" placeholder="שם מלא" />
             </div>
-            <div>
-              <div style={{ fontSize: 12, color: "#9E9A90", marginBottom: 4 }}>טלפון *</div>
-              <input value={form.phone} onChange={(e) => handleField("phone", e.target.value)} style={inp} placeholder="05X-XXXXXXX" />
+            <div className="form-group">
+              <label className="form-label">טלפון *</label>
+              <input value={form.phone} onChange={(e) => handleField("phone", e.target.value)} className="form-input" placeholder="05X-XXXXXXX" />
             </div>
-            <div>
-              <div style={{ fontSize: 12, color: "#9E9A90", marginBottom: 4 }}>תאריך לידה</div>
-              <input type="date" value={form.birthDate} onChange={(e) => handleField("birthDate", e.target.value)} style={inp} />
+            <div className="form-group">
+              <label className="form-label">תאריך לידה</label>
+              <input type="date" value={form.birthDate} onChange={(e) => handleField("birthDate", e.target.value)} className="form-input" />
             </div>
-            <div>
-              <div style={{ fontSize: 12, color: "#9E9A90", marginBottom: 4 }}>תאריך התחלה *</div>
-              <input type="date" value={form.startDate} onChange={(e) => handleField("startDate", e.target.value)} style={inp} />
+            <div className="form-group">
+              <label className="form-label">תאריך התחלה *</label>
+              <input type="date" value={form.startDate} onChange={(e) => handleField("startDate", e.target.value)} className="form-input" />
             </div>
-            <div>
-              <div style={{ fontSize: 12, color: "#9E9A90", marginBottom: 4 }}>סוג אימון</div>
-              <select value={form.trainingType} onChange={(e) => handleField("trainingType", e.target.value)} style={inp}>
+            <div className="form-group">
+              <label className="form-label">סוג אימון</label>
+              <select value={form.trainingType} onChange={(e) => handleField("trainingType", e.target.value)} className="form-select">
                 {trainingTypeOptions.map((o) => <option key={o}>{o}</option>)}
               </select>
             </div>
-            <div>
-              <div style={{ fontSize: 12, color: "#9E9A90", marginBottom: 4 }}>סטטוס</div>
-              <select value={form.status} onChange={(e) => handleField("status", e.target.value)} style={inp}>
+            <div className="form-group">
+              <label className="form-label">סטטוס</label>
+              <select value={form.status} onChange={(e) => handleField("status", e.target.value)} className="form-select">
                 {statusOptions.map((o) => <option key={o}>{o}</option>)}
               </select>
             </div>
           </div>
-          <div style={{ marginBottom: 12 }}>
-            <div style={{ fontSize: 12, color: "#9E9A90", marginBottom: 4 }}>יעד מרכזי *</div>
-            <input value={form.mainGoal} onChange={(e) => handleField("mainGoal", e.target.value)} style={inp} placeholder="יעד מרכזי" />
+          <div className="form-group">
+            <label className="form-label">יעד מרכזי *</label>
+            <input value={form.mainGoal} onChange={(e) => handleField("mainGoal", e.target.value)} className="form-input" placeholder="יעד מרכזי" />
           </div>
-          <div style={{ marginBottom: 12 }}>
-            <div style={{ fontSize: 12, color: "#9E9A90", marginBottom: 4 }}>מדד הצלחה</div>
-            <input value={form.successMetric} onChange={(e) => handleField("successMetric", e.target.value)} style={inp} placeholder="מדד הצלחה" />
+          <div className="form-group">
+            <label className="form-label">מדד הצלחה</label>
+            <input value={form.successMetric} onChange={(e) => handleField("successMetric", e.target.value)} className="form-input" placeholder="מדד הצלחה" />
           </div>
-          <div style={{ marginBottom: 16 }}>
-            <div style={{ fontSize: 12, color: "#9E9A90", marginBottom: 4 }}>הערות</div>
-            <textarea value={form.notes} onChange={(e) => handleField("notes", e.target.value)} style={{ ...inp, height: 72, resize: "vertical" }} placeholder="הערות נוספות" />
+          <div className="form-group">
+            <label className="form-label">הערות</label>
+            <textarea value={form.notes} onChange={(e) => handleField("notes", e.target.value)} className="form-textarea" placeholder="הערות נוספות" />
           </div>
-          {formError && <div style={{ fontSize: 13, color: "#C0392B", marginBottom: 12 }}>{formError}</div>}
-          <div style={{ display: "flex", gap: 8 }}>
-            <button onClick={handleSave} disabled={actionsLocked} style={{ fontSize: 13, padding: "8px 20px", borderRadius: 8, border: "none", background: actionsLocked ? "#9E9A90" : "#7C2D3E", color: "#fff", cursor: actionsLocked ? "not-allowed" : "pointer" }}>{saving ? "שומר..." : editingTraineeId ? "שמור שינויים" : "שמור מתאמן"}</button>
-            <button onClick={() => { setShowForm(false); setFormError(""); setEditingTraineeId(null); setForm({ fullName: "", phone: "", birthDate: "", startDate: "", trainingType: "אישי", status: "פעיל", mainGoal: "", successMetric: "", notes: "" }); }} disabled={saving} style={{ fontSize: 13, padding: "8px 16px", borderRadius: 8, border: "0.5px solid #EDEBE6", background: "#fff", color: "#615E57", cursor: saving ? "not-allowed" : "pointer" }}>ביטול</button>
+          {formError && <div className="alert-strip danger">{formError}</div>}
+          <div className="flex-gap">
+            <button onClick={handleSave} disabled={actionsLocked} className="btn btn-primary btn-sm">{saving ? "שומר..." : editingTraineeId ? "שמור שינויים" : "שמור מתאמן"}</button>
+            <button onClick={() => { setShowForm(false); setFormError(""); setEditingTraineeId(null); setForm({ fullName: "", phone: "", birthDate: "", startDate: "", trainingType: "אישי", status: "פעיל", mainGoal: "", successMetric: "", notes: "" }); }} disabled={saving} className="btn btn-outline btn-sm">ביטול</button>
           </div>
         </div>
       )}
-      <div style={{ background: "#fff", borderRadius: 12, border: "0.5px solid #EDEBE6", padding: 20 }}>
-        <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-          <div onClick={() => setFilter("הכל")} style={pillStyle(filter === "הכל")}>הכל</div>
-          <div onClick={() => setFilter("פעילים")} style={pillStyle(filter === "פעילים")}>פעילים</div>
-          <div onClick={() => setFilter("מעקב")} style={pillStyle(filter === "מעקב")}>מעקב</div>
-        </div>
-        {rowError && (
-          <div style={{ fontSize: 13, color: "#C0392B", marginBottom: 8 }}>
-            {rowError}
-          </div>
-        )}
-        {filteredTrainees.length === 0 ? (
-          <div style={{ fontSize: 14, color: "#9E9A90", textAlign: "center", padding: "24px 0" }}>אין מתאמנים להצגה עדיין</div>
-        ) : (
-          filteredTrainees.map((t) => {
-            const years = trainingYears(t.start_date);
-            const busy = rowActionId === t.id;
-            const activeProgram = activeProgramsByTrainee[t.id];
+
+      <div className="filter-chips trainees-filters">
+        {["הכל", "אונליין", "אישי"].map((option) => (
+          <button
+            type="button"
+            key={option}
+            className={`filter-chip${filter === option ? " active" : ""}`}
+            onClick={() => setFilter(option)}
+          >
+            {option}
+          </button>
+        ))}
+      </div>
+
+      {rowError && <div className="alert-strip danger">{rowError}</div>}
+
+      {filteredTrainees.length === 0 ? (
+        <div className="card empty-state">אין מתאמנים להצגה עדיין</div>
+      ) : (
+        <div className="trainee-cards-grid">
+          {filteredTrainees.map((trainee) => {
+            const stats = sessionStats(trainee.id);
+            const activeProgram = activeProgramsByTrainee[trainee.id];
+            const busy = rowActionId === trainee.id;
+
             return (
-              <div key={t.id} style={{ padding: "12px 0", borderBottom: "0.5px solid #EDEBE6", opacity: busy ? 0.65 : 1 }}>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
-                  <div>
-                    <div style={{ fontWeight: 600, fontSize: 14 }}>{t.full_name}</div>
-                    <div style={{ fontSize: 12, color: "#9E9A90" }}>{t.phone} · {t.training_type} · התחיל {t.start_date}</div>
+              <article
+                key={trainee.id}
+                className="trainee-card"
+                role="button"
+                tabIndex={0}
+                aria-label={`פתיחת הפרופיל של ${trainee.full_name}`}
+                onClick={() => setSelectedTraineeId(trainee.id)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    setSelectedTraineeId(trainee.id);
+                  }
+                }}
+                style={{ opacity: busy ? 0.65 : 1 }}
+              >
+                <div className="trainee-card-head">
+                  <div className="trainee-card-person">
+                    <div className="avatar avatar-lg">{initials(trainee.full_name)}</div>
+                    <div>
+                      <div className="trainee-card-name">{trainee.full_name}</div>
+                      <div className="trainee-card-contact">
+                        {trainee.phone || "לא הוזן טלפון"}
+                      </div>
+                    </div>
                   </div>
-                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                    <select value={t.status} onChange={(e) => handleStatusChange(t.id, e.target.value)} disabled={actionsLocked} style={{ fontSize: 12, padding: "4px 8px", borderRadius: 6, border: "0.5px solid #EDEBE6", background: "#FAF8F5", cursor: actionsLocked ? "not-allowed" : "pointer" }}>
-                      {statusOptions.map((o) => <option key={o}>{o}</option>)}
-                    </select>
-                    <a href={whatsappLink(t.phone)} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: "#25D366", textDecoration: "none" }}>WA</a>
-                    <button onClick={() => handleEdit(t)} disabled={actionsLocked} style={{ fontSize: 12, padding: "4px 8px", borderRadius: 6, border: "none", background: "#FAF8F5", color: "#615E57", cursor: actionsLocked ? "not-allowed" : "pointer" }}>ערוך</button>
-                    <button onClick={() => handleDelete(t.id)} disabled={actionsLocked} style={{ fontSize: 12, padding: "4px 8px", borderRadius: 6, border: "none", background: "#FAF8F5", color: "#C0392B", cursor: actionsLocked ? "not-allowed" : "pointer" }}>מחק</button>
-                  </div>
+                  {trainee.phone && (
+                    <a
+                      href={whatsappLink(trainee.phone)}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="btn btn-whatsapp btn-sm trainee-card-wa"
+                      onClick={(event) => event.stopPropagation()}
+                    >
+                      WA
+                    </a>
+                  )}
                 </div>
-                <div style={{ fontSize: 12, color: "#615E57", marginBottom: 2 }}>יעד: {t.main_goal}</div>
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    gap: 8,
-                    marginTop: 7,
-                    padding: "8px 10px",
-                    borderRadius: 8,
-                    background: "#FAF8F5",
-                  }}
-                >
-                  <div style={{ fontSize: 12, color: activeProgram ? "#615E57" : "#9E9A90" }}>
-                    {activeProgram
-                      ? `תוכנית פעילה: ${activeProgram.name}`
-                      : "אין תוכנית פעילה"}
+
+                <div className="trainee-card-badges">
+                  <span className="badge badge-new">{trainee.training_type}</span>
+                  <span className={`badge ${statusClass(trainee.status)}`}>
+                    {trainee.status}
+                  </span>
+                  {activeProgram && <span className="badge badge-burg">תוכנית פעילה</span>}
+                </div>
+
+                <div className="trainee-card-program">
+                  <div>
+                    <span className="muted text-xs">תוכנית אימון</span>
+                    <div>{activeProgram ? activeProgram.name : "אין תוכנית פעילה"}</div>
                   </div>
                   <button
                     type="button"
-                    onClick={() => onOpenPrograms(t.id)}
-                    disabled={actionsLocked}
-                    style={{
-                      fontSize: 12,
-                      padding: "5px 9px",
-                      borderRadius: 7,
-                      border: "0.5px solid #EDEBE6",
-                      background: "#fff",
-                      color: "#7C2D3E",
-                      cursor: actionsLocked ? "not-allowed" : "pointer",
+                    className="btn btn-ghost btn-sm"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onOpenPrograms(trainee.id);
                     }}
                   >
-                    {activeProgram ? "פתח תוכנית" : "צור תוכנית"}
+                    {activeProgram ? "פתח" : "צור"}
                   </button>
                 </div>
-                {t.success_metric && <div style={{ fontSize: 12, color: "#9E9A90" }}>מדד: {t.success_metric}</div>}
-                {t.notes && <div style={{ fontSize: 12, color: "#9E9A90", marginTop: 2 }}>{t.notes}</div>}
-                {years >= 1 && (
-                  <div style={{ fontSize: 12, color: "#7C2D3E", marginTop: 4 }}>
-                    {years === 1 ? "השלימו שנת אימונים" : `השלימו ${years} שנות אימונים`}
+
+                <div className="trainee-card-progress">
+                  <div className="flex-between">
+                    <span className="muted text-sm">השלמה שבועית</span>
+                    <strong>
+                      {stats.weeklyCompleted}/{stats.weeklyPlanned}
+                    </strong>
                   </div>
-                )}
-                <div style={{ fontSize: 11, color: "#C4C0B8", marginTop: 4 }}>נוסף: {new Date(t.created_at).toLocaleDateString("he-IL")}</div>
-              </div>
+                  <div className="progress-bar">
+                    <div
+                      className={`progress-fill ${stats.weeklyPercent >= 75 ? "green" : stats.weeklyPercent >= 40 ? "warn" : "danger"}`}
+                      style={{ width: `${stats.weeklyPercent}%` }}
+                    />
+                  </div>
+                </div>
+
+                <div className="trainee-card-footer">
+                  <span>{trainee.main_goal || "לא הוגדר יעד"}</span>
+                  <span>לפרופיל ←</span>
+                </div>
+              </article>
             );
-          })
-        )}
-      </div>
+          })}
+        </div>
+      )}
     </div>
   );
 }

@@ -1,6 +1,7 @@
 ﻿import { useEffect, useRef, useState } from "react";
 import { fetchLeads, createLead, updateLead, updateLeadStatus, deleteLead } from "./services/leadsService.js";
 import { fetchTrainees, createTrainee, updateTrainee, updateTraineeStatus, deleteTrainee } from "./services/traineesService.js";
+import { fetchSessions, createSession, updateSession, updateSessionStatus, deleteSession } from "./services/sessionsService.js";
 
 function whatsappLink(phone) {
   let digits = phone.replace(/\D/g, "");
@@ -1034,12 +1035,7 @@ function Reviews() {
 
 
 function Schedule() {
-  const [sessions, setSessions] = useState([]);
-  const [trainees, setTrainees] = useState([]);
-  const [sessionsError, setSessionsError] = useState("");
-  const [showForm, setShowForm] = useState(false);
-  const [formError, setFormError] = useState("");
-  const [form, setForm] = useState({
+  const EMPTY_FORM = {
     traineeId: "",
     traineeName: "",
     date: "",
@@ -1049,7 +1045,19 @@ function Schedule() {
     location: "",
     status: "מתוכנן",
     notes: "",
-  });
+  };
+
+  const [sessions, setSessions] = useState([]);
+  const [trainees, setTrainees] = useState([]);
+  const [sessionsError, setSessionsError] = useState("");
+  const [showForm, setShowForm] = useState(false);
+  const [formError, setFormError] = useState("");
+  const [form, setForm] = useState(EMPTY_FORM);
+  const [editingSessionId, setEditingSessionId] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [rowActionId, setRowActionId] = useState(null);
+  const [rowError, setRowError] = useState("");
+  const actionLockRef = useRef(false);
 
   function mapSessionRow(row, traineesList) {
     const trainee = traineesList.find((t) => t.id === row.trainee_id);
@@ -1134,10 +1142,11 @@ function Schedule() {
     return String(h).padStart(2, "0") + ":" + String(m).padStart(2, "0");
   }
 
-  function hasOverlap(newDate, newStart, newDur, existingSessions) {
+  function hasOverlap(newDate, newStart, newDur, existingSessions, ignoredSessionId = null) {
     const newStartM = toMinutes(newStart);
     const newEndM = newStartM + Number(newDur);
     return existingSessions.some((s) => {
+      if (s.id === ignoredSessionId) return false;
       if (s.date !== newDate || s.status === "בוטל") return false;
       const sStartM = toMinutes(s.startTime);
       const sEndM = sStartM + Number(s.durationMinutes);
@@ -1146,6 +1155,8 @@ function Schedule() {
   }
 
   async function handleSave() {
+    if (actionLockRef.current || saving || rowActionId) return;
+
     const traineeId = form.traineeId;
     const date = form.date.trim();
     const startTime = form.startTime.trim();
@@ -1159,51 +1170,113 @@ function Schedule() {
       setFormError("משך האימון חייב להיות גדול מ-0");
       return;
     }
-    if (hasOverlap(date, startTime, dur, sessions)) {
+    if (hasOverlap(date, startTime, dur, sessions, editingSessionId)) {
       setFormError("קיים אימון חופף בשעה שנבחרה");
       return;
     }
 
+    actionLockRef.current = true;
+    setSaving(true);
+    setFormError("");
+
+    const payload = {
+      traineeId,
+      date,
+      startTime,
+      durationMinutes: dur,
+      trainingType: form.trainingType,
+      location,
+      status: form.status,
+      notes: form.notes.trim() || null,
+    };
+
     try {
-      const row = await createSession({
-        traineeId,
-        date,
-        startTime,
-        durationMinutes: dur,
-        trainingType: form.trainingType,
-        location,
-        status: form.status,
-        notes: form.notes.trim(),
-      });
-      setSessions((prev) => [...prev, mapSessionRow(row, trainees)]);
-      setForm({ traineeId: "", traineeName: "", date: "", startTime: "", durationMinutes: "", trainingType: "אישי", location: "", status: "מתוכנן", notes: "" });
+      if (editingSessionId) {
+        const row = await updateSession(editingSessionId, payload);
+        setSessions((prev) =>
+          prev.map((session) =>
+            session.id === editingSessionId
+              ? mapSessionRow(row, trainees)
+              : session
+          )
+        );
+      } else {
+        const row = await createSession(payload);
+        setSessions((prev) => [...prev, mapSessionRow(row, trainees)]);
+      }
+
+      setForm(EMPTY_FORM);
+      setEditingSessionId(null);
       setFormError("");
       setShowForm(false);
     } catch (err) {
-      console.error("Session create error:", err);
-      setFormError("לא ניתן לשמור את האימון. נסה שוב.");
+      console.error(editingSessionId ? "Session update error:" : "Session create error:", err);
+      setFormError(editingSessionId ? "לא ניתן לשמור את השינויים. נסה שוב." : "לא ניתן לשמור את האימון. נסה שוב.");
+    } finally {
+      actionLockRef.current = false;
+      setSaving(false);
     }
   }
 
+  function handleEdit(session) {
+    if (actionLockRef.current || saving || rowActionId) return;
+
+    setEditingSessionId(session.id);
+    setForm({
+      traineeId: session.traineeId,
+      traineeName: session.traineeName,
+      date: session.date,
+      startTime: session.startTime,
+      durationMinutes: String(session.durationMinutes),
+      trainingType: session.trainingType,
+      location: session.location,
+      status: session.status,
+      notes: session.notes || "",
+    });
+    setShowForm(true);
+    setFormError("");
+    setRowError("");
+  }
+
   async function handleStatusChange(id, newStatus) {
+    if (actionLockRef.current || saving || rowActionId) return;
+
+    actionLockRef.current = true;
+    setRowActionId(id);
+    setRowError("");
+
     try {
       const row = await updateSessionStatus(id, newStatus);
       setSessions((prev) => prev.map((s) => s.id === id ? mapSessionRow(row, trainees) : s));
     } catch (err) {
       console.error("Session status update error:", err);
+      setRowError("לא ניתן לעדכן את סטטוס האימון.");
+    } finally {
+      actionLockRef.current = false;
+      setRowActionId(null);
     }
   }
 
   async function handleDelete(id) {
+    if (actionLockRef.current || saving || rowActionId) return;
+
     if (!window.confirm("למחוק אימון זה?")) {
       return;
     }
+
+    actionLockRef.current = true;
+    setRowActionId(id);
+    setRowError("");
 
     try {
       await deleteSession(id);
       setSessions((prev) => prev.filter((s) => s.id !== id));
     } catch (err) {
       console.error("Session delete error:", err);
+      setRowError("לא ניתן למחוק את האימון.");
+    } finally {
+      actionLockRef.current = false;
+      setRowActionId(null);
     }
   }
 
@@ -1249,6 +1322,7 @@ function Schedule() {
 
   const statusOptions = ["מתוכנן", "הושלם", "בוטל", "דורש תיאום"];
   const trainingTypeOptions = ["אישי", "אונליין", "קבוצתי"];
+  const actionsLocked = saving || rowActionId !== null;
 
   const inp = {
     width: "100%",
@@ -1267,7 +1341,7 @@ function Schedule() {
           <h2 style={{ margin: 0, fontSize: 20, color: "#1E1C19" }}>לו"ז</h2>
           <p style={{ margin: "4px 0 0", fontSize: 13, color: "#9E9A90" }}>ניהול אימונים, זמינות ומעקב יומי</p>
         </div>
-        <button onClick={() => { setShowForm(true); setFormError(""); }} style={{ fontSize: 13, padding: "8px 16px", borderRadius: 8, border: "none", background: "#7C2D3E", color: "#fff", cursor: "pointer" }}>+ הוסף אימון</button>
+        <button onClick={() => { setEditingSessionId(null); setForm(EMPTY_FORM); setShowForm(true); setFormError(""); setRowError(""); }} disabled={actionsLocked} style={{ fontSize: 13, padding: "8px 16px", borderRadius: 8, border: "none", background: actionsLocked ? "#9E9A90" : "#7C2D3E", color: "#fff", cursor: actionsLocked ? "not-allowed" : "pointer" }}>+ הוסף אימון</button>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16, marginBottom: 24 }}>
         <div style={{ background: "#fff", borderRadius: 10, border: "0.5px solid #EDEBE6", padding: 16 }}>
@@ -1288,9 +1362,14 @@ function Schedule() {
           {sessionsError}
         </div>
       )}
+      {rowError && (
+        <div style={{ fontSize: 13, color: "#C0392B", marginBottom: 16 }}>
+          {rowError}
+        </div>
+      )}
       {showForm && (
         <div style={{ background: "#fff", borderRadius: 12, border: "0.5px solid #EDEBE6", padding: 20, marginBottom: 16 }}>
-          <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 16 }}>הוספת אימון חדש</div>
+          <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 16 }}>{editingSessionId ? "עריכת אימון" : "הוספת אימון חדש"}</div>
           <div style={{ marginBottom: 12 }}>
             <div style={{ fontSize: 12, color: "#9E9A90", marginBottom: 4 }}>מתאמן *</div>
             {trainees.length === 0 ? (
@@ -1338,8 +1417,8 @@ function Schedule() {
           </div>
           {formError && <div style={{ fontSize: 13, color: "#C0392B", marginBottom: 12 }}>{formError}</div>}
           <div style={{ display: "flex", gap: 8 }}>
-            <button onClick={handleSave} style={{ fontSize: 13, padding: "8px 20px", borderRadius: 8, border: "none", background: "#7C2D3E", color: "#fff", cursor: "pointer" }}>שמור אימון</button>
-            <button onClick={() => { setShowForm(false); setFormError(""); }} style={{ fontSize: 13, padding: "8px 16px", borderRadius: 8, border: "0.5px solid #EDEBE6", background: "#fff", color: "#615E57", cursor: "pointer" }}>ביטול</button>
+            <button onClick={handleSave} disabled={actionsLocked} style={{ fontSize: 13, padding: "8px 20px", borderRadius: 8, border: "none", background: actionsLocked ? "#9E9A90" : "#7C2D3E", color: "#fff", cursor: actionsLocked ? "not-allowed" : "pointer" }}>{saving ? "שומר..." : editingSessionId ? "שמור שינויים" : "שמור אימון"}</button>
+            <button onClick={() => { setShowForm(false); setFormError(""); setEditingSessionId(null); setForm(EMPTY_FORM); }} disabled={saving} style={{ fontSize: 13, padding: "8px 16px", borderRadius: 8, border: "0.5px solid #EDEBE6", background: "#fff", color: "#615E57", cursor: saving ? "not-allowed" : "pointer" }}>ביטול</button>
           </div>
         </div>
       )}
@@ -1351,8 +1430,9 @@ function Schedule() {
           todaySessions.map((s) => {
             const endTime = addMinutes(s.startTime, s.durationMinutes);
             const wa = waLink(s.traineeId);
+            const busy = rowActionId === s.id;
             return (
-              <div key={s.id} style={{ padding: "12px 0", borderBottom: "0.5px solid #EDEBE6" }}>
+              <div key={s.id} style={{ padding: "12px 0", borderBottom: "0.5px solid #EDEBE6", opacity: busy ? 0.65 : 1 }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
                   <div>
                     <div style={{ fontWeight: 600, fontSize: 14 }}>{s.traineeName}</div>
@@ -1360,11 +1440,12 @@ function Schedule() {
                     <div style={{ fontSize: 12, color: "#9E9A90" }}>מיקום: {s.location}</div>
                   </div>
                   <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                    <select value={s.status} onChange={(e) => handleStatusChange(s.id, e.target.value)} style={{ fontSize: 12, padding: "4px 8px", borderRadius: 6, border: "0.5px solid #EDEBE6", background: "#FAF8F5", cursor: "pointer" }}>
+                    <select value={s.status} onChange={(e) => handleStatusChange(s.id, e.target.value)} disabled={actionsLocked} style={{ fontSize: 12, padding: "4px 8px", borderRadius: 6, border: "0.5px solid #EDEBE6", background: "#FAF8F5", cursor: actionsLocked ? "not-allowed" : "pointer" }}>
                       {statusOptions.map((o) => <option key={o}>{o}</option>)}
                     </select>
                     {wa && <a href={wa} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: "#25D366", textDecoration: "none" }}>WA</a>}
-                    <button onClick={() => handleDelete(s.id)} style={{ fontSize: 12, padding: "4px 8px", borderRadius: 6, border: "none", background: "#FAF8F5", color: "#C0392B", cursor: "pointer" }}>מחק</button>
+                    <button onClick={() => handleEdit(s)} disabled={actionsLocked} style={{ fontSize: 12, padding: "4px 8px", borderRadius: 6, border: "none", background: "#FAF8F5", color: "#615E57", cursor: actionsLocked ? "not-allowed" : "pointer" }}>ערוך</button>
+                    <button onClick={() => handleDelete(s.id)} disabled={actionsLocked} style={{ fontSize: 12, padding: "4px 8px", borderRadius: 6, border: "none", background: "#FAF8F5", color: "#C0392B", cursor: actionsLocked ? "not-allowed" : "pointer" }}>מחק</button>
                   </div>
                 </div>
                 {s.notes && <div style={{ fontSize: 12, color: "#9E9A90", marginTop: 2 }}>{s.notes}</div>}
@@ -1381,8 +1462,9 @@ function Schedule() {
           upcomingSessions.map((s) => {
             const endTime = addMinutes(s.startTime, s.durationMinutes);
             const wa = waLink(s.traineeId);
+            const busy = rowActionId === s.id;
             return (
-              <div key={s.id} style={{ padding: "12px 0", borderBottom: "0.5px solid #EDEBE6" }}>
+              <div key={s.id} style={{ padding: "12px 0", borderBottom: "0.5px solid #EDEBE6", opacity: busy ? 0.65 : 1 }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
                   <div>
                     <div style={{ fontWeight: 600, fontSize: 14 }}>{s.traineeName}</div>
@@ -1390,11 +1472,12 @@ function Schedule() {
                     <div style={{ fontSize: 12, color: "#9E9A90" }}>מיקום: {s.location}</div>
                   </div>
                   <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                    <select value={s.status} onChange={(e) => handleStatusChange(s.id, e.target.value)} style={{ fontSize: 12, padding: "4px 8px", borderRadius: 6, border: "0.5px solid #EDEBE6", background: "#FAF8F5", cursor: "pointer" }}>
+                    <select value={s.status} onChange={(e) => handleStatusChange(s.id, e.target.value)} disabled={actionsLocked} style={{ fontSize: 12, padding: "4px 8px", borderRadius: 6, border: "0.5px solid #EDEBE6", background: "#FAF8F5", cursor: actionsLocked ? "not-allowed" : "pointer" }}>
                       {statusOptions.map((o) => <option key={o}>{o}</option>)}
                     </select>
                     {wa && <a href={wa} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: "#25D366", textDecoration: "none" }}>WA</a>}
-                    <button onClick={() => handleDelete(s.id)} style={{ fontSize: 12, padding: "4px 8px", borderRadius: 6, border: "none", background: "#FAF8F5", color: "#C0392B", cursor: "pointer" }}>מחק</button>
+                    <button onClick={() => handleEdit(s)} disabled={actionsLocked} style={{ fontSize: 12, padding: "4px 8px", borderRadius: 6, border: "none", background: "#FAF8F5", color: "#615E57", cursor: actionsLocked ? "not-allowed" : "pointer" }}>ערוך</button>
+                    <button onClick={() => handleDelete(s.id)} disabled={actionsLocked} style={{ fontSize: 12, padding: "4px 8px", borderRadius: 6, border: "none", background: "#FAF8F5", color: "#C0392B", cursor: actionsLocked ? "not-allowed" : "pointer" }}>מחק</button>
                   </div>
                 </div>
                 {s.notes && <div style={{ fontSize: 12, color: "#9E9A90", marginTop: 2 }}>{s.notes}</div>}

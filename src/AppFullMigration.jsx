@@ -2,6 +2,8 @@
 import { fetchLeads, createLead, updateLead, updateLeadStatus, deleteLead } from "./services/leadsService.js";
 import { fetchTrainees, createTrainee, updateTrainee, updateTraineeStatus, deleteTrainee } from "./services/traineesService.js";
 import { fetchSessions, createSession, updateSession, updateSessionStatus, deleteSession } from "./services/sessionsService.js";
+import { fetchActivePrograms } from "./services/programsService.js";
+import Programs from "./components/Programs.jsx";
 
 function whatsappLink(phone) {
   let digits = phone.replace(/\D/g, "");
@@ -465,7 +467,7 @@ function Leads() {
 }
 
 
-function Trainees() {
+function Trainees({ onOpenPrograms }) {
   const STORAGE_KEY = "rk-fitness-trainees";
 
   const [trainees, setTrainees] = useState([]);
@@ -490,6 +492,7 @@ function Trainees() {
   const [saving, setSaving] = useState(false);
   const [rowActionId, setRowActionId] = useState(null);
   const [rowError, setRowError] = useState("");
+  const [activeProgramsByTrainee, setActiveProgramsByTrainee] = useState({});
   const actionLockRef = useRef(false);
 
   async function handleRetry() {
@@ -497,8 +500,16 @@ function Trainees() {
     setLoadError("");
 
     try {
-      const data = await fetchTrainees();
-      setTrainees(data);
+      const [traineeRows, activePrograms] = await Promise.all([
+        fetchTrainees(),
+        fetchActivePrograms(),
+      ]);
+      setTrainees(traineeRows);
+      setActiveProgramsByTrainee(
+        Object.fromEntries(
+          activePrograms.map((program) => [program.trainee_id, program])
+        )
+      );
       setHasLoadedTrainees(true);
     } catch (err) {
       console.error("Trainees fetch error:", err);
@@ -513,9 +524,17 @@ function Trainees() {
 
     async function load() {
       try {
-        const data = await fetchTrainees();
+        const [traineeRows, activePrograms] = await Promise.all([
+          fetchTrainees(),
+          fetchActivePrograms(),
+        ]);
         if (active) {
-          setTrainees(data);
+          setTrainees(traineeRows);
+          setActiveProgramsByTrainee(
+            Object.fromEntries(
+              activePrograms.map((program) => [program.trainee_id, program])
+            )
+          );
           setLoadError("");
           setHasLoadedTrainees(true);
         }
@@ -847,6 +866,7 @@ function Trainees() {
           filteredTrainees.map((t) => {
             const years = trainingYears(t.start_date);
             const busy = rowActionId === t.id;
+            const activeProgram = activeProgramsByTrainee[t.id];
             return (
               <div key={t.id} style={{ padding: "12px 0", borderBottom: "0.5px solid #EDEBE6", opacity: busy ? 0.65 : 1 }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
@@ -864,6 +884,40 @@ function Trainees() {
                   </div>
                 </div>
                 <div style={{ fontSize: 12, color: "#615E57", marginBottom: 2 }}>יעד: {t.main_goal}</div>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: 8,
+                    marginTop: 7,
+                    padding: "8px 10px",
+                    borderRadius: 8,
+                    background: "#FAF8F5",
+                  }}
+                >
+                  <div style={{ fontSize: 12, color: activeProgram ? "#615E57" : "#9E9A90" }}>
+                    {activeProgram
+                      ? `תוכנית פעילה: ${activeProgram.name}`
+                      : "אין תוכנית פעילה"}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => onOpenPrograms(t.id)}
+                    disabled={actionsLocked}
+                    style={{
+                      fontSize: 12,
+                      padding: "5px 9px",
+                      borderRadius: 7,
+                      border: "0.5px solid #EDEBE6",
+                      background: "#fff",
+                      color: "#7C2D3E",
+                      cursor: actionsLocked ? "not-allowed" : "pointer",
+                    }}
+                  >
+                    {activeProgram ? "פתח תוכנית" : "צור תוכנית"}
+                  </button>
+                </div>
                 {t.success_metric && <div style={{ fontSize: 12, color: "#9E9A90" }}>מדד: {t.success_metric}</div>}
                 {t.notes && <div style={{ fontSize: 12, color: "#9E9A90", marginTop: 2 }}>{t.notes}</div>}
                 {years >= 1 && (
@@ -1634,6 +1688,7 @@ const VIEW_TITLES = {
   dashboard:      "לוח בקרה",
   leads:          "לידים",
   trainees:       "מתאמנים",
+  programs:       "תוכניות אימון",
   reviews:        "סקירות אימונים",
   schedule:       "לוח זמנים",
   revenue:        "הכנסות",
@@ -1657,7 +1712,7 @@ const ADMIN_GROUPS = [
       { id: "trainees", icon: "💪", label: "מתאמנים" },
       { id: null,       icon: "📈", label: "התקדמות מתאמנים", disabled: true },
       { id: "reviews",  icon: "📋", label: "סקירות אימונים" },
-      { id: null,       icon: "📝", label: "תוכניות אימון",   disabled: true },
+      { id: "programs", icon: "📝", label: "תוכניות אימון" },
     ],
   },
   {
@@ -1709,6 +1764,7 @@ export default function AppFullMigration({ onLogout, signingOut = false, signOut
   const [view, setView] = useState("dashboard");
   const [role, setRole] = useState("admin");
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [selectedProgramTraineeId, setSelectedProgramTraineeId] = useState("");
 
   function toggleRole() {
     const next = role === "admin" ? "trainee" : "admin";
@@ -1718,7 +1774,16 @@ export default function AppFullMigration({ onLogout, signingOut = false, signOut
   }
 
   function selectView(nextView) {
+    if (nextView === "programs") {
+      setSelectedProgramTraineeId("");
+    }
     setView(nextView);
+    setSidebarOpen(false);
+  }
+
+  function openProgramsForTrainee(traineeId) {
+    setSelectedProgramTraineeId(traineeId);
+    setView("programs");
     setSidebarOpen(false);
   }
 
@@ -1795,7 +1860,8 @@ export default function AppFullMigration({ onLogout, signingOut = false, signOut
         <div className="page">
           {view === "dashboard"    && <Dashboard />}
           {view === "leads"        && <Leads />}
-          {view === "trainees"     && <Trainees />}
+          {view === "trainees"     && <Trainees onOpenPrograms={openProgramsForTrainee} />}
+          {view === "programs"     && <Programs initialTraineeId={selectedProgramTraineeId} />}
           {view === "reviews"      && <Reviews />}
           {view === "schedule"     && <Schedule />}
           {view === "revenue"      && <Revenue />}

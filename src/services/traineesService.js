@@ -33,6 +33,11 @@ export async function createTrainee(input) {
       main_goal: input.main_goal,
       success_metric: input.success_metric ?? null,
       notes: input.notes ?? null,
+      package_name: input.package_name ?? null,
+      package_price: input.package_price ?? null,
+      payment_method: input.payment_method ?? null,
+      payment_status: input.payment_status ?? null,
+      next_payment_date: input.next_payment_date ?? null,
     })
     .select()
     .single();
@@ -54,6 +59,11 @@ export async function updateTrainee(id, input) {
       main_goal: input.main_goal,
       success_metric: input.success_metric ?? null,
       notes: input.notes ?? null,
+      package_name: input.package_name ?? null,
+      package_price: input.package_price ?? null,
+      payment_method: input.payment_method ?? null,
+      payment_status: input.payment_status ?? null,
+      next_payment_date: input.next_payment_date ?? null,
     })
     .eq("id", id)
     .select()

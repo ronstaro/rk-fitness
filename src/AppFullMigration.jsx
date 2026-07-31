@@ -2,6 +2,7 @@
 import { fetchTrainees, createTrainee, updateTrainee, updateTraineeStatus, deleteTrainee } from "./services/traineesService.js";
 import { fetchSessions } from "./services/sessionsService.js";
 import { fetchActivePrograms } from "./services/programsService.js";
+import Dashboard from "./components/Dashboard.jsx";
 import Leads from "./components/Leads.jsx";
 import Programs from "./components/Programs.jsx";
 import Schedule from "./components/Schedule.jsx";
@@ -19,39 +20,6 @@ function whatsappLink(phone) {
 
   return `https://wa.me/${digits}`;
 }
-
-function Dashboard() {
-  return (
-    <div>
-      <div style={{ background: "#7C2D3E", color: "#fff", borderRadius: 12, padding: 22, marginBottom: 24 }}>
-        <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>שלום, רוני ✨</div>
-        <div style={{ fontSize: 14, opacity: 0.85 }}>ברוכה הבאה לדשבורד שלך</div>
-      </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16, marginBottom: 24 }}>
-        <div style={{ background: "#fff", borderRadius: 10, border: "0.5px solid #EDEBE6", padding: 16 }}>
-          <div style={{ fontSize: 11, textTransform: "uppercase", color: "#9E9A90", marginBottom: 6 }}>מתאמנים פעילים</div>
-          <div style={{ fontSize: 28, fontWeight: 700 }}>—</div>
-        </div>
-        <div style={{ background: "#fff", borderRadius: 10, border: "0.5px solid #EDEBE6", padding: 16 }}>
-          <div style={{ fontSize: 11, textTransform: "uppercase", color: "#9E9A90", marginBottom: 6 }}>לידים חדשים</div>
-          <div style={{ fontSize: 28, fontWeight: 700 }}>—</div>
-        </div>
-        <div style={{ background: "#fff", borderRadius: 10, border: "0.5px solid #EDEBE6", padding: 16 }}>
-          <div style={{ fontSize: 11, textTransform: "uppercase", color: "#9E9A90", marginBottom: 6 }}>הכנסה חודשית</div>
-          <div style={{ fontSize: 28, fontWeight: 700 }}>—</div>
-        </div>
-      </div>
-      <div style={{ background: "#fff", borderRadius: 12, border: "0.5px solid #EDEBE6", padding: 20 }}>
-        <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 12 }}>סקירה מהירה</div>
-        <div style={{ fontSize: 14, color: "#615E57", padding: "8px 0", borderBottom: "0.5px solid #EDEBE6" }}>📋 אימונים שממתינים לסקירה</div>
-        <div style={{ fontSize: 14, color: "#615E57", padding: "8px 0", borderBottom: "0.5px solid #EDEBE6" }}>📥 לידים למעקב</div>
-        <div style={{ fontSize: 14, color: "#615E57", padding: "8px 0", borderBottom: "0.5px solid #EDEBE6" }}>💳 תשלומים / חידושים</div>
-        <div style={{ fontSize: 14, color: "#615E57", padding: "8px 0" }}>📅 לו״ז להיום</div>
-      </div>
-    </div>
-  );
-}
-
 
 function Trainees({ onOpenPrograms }) {
   const STORAGE_KEY = "rk-fitness-trainees";
@@ -1416,7 +1384,7 @@ export default function AppFullMigration({ onLogout, signingOut = false, signOut
         </div>
 
         <div className="page">
-          {view === "dashboard"    && <Dashboard />}
+          {view === "dashboard"    && <Dashboard onNavigate={selectView} />}
           {view === "leads"        && <Leads />}
           {view === "trainees"     && <Trainees onOpenPrograms={openProgramsForTrainee} />}
           {view === "programs"     && <Programs initialTraineeId={selectedProgramTraineeId} />}

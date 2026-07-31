@@ -1,5 +1,27 @@
 import { supabase } from "../lib/supabase.js";
 
+function leadPayload(input) {
+  return {
+    full_name: input.full_name,
+    phone: input.phone,
+    email: input.email ?? null,
+    gender: input.gender ?? null,
+    birth_date: input.birth_date ?? null,
+    source: input.source,
+    custom_source: input.custom_source ?? null,
+    referral_name: input.referral_name ?? null,
+    status: input.status,
+    follow_up_date: input.follow_up_date ?? null,
+    goal: input.goal ?? null,
+    experience_level: input.experience_level ?? null,
+    service_type: input.service_type ?? null,
+    location: input.location ?? null,
+    availability: input.availability ?? null,
+    health_declaration_status: input.health_declaration_status ?? null,
+    notes: input.notes ?? null,
+  };
+}
+
 export async function fetchLeads() {
   const { data, error } = await supabase
     .from("leads")
@@ -19,14 +41,8 @@ export async function createLead(input) {
   const { data, error } = await supabase
     .from("leads")
     .insert({
-      owner_id:        user.id,
-      full_name:       input.full_name,
-      phone:           input.phone,
-      source:          input.source,
-      custom_source:   input.custom_source   ?? null,
-      status:          input.status,
-      follow_up_date:  input.follow_up_date  ?? null,
-      notes:           input.notes           ?? null,
+      owner_id: user.id,
+      ...leadPayload(input),
     })
     .select()
     .single();
@@ -37,15 +53,7 @@ export async function createLead(input) {
 export async function updateLead(id, input) {
   const { data, error } = await supabase
     .from("leads")
-    .update({
-      full_name: input.full_name,
-      phone: input.phone,
-      source: input.source,
-      custom_source: input.custom_source ?? null,
-      status: input.status,
-      follow_up_date: input.follow_up_date ?? null,
-      notes: input.notes ?? null,
-    })
+    .update(leadPayload(input))
     .eq("id", id)
     .select()
     .single();
@@ -71,4 +79,15 @@ export async function deleteLead(id) {
     .delete()
     .eq("id", id);
   if (error) throw error;
+}
+
+export async function convertLeadToTrainee(id, trainingType, startDate) {
+  const { data, error } = await supabase.rpc("convert_lead_to_trainee", {
+    p_lead_id: id,
+    p_training_type: trainingType,
+    p_start_date: startDate,
+  });
+
+  if (error) throw error;
+  return Array.isArray(data) ? data[0] : data;
 }

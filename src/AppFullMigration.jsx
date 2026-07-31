@@ -3,6 +3,7 @@ import { fetchTrainees, createTrainee, updateTrainee, updateTraineeStatus, delet
 import { fetchSessions } from "./services/sessionsService.js";
 import { fetchActivePrograms } from "./services/programsService.js";
 import Dashboard from "./components/Dashboard.jsx";
+import Finance from "./components/Finance.jsx";
 import Leads from "./components/Leads.jsx";
 import Programs from "./components/Programs.jsx";
 import Schedule from "./components/Schedule.jsx";
@@ -1087,43 +1088,6 @@ function Reviews() {
 
 
 
-function Revenue() {
-  return (
-    <div>
-      <div style={{ marginBottom: 20 }}>
-        <h2 style={{ margin: 0, fontSize: 20, color: "#1E1C19" }}>Revenue</h2>
-        <div style={{ fontSize: 13, color: "#9E9A90", marginTop: 4 }}>Monthly tracking, expenses and financial summary</div>
-      </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16, marginBottom: 24 }}>
-        <div style={{ background: "#fff", borderRadius: 10, border: "0.5px solid #EDEBE6", padding: 16 }}>
-          <div style={{ fontSize: 11, color: "#9E9A90", marginBottom: 6 }}>Monthly Revenue</div>
-          <div style={{ fontSize: 28, fontWeight: 700 }}>--</div>
-        </div>
-        <div style={{ background: "#fff", borderRadius: 10, border: "0.5px solid #EDEBE6", padding: 16 }}>
-          <div style={{ fontSize: 11, color: "#9E9A90", marginBottom: 6 }}>Expenses</div>
-          <div style={{ fontSize: 28, fontWeight: 700 }}>--</div>
-        </div>
-        <div style={{ background: "#fff", borderRadius: 10, border: "0.5px solid #EDEBE6", padding: 16 }}>
-          <div style={{ fontSize: 11, color: "#9E9A90", marginBottom: 6 }}>Estimated Net</div>
-          <div style={{ fontSize: 28, fontWeight: 700 }}>--</div>
-        </div>
-      </div>
-      <div style={{ background: "#fff", borderRadius: 12, border: "0.5px solid #EDEBE6", padding: 20, marginBottom: 16 }}>
-        <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 12 }}>Monthly Revenue</div>
-        <div style={{ fontSize: 14, color: "#9E9A90" }}>Data will appear after connection.</div>
-      </div>
-      <div style={{ background: "#fff", borderRadius: 12, border: "0.5px solid #EDEBE6", padding: 20, marginBottom: 16 }}>
-        <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 12 }}>Expenses</div>
-        <div style={{ fontSize: 14, color: "#9E9A90" }}>Data will appear after connection.</div>
-      </div>
-      <div style={{ background: "#fff", borderRadius: 12, border: "0.5px solid #EDEBE6", padding: 20 }}>
-        <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 8 }}>Financial Summary</div>
-        <div style={{ fontSize: 14, color: "#9E9A90" }}>Data will appear after connection.</div>
-      </div>
-    </div>
-  );
-}
-
 function Settings() {
   const [lang, setLang] = useState("he");
   const [checks, setChecks] = useState({ personal: false, online: false, group: false, reminders: false, leads: false, birthdays: false, renewals: false });
@@ -1217,7 +1181,7 @@ const VIEW_TITLES = {
   programs:       "תוכניות אימון",
   reviews:        "סקירות אימונים",
   schedule:       "לוח זמנים",
-  revenue:        "הכנסות",
+  revenue:        "כספים",
   settings:       "הגדרות",
   "trainee-home": "בית",
   workout:        "האימון שלי",
@@ -1245,7 +1209,7 @@ const ADMIN_GROUPS = [
     label: 'פיננסי ולו"ז',
     items: [
       { id: "schedule", icon: "📅", label: "לוח זמנים" },
-      { id: "revenue",  icon: "💰", label: "הכנסות" },
+      { id: "revenue",  icon: "💰", label: "כספים" },
     ],
   },
   {
@@ -1390,7 +1354,7 @@ export default function AppFullMigration({ onLogout, signingOut = false, signOut
           {view === "programs"     && <Programs initialTraineeId={selectedProgramTraineeId} />}
           {view === "reviews"      && <Reviews />}
           {view === "schedule"     && <Schedule />}
-          {view === "revenue"      && <Revenue />}
+          {view === "revenue"      && <Finance />}
           {view === "settings"     && <Settings />}
           {view === "trainee-home" && <TraineeHome />}
           {view === "workout"      && <Workout />}

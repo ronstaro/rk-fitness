@@ -469,15 +469,7 @@ function Leads() {
 
 function Trainees({ onOpenPrograms }) {
   const STORAGE_KEY = "rk-fitness-trainees";
-
-  const [trainees, setTrainees] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState("");
-  const [hasLoadedTrainees, setHasLoadedTrainees] = useState(false);
-  const [showForm, setShowForm] = useState(false);
-  const [formError, setFormError] = useState("");
-  const [filter, setFilter] = useState("הכל");
-  const [form, setForm] = useState({
+  const emptyTraineeForm = () => ({
     fullName: "",
     phone: "",
     birthDate: "",
@@ -487,7 +479,21 @@ function Trainees({ onOpenPrograms }) {
     mainGoal: "",
     successMetric: "",
     notes: "",
+    packageName: "",
+    packagePrice: "",
+    paymentMethod: "",
+    paymentStatus: "",
+    nextPaymentDate: "",
   });
+
+  const [trainees, setTrainees] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const [hasLoadedTrainees, setHasLoadedTrainees] = useState(false);
+  const [showForm, setShowForm] = useState(false);
+  const [formError, setFormError] = useState("");
+  const [filter, setFilter] = useState("הכל");
+  const [form, setForm] = useState(emptyTraineeForm);
   const [editingTraineeId, setEditingTraineeId] = useState(null);
   const [saving, setSaving] = useState(false);
   const [rowActionId, setRowActionId] = useState(null);
@@ -615,6 +621,11 @@ function Trainees({ onOpenPrograms }) {
       main_goal: mainGoal,
       success_metric: form.successMetric.trim() || null,
       notes: form.notes.trim() || null,
+      package_name: form.packageName.trim() || null,
+      package_price: form.packagePrice === "" ? null : Number(form.packagePrice),
+      payment_method: form.paymentMethod || null,
+      payment_status: form.paymentStatus || null,
+      next_payment_date: form.nextPaymentDate || null,
     };
 
     try {
@@ -628,7 +639,7 @@ function Trainees({ onOpenPrograms }) {
         setTrainees((prev) => [row, ...prev]);
       }
 
-      setForm({ fullName: "", phone: "", birthDate: "", startDate: "", trainingType: "אישי", status: "פעיל", mainGoal: "", successMetric: "", notes: "" });
+      setForm(emptyTraineeForm());
       setEditingTraineeId(null);
       setShowForm(false);
     } catch (err) {
@@ -654,6 +665,11 @@ function Trainees({ onOpenPrograms }) {
       mainGoal: trainee.main_goal,
       successMetric: trainee.success_metric || "",
       notes: trainee.notes || "",
+      packageName: trainee.package_name || "",
+      packagePrice: trainee.package_price ?? "",
+      paymentMethod: trainee.payment_method || "",
+      paymentStatus: trainee.payment_status || "",
+      nextPaymentDate: trainee.next_payment_date || "",
     });
     setShowForm(true);
     setFormError("");
@@ -723,6 +739,8 @@ function Trainees({ onOpenPrograms }) {
 
   const statusOptions = ["פעיל", "בהקפאה", "דורש מעקב", "הסתיים"];
   const trainingTypeOptions = ["אישי", "אונליין", "קבוצתי"];
+  const paymentMethodOptions = ["אשראי", "העברה בנקאית", "Bit", "מזומן", "אחר"];
+  const paymentStatusOptions = ["שולם", "ממתין לתשלום", "באיחור"];
   const selectedTrainee = trainees.find((trainee) => trainee.id === selectedTraineeId);
 
   function initials(fullName) {
@@ -752,6 +770,26 @@ function Trainees({ onOpenPrograms }) {
       age -= 1;
     }
     return age;
+  }
+
+  function formatPrice(value) {
+    if (value === null || value === undefined || value === "") return "לא הוזן";
+    return new Intl.NumberFormat("he-IL", {
+      style: "currency",
+      currency: "ILS",
+      maximumFractionDigits: 2,
+    }).format(Number(value));
+  }
+
+  function remainingProgramDays(endDate) {
+    if (!endDate) return "לא הוגדר";
+    const end = new Date(`${endDate}T12:00:00`);
+    const today = new Date();
+    today.setHours(12, 0, 0, 0);
+    const days = Math.ceil((end - today) / 86400000);
+    if (days < 0) return "הסתיימה";
+    if (days === 0) return "היום";
+    return `${days} ימים`;
   }
 
   function localDateKey(date) {
@@ -928,7 +966,7 @@ function Trainees({ onOpenPrograms }) {
 
         {showForm && editingTraineeId === selectedTrainee.id && (
           <section className="card trainee-edit-card">
-            <div className="section-title">עריכת מתאמן</div>
+            <div className="section-title">✏️ עריכת מתאמן</div>
             <div className="form-row">
               <div className="form-group">
                 <label className="form-label">שם מלא *</label>
@@ -967,6 +1005,35 @@ function Trainees({ onOpenPrograms }) {
               <label className="form-label">הערות</label>
               <textarea className="form-textarea" value={form.notes} onChange={(event) => handleField("notes", event.target.value)} />
             </div>
+            <div className="section-title">💳 חבילה ותשלום</div>
+            <div className="form-row">
+              <div className="form-group">
+                <label className="form-label">שם החבילה</label>
+                <input className="form-input" value={form.packageName} onChange={(event) => handleField("packageName", event.target.value)} placeholder="למשל: 10 אימונים אישיים" />
+              </div>
+              <div className="form-group">
+                <label className="form-label">מחיר החבילה</label>
+                <input className="form-input" type="number" min="0" step="0.01" value={form.packagePrice} onChange={(event) => handleField("packagePrice", event.target.value)} placeholder="₪" />
+              </div>
+              <div className="form-group">
+                <label className="form-label">שיטת תשלום</label>
+                <select className="form-select" value={form.paymentMethod} onChange={(event) => handleField("paymentMethod", event.target.value)}>
+                  <option value="">לא הוגדר</option>
+                  {paymentMethodOptions.map((method) => <option key={method}>{method}</option>)}
+                </select>
+              </div>
+              <div className="form-group">
+                <label className="form-label">סטטוס תשלום</label>
+                <select className="form-select" value={form.paymentStatus} onChange={(event) => handleField("paymentStatus", event.target.value)}>
+                  <option value="">לא הוגדר</option>
+                  {paymentStatusOptions.map((status) => <option key={status}>{status}</option>)}
+                </select>
+              </div>
+              <div className="form-group">
+                <label className="form-label">תשלום הבא</label>
+                <input className="form-input" type="date" value={form.nextPaymentDate} onChange={(event) => handleField("nextPaymentDate", event.target.value)} />
+              </div>
+            </div>
             {formError && <div className="alert-strip danger">{formError}</div>}
             <div className="flex-gap">
               <button type="button" className="btn btn-primary btn-sm" onClick={handleSave} disabled={actionsLocked}>
@@ -982,7 +1049,7 @@ function Trainees({ onOpenPrograms }) {
         <div className="trainee-profile-grid">
           <div className="trainee-profile-column">
             <section className="card trainee-detail-card">
-              <div className="section-title">פרטים אישיים</div>
+              <div className="section-title">👤 פרטים אישיים</div>
               <dl className="trainee-detail-list">
                 <div><dt>טלפון</dt><dd>{selectedTrainee.phone || "לא הוזן"}</dd></div>
                 <div><dt>גיל</dt><dd>{age ?? "לא הוזן"}</dd></div>
@@ -995,27 +1062,29 @@ function Trainees({ onOpenPrograms }) {
             </section>
 
             <section className="card trainee-detail-card">
-              <div className="section-title">חיוב ותשלום</div>
-              <div className="trainee-unavailable-state">
-                נתוני התשלום עדיין לא מחוברים לפרופיל המתאמן.
-              </div>
-            </section>
-
-            <section className="card trainee-detail-card">
-              <div className="section-title">כרטיסיית אימונים</div>
-              <div className="trainee-unavailable-state">
-                מעקב יתרה, מחיר לשיעור ותוקף יתווספו לאחר חיבור מודול החבילות.
-              </div>
+              <div className="section-title">💳 חבילה ותשלום</div>
+              <dl className="trainee-detail-list">
+                <div><dt>חבילה</dt><dd>{selectedTrainee.package_name || "לא הוזן"}</dd></div>
+                <div><dt>מחיר</dt><dd>{formatPrice(selectedTrainee.package_price)}</dd></div>
+                <div><dt>שיטת תשלום</dt><dd>{selectedTrainee.payment_method || "לא הוזן"}</dd></div>
+                <div><dt>סטטוס</dt><dd>{selectedTrainee.payment_status || "לא הוזן"}</dd></div>
+                <div><dt>תשלום הבא</dt><dd>{formatDate(selectedTrainee.next_payment_date)}</dd></div>
+              </dl>
             </section>
           </div>
 
           <div className="trainee-profile-column">
             <section className="card trainee-detail-card">
-              <div className="section-title">תוכנית אימון</div>
+              <div className="section-title">📋 תוכנית אימון</div>
               {activeProgram ? (
                 <>
                   <div className="trainee-program-name">{activeProgram.name}</div>
-                  <div className="muted text-sm">התוכנית הפעילה של המתאמן</div>
+                  <dl className="trainee-detail-list mt-16">
+                    <div><dt>מטרת התוכנית</dt><dd>{activeProgram.goal || "לא הוזנה"}</dd></div>
+                    <div><dt>התחלה</dt><dd>{formatDate(activeProgram.start_date)}</dd></div>
+                    <div><dt>סיום</dt><dd>{formatDate(activeProgram.end_date)}</dd></div>
+                    <div><dt>ימים שנותרו</dt><dd>{remainingProgramDays(activeProgram.end_date)}</dd></div>
+                  </dl>
                   <button
                     type="button"
                     className="btn btn-outline btn-sm mt-16"
@@ -1039,7 +1108,7 @@ function Trainees({ onOpenPrograms }) {
             </section>
 
             <section className="card trainee-detail-card">
-              <div className="section-title">התקדמות</div>
+              <div className="section-title">📈 התקדמות</div>
               <div className="trainee-progress-row">
                 <div className="flex-between">
                   <span className="muted text-sm">השלמה שבועית</span>
@@ -1069,7 +1138,7 @@ function Trainees({ onOpenPrograms }) {
             </section>
 
             <section className="card trainee-detail-card">
-              <div className="section-title">הערות</div>
+              <div className="section-title">📝 הערות</div>
               <div className={selectedTrainee.notes ? "trainee-notes" : "trainee-unavailable-state"}>
                 {selectedTrainee.notes || "אין הערות עדיין."}
               </div>
@@ -1103,7 +1172,7 @@ function Trainees({ onOpenPrograms }) {
           className="btn btn-primary"
           onClick={() => {
             setEditingTraineeId(null);
-            setForm({ fullName: "", phone: "", birthDate: "", startDate: "", trainingType: "אישי", status: "פעיל", mainGoal: "", successMetric: "", notes: "" });
+            setForm(emptyTraineeForm());
             setShowForm(true);
             setFormError("");
           }}
@@ -1115,7 +1184,7 @@ function Trainees({ onOpenPrograms }) {
 
       {showForm && (
         <div className="card trainees-form-card">
-          <div className="section-title">{editingTraineeId ? "עריכת מתאמן" : "הוספת מתאמן חדש"}</div>
+          <div className="section-title">{editingTraineeId ? "✏️ עריכת מתאמן" : "👤 הוספת מתאמן חדש"}</div>
           <div className="form-row">
             <div className="form-group">
               <label className="form-label">שם מלא *</label>
@@ -1158,10 +1227,39 @@ function Trainees({ onOpenPrograms }) {
             <label className="form-label">הערות</label>
             <textarea value={form.notes} onChange={(e) => handleField("notes", e.target.value)} className="form-textarea" placeholder="הערות נוספות" />
           </div>
+          <div className="section-title">💳 חבילה ותשלום</div>
+          <div className="form-row">
+            <div className="form-group">
+              <label className="form-label">שם החבילה</label>
+              <input value={form.packageName} onChange={(e) => handleField("packageName", e.target.value)} className="form-input" placeholder="למשל: 10 אימונים אישיים" />
+            </div>
+            <div className="form-group">
+              <label className="form-label">מחיר החבילה</label>
+              <input type="number" min="0" step="0.01" value={form.packagePrice} onChange={(e) => handleField("packagePrice", e.target.value)} className="form-input" placeholder="₪" />
+            </div>
+            <div className="form-group">
+              <label className="form-label">שיטת תשלום</label>
+              <select value={form.paymentMethod} onChange={(e) => handleField("paymentMethod", e.target.value)} className="form-select">
+                <option value="">לא הוגדר</option>
+                {paymentMethodOptions.map((method) => <option key={method}>{method}</option>)}
+              </select>
+            </div>
+            <div className="form-group">
+              <label className="form-label">סטטוס תשלום</label>
+              <select value={form.paymentStatus} onChange={(e) => handleField("paymentStatus", e.target.value)} className="form-select">
+                <option value="">לא הוגדר</option>
+                {paymentStatusOptions.map((status) => <option key={status}>{status}</option>)}
+              </select>
+            </div>
+            <div className="form-group">
+              <label className="form-label">תשלום הבא</label>
+              <input type="date" value={form.nextPaymentDate} onChange={(e) => handleField("nextPaymentDate", e.target.value)} className="form-input" />
+            </div>
+          </div>
           {formError && <div className="alert-strip danger">{formError}</div>}
           <div className="flex-gap">
             <button onClick={handleSave} disabled={actionsLocked} className="btn btn-primary btn-sm">{saving ? "שומר..." : editingTraineeId ? "שמור שינויים" : "שמור מתאמן"}</button>
-            <button onClick={() => { setShowForm(false); setFormError(""); setEditingTraineeId(null); setForm({ fullName: "", phone: "", birthDate: "", startDate: "", trainingType: "אישי", status: "פעיל", mainGoal: "", successMetric: "", notes: "" }); }} disabled={saving} className="btn btn-outline btn-sm">ביטול</button>
+            <button onClick={() => { setShowForm(false); setFormError(""); setEditingTraineeId(null); setForm(emptyTraineeForm()); }} disabled={saving} className="btn btn-outline btn-sm">ביטול</button>
           </div>
         </div>
       )}

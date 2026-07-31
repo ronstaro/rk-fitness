@@ -26,7 +26,7 @@ export async function fetchPrograms() {
 export async function fetchActivePrograms() {
   const { data, error } = await supabase
     .from("workout_programs")
-    .select("id, trainee_id, name, status")
+    .select("id, trainee_id, name, goal, status, start_date, end_date")
     .eq("status", "active");
 
   if (error) throw error;

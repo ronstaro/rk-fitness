@@ -1763,3 +1763,57 @@ body.ltr .today-card.warn-border { border-right: none; border-left: 3px solid #F
   .finance-settings-form .form-group { width: 100%; }
   .finance-settings-form .btn { justify-content: center; }
 }
+
+/* ── Weekly trainee goals ─────────────────────────────────── */
+.weekly-goals-header { align-items: center; }
+.weekly-goals-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.weekly-goal-card {
+  padding: 18px; border: 1px solid var(--gray-100); border-radius: 12px;
+  background: #fff; box-shadow: 0 2px 8px rgba(39, 31, 34, .04);
+}
+.weekly-goal-person { display: flex; align-items: center; gap: 11px; }
+.weekly-goal-avatar {
+  display: grid; place-items: center; width: 42px; height: 42px; flex: 0 0 42px;
+  border-radius: 50%; background: var(--burg-pale); color: var(--burg); font-size: 14px; font-weight: 700;
+}
+.weekly-goal-person h3 { font-size: 15px; }
+.weekly-goal-person p { margin-top: 2px; color: var(--gray-400); font-size: 11px; }
+.weekly-goal-status {
+  margin-right: auto; padding: 4px 9px; border-radius: 20px; font-size: 10px; font-weight: 600;
+}
+.weekly-goal-status.success { background: #EAF7EF; color: #19733B; }
+.weekly-goal-status.warning { background: #FFF7DD; color: #8A6414; }
+.weekly-goal-status.danger { background: #FDEDEC; color: var(--danger); }
+.weekly-goal-status.neutral { background: var(--gray-50); color: var(--gray-500); }
+.weekly-goal-progress {
+  display: grid; grid-template-columns: 88px 1fr 42px; align-items: center; gap: 13px;
+  margin: 18px 0 16px; padding: 13px 14px; border-radius: 10px; background: var(--gray-50);
+}
+.weekly-goal-score { display: flex; flex-direction: column; }
+.weekly-goal-score strong { color: var(--burg); font-size: 21px; line-height: 1; }
+.weekly-goal-score span { margin-top: 5px; color: var(--gray-400); font-size: 9px; }
+.weekly-goal-meter { height: 9px; border-radius: 8px; background: var(--gray-100); overflow: hidden; }
+.weekly-goal-meter span { display: block; height: 100%; border-radius: inherit; transition: width .3s ease; }
+.weekly-goal-meter span.success { background: var(--success); }
+.weekly-goal-meter span.warning { background: var(--mustard); }
+.weekly-goal-meter span.danger { background: var(--danger); }
+.weekly-goal-meter span.neutral { background: var(--gray-300); }
+.weekly-goal-percent { color: var(--gray-600); font-size: 13px; text-align: left; }
+.weekly-goal-note label { display: block; margin-bottom: 6px; color: var(--gray-600); font-size: 11px; font-weight: 600; }
+.weekly-goal-note textarea { min-height: 58px; resize: vertical; }
+.weekly-goal-note-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; min-height: 34px; margin-top: 7px; }
+.weekly-goal-note-actions span { margin-left: auto; color: var(--danger); font-size: 11px; }
+.weekly-goals-state { padding: 42px 12px; color: var(--gray-400); text-align: center; }
+.weekly-goals-state p { margin-bottom: 12px; }
+
+@media (max-width: 900px) {
+  .weekly-goals-grid { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 560px) {
+  .weekly-goals-header { align-items: flex-start; flex-direction: column; gap: 10px; }
+  .weekly-goal-card { padding: 15px; }
+  .weekly-goal-status { max-width: 105px; text-align: center; }
+  .weekly-goal-progress { grid-template-columns: 75px 1fr 38px; gap: 9px; padding: 12px; }
+  .weekly-goal-score strong { font-size: 19px; }
+}

@@ -1069,19 +1069,20 @@ body.ltr .today-card.warn-border { border-right: none; border-left: 3px solid #F
 .trainee-detail-list { display: grid; gap: 0; }
 .trainee-detail-list > div {
   display: grid;
-  grid-template-columns: minmax(105px, .8fr) minmax(0, 1.5fr);
-  gap: 14px;
-  padding: 9px 0;
-  border-bottom: 1px solid var(--gray-100);
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 10px; align-items: start; padding: 11px 0;
+  border-bottom: 1px solid var(--gray-50);
 }
 .trainee-detail-list > div:last-child { border-bottom: 0; }
-.trainee-detail-list dt { color: var(--gray-400); font-size: 13px; }
-.trainee-detail-list dd {
-  color: var(--gray-900);
-  font-size: 13px;
-  font-weight: 500;
-  overflow-wrap: anywhere;
+.trainee-detail-icon {
+  width: 32px; height: 32px; display: grid; place-items: center;
+  border-radius: 9px; background: var(--burg-pale); font-size: 15px;
 }
+.trainee-detail-list > div > span:last-child { display: grid; min-width: 0; }
+.trainee-detail-list small { color: var(--gray-400); font-size: 11px; }
+.trainee-detail-list strong { color: var(--gray-900); font-size: 14px; font-weight: 400; overflow-wrap: anywhere; }
+.trainee-detail-list dt { color: var(--gray-400); font-size: 12px; }
+.trainee-detail-list dd { color: var(--gray-900); font-size: 13px; font-weight: 500; overflow-wrap: anywhere; }
 .trainee-program-name { font-size: 17px; font-weight: 700; color: var(--gray-900); }
 .trainee-unavailable-state {
   padding: 13px 14px;
@@ -1707,6 +1708,13 @@ body.ltr .today-card.warn-border { border-right: none; border-left: 3px solid #F
 .finance-status-select.unpaid { border-color: #E3B74F; background: #FFF9E9; color: var(--warn); }
 .finance-row-saving { display: block; margin-top: 3px; color: var(--gray-400); }
 .finance-empty { padding: 24px 8px; color: var(--gray-400); font-size: 13px; text-align: center; }
+.finance-payment-form {
+  display: grid; grid-template-columns: repeat(4, minmax(140px, 1fr));
+  gap: 12px; align-items: end; padding: 16px; margin-bottom: 16px;
+  border-radius: 10px; background: var(--gray-50);
+}
+.finance-payment-form .form-group { margin-bottom: 0; }
+.finance-row-actions { display: flex; gap: 6px; }
 .finance-expense-form {
   display: grid; grid-template-columns: 145px 160px 130px minmax(180px, 1fr);
   gap: 12px; align-items: end; padding: 16px; margin-bottom: 16px;
@@ -1733,6 +1741,7 @@ body.ltr .today-card.warn-border { border-right: none; border-left: 3px solid #F
   .finance-metrics { grid-template-columns: repeat(3, minmax(145px, 1fr)); }
   .finance-main-grid { grid-template-columns: 1fr; }
   .finance-expense-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .finance-payment-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (max-width: 700px) {
@@ -1746,6 +1755,7 @@ body.ltr .today-card.warn-border { border-right: none; border-left: 3px solid #F
   .finance-panel-heading { align-items: stretch; flex-direction: column; }
   .finance-panel-heading .btn { justify-content: center; }
   .finance-expense-form { grid-template-columns: 1fr; }
+  .finance-payment-form { grid-template-columns: 1fr; }
   .finance-form-error, .finance-form-actions { grid-column: auto; }
   .finance-expense-row { align-items: flex-start; flex-direction: column; }
   .finance-expense-end { width: 100%; flex-wrap: wrap; }

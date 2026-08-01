@@ -86,10 +86,14 @@ export async function updateTraineeStatus(id, status) {
 }
 
 export async function deleteTrainee(id) {
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("trainees")
     .delete()
-    .eq("id", id);
+    .eq("id", id)
+    .select("id")
+    .maybeSingle();
 
   if (error) throw error;
+  if (!data) throw new Error("המתאמן לא נמצא או שאין הרשאה למחוק אותו");
+  return data;
 }

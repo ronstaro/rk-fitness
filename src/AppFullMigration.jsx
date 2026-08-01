@@ -253,7 +253,7 @@ function Trainees({ onOpenPrograms }) {
   async function handleDelete(id) {
     if (actionLockRef.current || saving || rowActionId) return;
 
-    if (!window.confirm("למחוק מתאמן זה?")) {
+    if (!window.confirm("למחוק את המתאמן לצמיתות? האימונים ותוכניות האימון המקושרים יימחקו. היסטוריית הכספים תישמר ללא קישור למתאמן.")) {
       return;
     }
 

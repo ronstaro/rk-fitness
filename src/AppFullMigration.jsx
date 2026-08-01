@@ -604,26 +604,26 @@ function Trainees({ onOpenPrograms }) {
           <div className="trainee-profile-column">
             <section className="card trainee-detail-card">
               <div className="section-title">👤 פרטים אישיים</div>
-              <dl className="trainee-detail-list">
-                <div><dt>טלפון</dt><dd>{selectedTrainee.phone || "לא הוזן"}</dd></div>
-                <div><dt>גיל</dt><dd>{age ?? "לא הוזן"}</dd></div>
-                <div><dt>תאריך לידה</dt><dd>{formatDate(selectedTrainee.birth_date)}</dd></div>
-                <div><dt>תחילת אימון</dt><dd>{formatDate(selectedTrainee.start_date)}</dd></div>
-                <div><dt>מסלול</dt><dd>{selectedTrainee.training_type}</dd></div>
-                <div><dt>יעד מרכזי</dt><dd>{selectedTrainee.main_goal || "לא הוזן"}</dd></div>
-                <div><dt>מדד הצלחה</dt><dd>{selectedTrainee.success_metric || "לא הוזן"}</dd></div>
-              </dl>
+              <div className="trainee-detail-list">
+                <div><span className="trainee-detail-icon">📞</span><span><small>טלפון</small><strong>{selectedTrainee.phone || "לא הוזן"}</strong></span></div>
+                <div><span className="trainee-detail-icon">🎂</span><span><small>גיל</small><strong>{age ?? "לא הוזן"}</strong></span></div>
+                <div><span className="trainee-detail-icon">📅</span><span><small>תאריך לידה</small><strong>{formatDate(selectedTrainee.birth_date)}</strong></span></div>
+                <div><span className="trainee-detail-icon">🏁</span><span><small>תחילת אימון</small><strong>{formatDate(selectedTrainee.start_date)}</strong></span></div>
+                <div><span className="trainee-detail-icon">🏋️</span><span><small>מסלול</small><strong>{selectedTrainee.training_type}</strong></span></div>
+                <div><span className="trainee-detail-icon">🎯</span><span><small>יעד מרכזי</small><strong>{selectedTrainee.main_goal || "לא הוזן"}</strong></span></div>
+                <div><span className="trainee-detail-icon">📈</span><span><small>מדד הצלחה</small><strong>{selectedTrainee.success_metric || "לא הוזן"}</strong></span></div>
+              </div>
             </section>
 
             <section className="card trainee-detail-card">
               <div className="section-title">💳 חבילה ותשלום</div>
-              <dl className="trainee-detail-list">
-                <div><dt>חבילה</dt><dd>{selectedTrainee.package_name || "לא הוזן"}</dd></div>
-                <div><dt>מחיר</dt><dd>{formatPrice(selectedTrainee.package_price)}</dd></div>
-                <div><dt>שיטת תשלום</dt><dd>{selectedTrainee.payment_method || "לא הוזן"}</dd></div>
-                <div><dt>סטטוס</dt><dd>{selectedTrainee.payment_status || "לא הוזן"}</dd></div>
-                <div><dt>תשלום הבא</dt><dd>{formatDate(selectedTrainee.next_payment_date)}</dd></div>
-              </dl>
+              <div className="trainee-detail-list">
+                <div><span className="trainee-detail-icon">📦</span><span><small>חבילה</small><strong>{selectedTrainee.package_name || "לא הוזן"}</strong></span></div>
+                <div><span className="trainee-detail-icon">💰</span><span><small>מחיר</small><strong>{formatPrice(selectedTrainee.package_price)}</strong></span></div>
+                <div><span className="trainee-detail-icon">💳</span><span><small>שיטת תשלום</small><strong>{selectedTrainee.payment_method || "לא הוזן"}</strong></span></div>
+                <div><span className="trainee-detail-icon">✅</span><span><small>סטטוס</small><strong>{selectedTrainee.payment_status || "לא הוזן"}</strong></span></div>
+                <div><span className="trainee-detail-icon">🗓️</span><span><small>תשלום הבא</small><strong>{formatDate(selectedTrainee.next_payment_date)}</strong></span></div>
+              </div>
             </section>
           </div>
 

@@ -7,6 +7,7 @@ import Finance from "./components/Finance.jsx";
 import Leads from "./components/Leads.jsx";
 import Programs from "./components/Programs.jsx";
 import Schedule from "./components/Schedule.jsx";
+import WeeklyGoals from "./components/WeeklyGoals.jsx";
 
 function whatsappLink(phone) {
   let digits = phone.replace(/\D/g, "");
@@ -1180,6 +1181,7 @@ const VIEW_TITLES = {
   dashboard:      "לוח בקרה",
   leads:          "לידים",
   trainees:       "מתאמנים",
+  "weekly-goals": "יעד שבועי למתאמנים",
   programs:       "תוכניות אימון",
   reviews:        "סקירות אימונים",
   schedule:       "לוח זמנים",
@@ -1202,7 +1204,7 @@ const ADMIN_GROUPS = [
     items: [
       { id: "leads",    icon: "👥", label: "לידים" },
       { id: "trainees", icon: "💪", label: "מתאמנים" },
-      { id: null,       icon: "📈", label: "התקדמות מתאמנים", disabled: true },
+      { id: "weekly-goals", icon: "📈", label: "יעד שבועי למתאמנים" },
       { id: "reviews",  icon: "📋", label: "סקירות אימונים" },
       { id: "programs", icon: "📝", label: "תוכניות אימון" },
     ],
@@ -1353,6 +1355,7 @@ export default function AppFullMigration({ onLogout, signingOut = false, signOut
           {view === "dashboard"    && <Dashboard onNavigate={selectView} />}
           {view === "leads"        && <Leads />}
           {view === "trainees"     && <Trainees onOpenPrograms={openProgramsForTrainee} />}
+          {view === "weekly-goals" && <WeeklyGoals />}
           {view === "programs"     && <Programs initialTraineeId={selectedProgramTraineeId} />}
           {view === "reviews"      && <Reviews />}
           {view === "schedule"     && <Schedule />}

@@ -1,12 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
 import {
+  createMonthlyPayment,
   createFinanceExpense,
+  deleteMonthlyPayment,
   deleteFinanceExpense,
   fetchFinanceData,
   updateFinanceExpense,
   updateFinanceSettings,
   updateMonthlyPayment,
+  updateMonthlyPaymentDetails,
 } from "../services/financeService.js";
+
+const PAYMENT_METHODS = ["העברה בנקאית", "ביט", "פייבוקס", "אשראי", "מזומן", "אחר"];
 
 const EXPENSE_CATEGORIES = [
   "ציוד",
@@ -65,6 +70,18 @@ function emptyExpense(selectedMonth) {
   };
 }
 
+function emptyPayment(selectedMonth) {
+  return {
+    traineeId: "",
+    traineeName: "",
+    packageName: "",
+    amount: "",
+    paymentMethod: "",
+    paymentStatus: "paid",
+    paidAt: selectedMonth === monthKey() ? localDateKey() : `${selectedMonth}-01`,
+  };
+}
+
 export default function Finance() {
   const [selectedMonth, setSelectedMonth] = useState(monthKey);
   const [data, setData] = useState(null);
@@ -72,6 +89,11 @@ export default function Finance() {
   const [loadError, setLoadError] = useState("");
   const [rowError, setRowError] = useState("");
   const [rowActionId, setRowActionId] = useState(null);
+  const [showPaymentForm, setShowPaymentForm] = useState(false);
+  const [paymentForm, setPaymentForm] = useState(() => emptyPayment(monthKey()));
+  const [editingPaymentId, setEditingPaymentId] = useState(null);
+  const [paymentError, setPaymentError] = useState("");
+  const [savingPayment, setSavingPayment] = useState(false);
   const [showExpenseForm, setShowExpenseForm] = useState(false);
   const [expenseForm, setExpenseForm] = useState(() => emptyExpense(monthKey()));
   const [editingExpenseId, setEditingExpenseId] = useState(null);
@@ -174,8 +196,131 @@ export default function Finance() {
     if (nextMonth > monthKey()) return;
     setSelectedMonth(nextMonth);
     setShowExpenseForm(false);
+    setShowPaymentForm(false);
+    setEditingPaymentId(null);
+    setPaymentForm(emptyPayment(nextMonth));
     setEditingExpenseId(null);
     setExpenseForm(emptyExpense(nextMonth));
+  }
+
+  function syncPaymentInState(saved, previous = null) {
+    setData((current) => {
+      const payments = previous
+        ? current.payments.map((payment) => payment.id === saved.id ? saved : payment)
+        : [...current.payments, saved].sort((a, b) => a.trainee_name.localeCompare(b.trainee_name, "he"));
+      const trendPayments = current.trendPayments
+        .filter((payment) => payment.billing_month !== saved.billing_month)
+        .concat(payments.map((payment) => ({
+          billing_month: payment.billing_month,
+          amount: payment.amount,
+        })));
+      return { ...current, payments, trendPayments };
+    });
+  }
+
+  function openNewPayment() {
+    setEditingPaymentId(null);
+    setPaymentForm(emptyPayment(selectedMonth));
+    setPaymentError("");
+    setShowPaymentForm(true);
+  }
+
+  function openPaymentEdit(payment) {
+    setEditingPaymentId(payment.id);
+    setPaymentForm({
+      traineeId: payment.trainee_id || "",
+      traineeName: payment.trainee_name,
+      packageName: payment.package_name || "",
+      amount: String(payment.amount),
+      paymentMethod: payment.payment_method || "",
+      paymentStatus: payment.payment_status,
+      paidAt: payment.paid_at || `${selectedMonth}-01`,
+    });
+    setPaymentError("");
+    setShowPaymentForm(true);
+  }
+
+  function handlePaymentTraineeChange(traineeId) {
+    const trainee = data.activeTrainees.find((item) => item.id === traineeId);
+    setPaymentForm((form) => ({
+      ...form,
+      traineeId,
+      traineeName: trainee?.full_name || "",
+      packageName: trainee?.package_name || form.packageName,
+      amount: trainee?.package_price == null ? form.amount : String(trainee.package_price),
+      paymentMethod: trainee?.payment_method || form.paymentMethod,
+    }));
+  }
+
+  async function handlePaymentSave(event) {
+    event.preventDefault();
+    const amount = Number(paymentForm.amount);
+    if (!paymentForm.traineeName.trim() || amount < 0 || !Number.isFinite(amount)) {
+      setPaymentError("יש למלא שם וסכום תקין.");
+      return;
+    }
+    if (paymentForm.paymentStatus === "paid" && !paymentForm.paidAt.startsWith(selectedMonth)) {
+      setPaymentError("תאריך התשלום חייב להיות בחודש הנבחר.");
+      return;
+    }
+
+    const payload = {
+      trainee_id: paymentForm.traineeId || null,
+      billing_month: monthStart(selectedMonth),
+      trainee_name: paymentForm.traineeName.trim(),
+      package_name: paymentForm.packageName.trim(),
+      amount,
+      payment_method: paymentForm.paymentMethod,
+      payment_status: paymentForm.paymentStatus,
+      paid_at: paymentForm.paymentStatus === "paid" ? paymentForm.paidAt : null,
+    };
+
+    setSavingPayment(true);
+    setPaymentError("");
+    try {
+      if (editingPaymentId) {
+        const previous = data.payments.find((payment) => payment.id === editingPaymentId);
+        const saved = await updateMonthlyPaymentDetails(editingPaymentId, payload);
+        syncPaymentInState(saved, previous);
+      } else {
+        const saved = await createMonthlyPayment(payload);
+        syncPaymentInState(saved);
+      }
+      setShowPaymentForm(false);
+      setEditingPaymentId(null);
+    } catch (error) {
+      console.error("Monthly payment save error:", error);
+      setPaymentError("לא ניתן לשמור את ההכנסה. ייתכן שכבר קיימת שורה למתאמן בחודש הזה.");
+    } finally {
+      setSavingPayment(false);
+    }
+  }
+
+  async function handlePaymentDelete(payment) {
+    if (!window.confirm(`למחוק את שורת ההכנסה של ${payment.trainee_name}?`)) return;
+    setRowActionId(payment.id);
+    setRowError("");
+    try {
+      await deleteMonthlyPayment(payment);
+      setData((current) => {
+        const payments = current.payments.filter((item) => item.id !== payment.id);
+        return {
+          ...current,
+          payments,
+          trendPayments: current.trendPayments
+            .filter((item) => item.billing_month !== payment.billing_month)
+            .concat(payments.map((item) => ({
+              billing_month: item.billing_month,
+              amount: item.amount,
+            }))),
+        };
+      });
+    } catch (error) {
+      console.error("Monthly payment delete error:", error);
+      setRowError("לא ניתן למחוק את שורת ההכנסה. נסה שוב.");
+    } finally {
+      setRowActionId(null);
+    }
   }
 
   async function handlePaymentStatus(payment, status) {
@@ -447,7 +592,54 @@ export default function Finance() {
             <h3>פירוט חודשי לפי מתאמן</h3>
             <p>ברירת המחדל בחודש הנוכחי היא שולם לפי החבילה בפרופיל</p>
           </div>
+          <button type="button" className="btn btn-primary btn-sm" onClick={openNewPayment}>+ הוספת הכנסה</button>
         </div>
+        {showPaymentForm && (
+          <form className="finance-payment-form" onSubmit={handlePaymentSave}>
+            <div className="form-group">
+              <label className="form-label">מתאמן קיים</label>
+              <select className="form-select" value={paymentForm.traineeId} onChange={(event) => handlePaymentTraineeChange(event.target.value)}>
+                <option value="">הזנה ידנית</option>
+                {data.activeTrainees.map((trainee) => <option key={trainee.id} value={trainee.id}>{trainee.full_name}</option>)}
+              </select>
+            </div>
+            <div className="form-group">
+              <label className="form-label">שם *</label>
+              <input className="form-input" value={paymentForm.traineeName} disabled={Boolean(paymentForm.traineeId)} onChange={(event) => setPaymentForm((form) => ({ ...form, traineeName: event.target.value }))} />
+            </div>
+            <div className="form-group">
+              <label className="form-label">חבילה</label>
+              <input className="form-input" value={paymentForm.packageName} onChange={(event) => setPaymentForm((form) => ({ ...form, packageName: event.target.value }))} />
+            </div>
+            <div className="form-group">
+              <label className="form-label">סכום *</label>
+              <input className="form-input" type="number" min="0" step="0.01" value={paymentForm.amount} onChange={(event) => setPaymentForm((form) => ({ ...form, amount: event.target.value }))} />
+            </div>
+            <div className="form-group">
+              <label className="form-label">אמצעי תשלום</label>
+              <select className="form-select" value={paymentForm.paymentMethod} onChange={(event) => setPaymentForm((form) => ({ ...form, paymentMethod: event.target.value }))}>
+                <option value="">לא הוגדר</option>
+                {PAYMENT_METHODS.map((method) => <option key={method}>{method}</option>)}
+              </select>
+            </div>
+            <div className="form-group">
+              <label className="form-label">סטטוס</label>
+              <select className="form-select" value={paymentForm.paymentStatus} onChange={(event) => setPaymentForm((form) => ({ ...form, paymentStatus: event.target.value }))}>
+                <option value="paid">שולם</option>
+                <option value="unpaid">לא שולם</option>
+              </select>
+            </div>
+            {paymentForm.paymentStatus === "paid" && <div className="form-group">
+              <label className="form-label">תאריך תשלום</label>
+              <input className="form-input" type="date" min={`${selectedMonth}-01`} max={`${selectedMonth}-31`} value={paymentForm.paidAt} onChange={(event) => setPaymentForm((form) => ({ ...form, paidAt: event.target.value }))} />
+            </div>}
+            {paymentError && <div className="finance-form-error">{paymentError}</div>}
+            <div className="finance-form-actions">
+              <button type="submit" className="btn btn-primary btn-sm" disabled={savingPayment}>{savingPayment ? "שומר..." : editingPaymentId ? "שמירת שינויים" : "הוספת הכנסה"}</button>
+              <button type="button" className="btn btn-ghost btn-sm" disabled={savingPayment} onClick={() => setShowPaymentForm(false)}>ביטול</button>
+            </div>
+          </form>
+        )}
         {data.payments.length === 0 ? (
           <div className="finance-empty">אין נתוני תשלום לחודש הזה.</div>
         ) : (
@@ -461,6 +653,7 @@ export default function Finance() {
                   <th>אמצעי תשלום</th>
                   <th>סטטוס חודשי</th>
                   <th>תאריך תשלום</th>
+                  <th>פעולות</th>
                 </tr>
               </thead>
               <tbody>
@@ -493,6 +686,12 @@ export default function Finance() {
                         {busy && <small className="finance-row-saving">שומר...</small>}
                       </td>
                       <td>{payment.paid_at ? new Date(`${payment.paid_at}T12:00:00`).toLocaleDateString("he-IL") : "—"}</td>
+                      <td>
+                        <div className="finance-row-actions">
+                          <button type="button" className="btn btn-ghost btn-sm" disabled={Boolean(rowActionId)} onClick={() => openPaymentEdit(payment)}>עריכה</button>
+                          <button type="button" className="btn btn-danger btn-sm" disabled={Boolean(rowActionId)} onClick={() => handlePaymentDelete(payment)}>מחיקה</button>
+                        </div>
+                      </td>
                     </tr>
                   );
                 })}

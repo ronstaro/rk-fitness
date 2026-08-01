@@ -637,6 +637,8 @@ function Trainees({ onOpenPrograms }) {
                     <div><dt>מטרת התוכנית</dt><dd>{activeProgram.goal || "לא הוזנה"}</dd></div>
                     <div><dt>התחלה</dt><dd>{formatDate(activeProgram.start_date)}</dd></div>
                     <div><dt>סיום</dt><dd>{formatDate(activeProgram.end_date)}</dd></div>
+                    <div><dt>משך</dt><dd>{activeProgram.duration_weeks ? `${activeProgram.duration_weeks} שבועות` : "לא הוגדר"}</dd></div>
+                    <div><dt>אימונים בשבוע</dt><dd>{activeProgram.sessions_per_week || "לא הוגדר"}</dd></div>
                     <div><dt>ימים שנותרו</dt><dd>{remainingProgramDays(activeProgram.end_date)}</dd></div>
                   </dl>
                   <button

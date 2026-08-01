@@ -16,17 +16,23 @@ async function getCurrentUserId() {
 export async function fetchPrograms() {
   const { data, error } = await supabase
     .from("workout_programs")
-    .select("*")
+    .select("*, program_days(id)")
     .order("created_at", { ascending: false });
 
   if (error) throw error;
-  return data;
+  return data.map((program) => ({
+    ...program,
+    days_count: program.program_days?.length ?? 0,
+    program_days: undefined,
+  }));
 }
 
 export async function fetchActivePrograms() {
   const { data, error } = await supabase
     .from("workout_programs")
-    .select("id, trainee_id, name, goal, status, start_date, end_date")
+    .select(
+      "id, trainee_id, name, goal, status, start_date, end_date, duration_weeks, sessions_per_week"
+    )
     .eq("status", "active");
 
   if (error) throw error;
@@ -71,6 +77,9 @@ export async function createProgram(input) {
       start_date: input.start_date ?? null,
       end_date: input.end_date ?? null,
       notes: input.notes ?? null,
+      duration_weeks: input.duration_weeks ?? null,
+      sessions_per_week: input.sessions_per_week ?? null,
+      is_template: input.is_template ?? false,
     })
     .select()
     .single();
@@ -89,6 +98,9 @@ export async function updateProgram(id, input) {
       start_date: input.start_date ?? null,
       end_date: input.end_date ?? null,
       notes: input.notes ?? null,
+      duration_weeks: input.duration_weeks ?? null,
+      sessions_per_week: input.sessions_per_week ?? null,
+      is_template: input.is_template ?? false,
     })
     .eq("id", id)
     .select()

@@ -21,6 +21,9 @@ const EMPTY_PROGRAM = {
   goal: "",
   startDate: "",
   endDate: "",
+  durationWeeks: "8",
+  sessionsPerWeek: "3",
+  isTemplate: false,
   notes: "",
 };
 
@@ -94,6 +97,7 @@ export default function Programs({ initialTraineeId = "" }) {
   const [detailsError, setDetailsError] = useState("");
   const [actionError, setActionError] = useState("");
   const [actionKey, setActionKey] = useState("");
+  const [listFilter, setListFilter] = useState("all");
 
   const [showProgramForm, setShowProgramForm] = useState(false);
   const [editingProgramId, setEditingProgramId] = useState("");
@@ -132,7 +136,7 @@ export default function Programs({ initialTraineeId = "" }) {
       const requestedTraineeId = initialTraineeId || selectedTraineeId;
       const firstProgram = requestedTraineeId
         ? programRows.find((program) => program.trainee_id === requestedTraineeId)
-        : programRows[0];
+        : null;
 
       setSelectedTraineeId(requestedTraineeId);
       setSelectedProgramId((currentId) =>
@@ -202,6 +206,29 @@ export default function Programs({ initialTraineeId = "" }) {
       startDate: program.start_date || "",
       endDate: program.end_date || "",
       notes: program.notes || "",
+      durationWeeks: program.duration_weeks == null ? "" : String(program.duration_weeks),
+      sessionsPerWeek:
+        program.sessions_per_week == null ? "" : String(program.sessions_per_week),
+      isTemplate: Boolean(program.is_template),
+    });
+    setShowProgramForm(true);
+    setActionError("");
+  }
+
+  function beginDuplicateProgram(program) {
+    setSelectedProgramId("");
+    setEditingProgramId("");
+    setProgramForm({
+      traineeId: program.trainee_id,
+      name: `${program.name} — עותק`,
+      goal: program.goal || "",
+      startDate: "",
+      endDate: "",
+      durationWeeks: program.duration_weeks == null ? "" : String(program.duration_weeks),
+      sessionsPerWeek:
+        program.sessions_per_week == null ? "" : String(program.sessions_per_week),
+      isTemplate: Boolean(program.is_template),
+      notes: program.notes || "",
     });
     setShowProgramForm(true);
     setActionError("");
@@ -222,6 +249,22 @@ export default function Programs({ initialTraineeId = "" }) {
       return;
     }
 
+    const durationWeeks =
+      programForm.durationWeeks === "" ? null : Number(programForm.durationWeeks);
+    const sessionsPerWeek =
+      programForm.sessionsPerWeek === "" ? null : Number(programForm.sessionsPerWeek);
+    if (
+      (durationWeeks !== null &&
+        (!Number.isInteger(durationWeeks) || durationWeeks < 1 || durationWeeks > 52)) ||
+      (sessionsPerWeek !== null &&
+        (!Number.isInteger(sessionsPerWeek) ||
+          sessionsPerWeek < 1 ||
+          sessionsPerWeek > 14))
+    ) {
+      setActionError("יש להזין מספר שבועות בין 1 ל־52 ואימונים בשבוע בין 1 ל־14.");
+      return;
+    }
+
     setActionKey("program-save");
     setActionError("");
     const payload = {
@@ -231,6 +274,9 @@ export default function Programs({ initialTraineeId = "" }) {
       start_date: programForm.startDate || null,
       end_date: programForm.endDate || null,
       notes: programForm.notes.trim() || null,
+      duration_weeks: durationWeeks,
+      sessions_per_week: sessionsPerWeek,
+      is_template: programForm.isTemplate,
     };
 
     try {
@@ -518,6 +564,41 @@ export default function Programs({ initialTraineeId = "" }) {
     }
   }
 
+  function formatDate(value) {
+    if (!value) return "ללא תאריך";
+    return new Date(`${value}T12:00:00`).toLocaleDateString("he-IL");
+  }
+
+  function traineeName(program) {
+    return trainees.find((trainee) => trainee.id === program.trainee_id)?.full_name ||
+      "מתאמן לא זמין";
+  }
+
+  function daysUntil(value) {
+    if (!value) return null;
+    const start = new Date(`${value}T12:00:00`);
+    const today = new Date();
+    today.setHours(12, 0, 0, 0);
+    return Math.ceil((start - today) / 86400000);
+  }
+
+  const activeProgramsCount = programs.filter(
+    (program) => program.status === "active" && !program.is_template
+  ).length;
+  const templateProgramsCount = programs.filter((program) => program.is_template).length;
+  const filteredPrograms = programs.filter((program) => {
+    if (selectedTraineeId && program.trainee_id !== selectedTraineeId) return false;
+    if (listFilter === "active") return program.status === "active" && !program.is_template;
+    if (listFilter === "templates") return program.is_template;
+    return true;
+  });
+  const upcomingProgram = programs
+    .filter((program) => {
+      const days = daysUntil(program.start_date);
+      return days !== null && days >= 0 && program.status !== "archived";
+    })
+    .sort((a, b) => a.start_date.localeCompare(b.start_date))[0];
+
   if (loading) {
     return (
       <div style={{ textAlign: "center", padding: "40px 0", color: "#9E9A90" }}>
@@ -537,8 +618,368 @@ export default function Programs({ initialTraineeId = "" }) {
     );
   }
 
+  if (!selectedProgram || showProgramForm) {
+    return (
+      <div className="programs-page slide-in">
+        <div className="programs-page-header">
+          <div>
+            <h2>תוכניות אימון</h2>
+            <p>
+              {programs.length} תוכניות · {templateProgramsCount} {templateProgramsCount === 1 ? "תבנית" : "תבניות"}
+            </p>
+          </div>
+          {!showProgramForm && (
+            <button
+              type="button"
+              className="btn btn-outline"
+              onClick={beginCreateProgram}
+              disabled={busy || trainees.length === 0}
+            >
+              + תוכנית חדשה
+            </button>
+          )}
+        </div>
+
+        {showProgramForm ? (
+          <section className="card program-form-card">
+            <div className="program-form-heading">
+              <div>
+                <span className="badge badge-inactive">
+                  {editingProgramId ? "עריכה" : "טיוטה"}
+                </span>
+                <h3>{editingProgramId ? "עריכת תוכנית" : "תוכנית חדשה"}</h3>
+              </div>
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                disabled={busy}
+                onClick={() => {
+                  setShowProgramForm(false);
+                  setEditingProgramId("");
+                  setProgramForm(EMPTY_PROGRAM);
+                  setActionError("");
+                }}
+              >
+                חזרה
+              </button>
+            </div>
+
+            <div className="program-form-section">
+              <div className="section-title">פרטי התוכנית</div>
+              <div className="form-row">
+                <div className="form-group">
+                  <label className="form-label">שם התוכנית *</label>
+                  <input
+                    className="form-input"
+                    value={programForm.name}
+                    onChange={(event) =>
+                      setProgramForm((form) => ({ ...form, name: event.target.value }))
+                    }
+                    placeholder="לדוגמה: תוכנית כוח A/B"
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">מתאמן *</label>
+                  <select
+                    className="form-select"
+                    value={programForm.traineeId}
+                    onChange={(event) =>
+                      setProgramForm((form) => ({
+                        ...form,
+                        traineeId: event.target.value,
+                      }))
+                    }
+                  >
+                    <option value="">בחר מתאמן</option>
+                    {trainees.map((trainee) => (
+                      <option key={trainee.id} value={trainee.id}>
+                        {trainee.full_name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">מטרת התוכנית</label>
+                <input
+                  className="form-input"
+                  value={programForm.goal}
+                  onChange={(event) =>
+                    setProgramForm((form) => ({ ...form, goal: event.target.value }))
+                  }
+                  placeholder="מה התוכנית נועדה לקדם?"
+                />
+              </div>
+
+              <div className="program-form-grid-3">
+                <div className="form-group">
+                  <label className="form-label">תאריך התחלה</label>
+                  <input
+                    className="form-input"
+                    type="date"
+                    value={programForm.startDate}
+                    onChange={(event) =>
+                      setProgramForm((form) => ({
+                        ...form,
+                        startDate: event.target.value,
+                      }))
+                    }
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">תאריך סיום</label>
+                  <input
+                    className="form-input"
+                    type="date"
+                    value={programForm.endDate}
+                    onChange={(event) =>
+                      setProgramForm((form) => ({
+                        ...form,
+                        endDate: event.target.value,
+                      }))
+                    }
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">מספר שבועות</label>
+                  <input
+                    className="form-input"
+                    type="number"
+                    min="1"
+                    max="52"
+                    value={programForm.durationWeeks}
+                    onChange={(event) =>
+                      setProgramForm((form) => ({
+                        ...form,
+                        durationWeeks: event.target.value,
+                      }))
+                    }
+                  />
+                </div>
+              </div>
+
+              <div className="program-plan-row">
+                <div className="form-group">
+                  <label className="form-label">אימונים בשבוע</label>
+                  <input
+                    className="form-input"
+                    type="number"
+                    min="1"
+                    max="14"
+                    value={programForm.sessionsPerWeek}
+                    onChange={(event) =>
+                      setProgramForm((form) => ({
+                        ...form,
+                        sessionsPerWeek: event.target.value,
+                      }))
+                    }
+                  />
+                </div>
+                <label className="program-template-check">
+                  <input
+                    type="checkbox"
+                    checked={programForm.isTemplate}
+                    onChange={(event) =>
+                      setProgramForm((form) => ({
+                        ...form,
+                        isTemplate: event.target.checked,
+                      }))
+                    }
+                  />
+                  שמור כתבנית לשימוש חוזר
+                </label>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">הערות</label>
+                <textarea
+                  className="form-textarea"
+                  value={programForm.notes}
+                  onChange={(event) =>
+                    setProgramForm((form) => ({ ...form, notes: event.target.value }))
+                  }
+                />
+              </div>
+            </div>
+
+            {actionError && <div className="alert-strip danger">{actionError}</div>}
+
+            <div className="program-form-actions">
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={handleSaveProgram}
+                disabled={busy}
+              >
+                {actionKey === "program-save" ? "שומר..." : "שמור תוכנית ✓"}
+              </button>
+              <button
+                type="button"
+                className="btn btn-outline"
+                disabled={busy}
+                onClick={() => {
+                  setShowProgramForm(false);
+                  setEditingProgramId("");
+                  setProgramForm(EMPTY_PROGRAM);
+                  setActionError("");
+                }}
+              >
+                ביטול
+              </button>
+            </div>
+          </section>
+        ) : trainees.length === 0 ? (
+          <section className="card programs-empty-state">
+            יש להוסיף מתאמן לפני יצירת תוכנית אימון.
+          </section>
+        ) : (
+          <>
+            <section className="card programs-upcoming">
+              <div className="section-title">📌 תוכנית קרובה</div>
+              {upcomingProgram ? (
+                <button
+                  type="button"
+                  className="program-upcoming-link"
+                  onClick={() => setSelectedProgramId(upcomingProgram.id)}
+                >
+                  {daysUntil(upcomingProgram.start_date) === 0
+                    ? "התוכנית מתחילה היום"
+                    : `התוכנית מתחילה בעוד ${daysUntil(upcomingProgram.start_date)} ימים`} · פתח
+                </button>
+              ) : (
+                <span className="programs-muted">אין תוכנית מתוכננת להתחיל בקרוב.</span>
+              )}
+            </section>
+
+            <div className="programs-list-toolbar">
+              <div className="filters programs-filters">
+                {[
+                  ["all", `הכל (${programs.length})`],
+                  ["active", `פעיל (${activeProgramsCount})`],
+                  ["templates", `תבניות (${templateProgramsCount})`],
+                ].map(([value, label]) => (
+                  <button
+                    type="button"
+                    key={value}
+                    className={`filter-chip ${listFilter === value ? "active" : ""}`}
+                    onClick={() => setListFilter(value)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <select
+                className="form-select programs-trainee-filter"
+                value={selectedTraineeId}
+                onChange={(event) => setSelectedTraineeId(event.target.value)}
+                aria-label="סינון לפי מתאמן"
+              >
+                <option value="">כל המתאמנים</option>
+                {trainees.map((trainee) => (
+                  <option key={trainee.id} value={trainee.id}>
+                    {trainee.full_name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {actionError && <div className="alert-strip danger">{actionError}</div>}
+
+            <div className="programs-list">
+              {filteredPrograms.length === 0 ? (
+                <section className="card programs-empty-state">
+                  אין תוכניות שמתאימות לסינון שבחרת.
+                </section>
+              ) : (
+                filteredPrograms.map((program) => (
+                  <article
+                    className="program-list-card"
+                    key={program.id}
+                    role="button"
+                    tabIndex="0"
+                    onClick={() => setSelectedProgramId(program.id)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        setSelectedProgramId(program.id);
+                      }
+                    }}
+                  >
+                    <div className="program-list-main">
+                      <div className="program-list-title-row">
+                        <h3>{program.name}</h3>
+                        <span className={`badge ${program.status === "active" ? "badge-active" : "badge-new"}`}>
+                          {program.is_template ? "תבנית" : STATUS_LABELS[program.status]}
+                        </span>
+                      </div>
+                      <p>
+                        {traineeName(program)} · {program.days_count || 0} ימי אימון
+                        {program.sessions_per_week
+                          ? ` · ${program.sessions_per_week}× בשבוע`
+                          : ""}
+                        {program.duration_weeks ? ` · ${program.duration_weeks} שבועות` : ""}
+                        {(program.start_date || program.end_date) &&
+                          ` · ${formatDate(program.start_date)} – ${formatDate(program.end_date)}`}
+                      </p>
+                    </div>
+                    <div className="program-list-actions">
+                      <button
+                        type="button"
+                        className="btn btn-outline btn-sm"
+                        disabled={busy}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          beginEditProgram(program);
+                        }}
+                      >
+                        ערוך
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-outline btn-sm"
+                        disabled={busy}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          beginDuplicateProgram(program);
+                        }}
+                      >
+                        שכפל
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-danger btn-sm"
+                        disabled={busy}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          handleDeleteProgram(program);
+                        }}
+                      >
+                        {actionKey === `delete-${program.id}` ? "מוחק..." : "מחק"}
+                      </button>
+                    </div>
+                  </article>
+                ))
+              )}
+            </div>
+          </>
+        )}
+      </div>
+    );
+  }
+
   return (
-    <div>
+    <div className="program-editor-page slide-in">
+      <button
+        type="button"
+        className="btn btn-ghost btn-sm program-editor-back"
+        onClick={() => {
+          setSelectedProgramId("");
+          setSelectedTraineeId("");
+        }}
+      >
+        → חזרה לתוכניות
+      </button>
       <div
         style={{
           display: "flex",

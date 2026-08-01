@@ -6,6 +6,8 @@ const DEFAULT_SETTINGS = {
   prices_include_vat: true,
 };
 
+const REMOVED_PAYMENT_NOTE = "__removed_by_admin__";
+
 async function getCurrentUserId() {
   const {
     data: { user },
@@ -95,7 +97,7 @@ export async function fetchFinanceData(monthStart) {
       supabase.from("finance_settings").select("*").maybeSingle(),
       supabase
         .from("trainee_monthly_payments")
-        .select("billing_month, amount")
+        .select("billing_month, amount, notes")
         .gte("billing_month", trendStart)
         .lte("billing_month", monthStart),
     ]);
@@ -121,7 +123,7 @@ export async function fetchFinanceData(monthStart) {
     settings = data;
   }
 
-  const payments =
+  const ensuredPayments =
     monthStart === currentMonth
       ? await ensureMonthlyPayments(
           ownerId,
@@ -130,9 +132,14 @@ export async function fetchFinanceData(monthStart) {
           paymentsResult.data
         )
       : paymentsResult.data;
+  const payments = ensuredPayments.filter(
+    (payment) => payment.notes !== REMOVED_PAYMENT_NOTE
+  );
 
-  let trendPayments = trendResult.data;
-  if (payments.length !== paymentsResult.data.length) {
+  let trendPayments = trendResult.data.filter(
+    (payment) => payment.notes !== REMOVED_PAYMENT_NOTE
+  );
+  if (ensuredPayments.length !== paymentsResult.data.length) {
     trendPayments = trendPayments
       .filter((payment) => payment.billing_month !== monthStart)
       .concat(
@@ -165,6 +172,57 @@ export async function updateMonthlyPayment(id, paymentStatus) {
 
   if (error) throw error;
   return data;
+}
+
+export async function createMonthlyPayment(input) {
+  const ownerId = await getCurrentUserId();
+  const { data, error } = await supabase
+    .from("trainee_monthly_payments")
+    .insert({
+      owner_id: ownerId,
+      trainee_id: input.trainee_id || null,
+      billing_month: input.billing_month,
+      trainee_name: input.trainee_name,
+      package_name: input.package_name || null,
+      amount: input.amount,
+      payment_method: input.payment_method || null,
+      payment_status: input.payment_status,
+      paid_at: input.payment_status === "paid" ? input.paid_at : null,
+    })
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+export async function updateMonthlyPaymentDetails(id, input) {
+  const { data, error } = await supabase
+    .from("trainee_monthly_payments")
+    .update({
+      trainee_id: input.trainee_id || null,
+      trainee_name: input.trainee_name,
+      package_name: input.package_name || null,
+      amount: input.amount,
+      payment_method: input.payment_method || null,
+      payment_status: input.payment_status,
+      paid_at: input.payment_status === "paid" ? input.paid_at : null,
+    })
+    .eq("id", id)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+export async function deleteMonthlyPayment(payment) {
+  const query = supabase.from("trainee_monthly_payments");
+  const { error } = payment.trainee_id
+    ? await query.update({ notes: REMOVED_PAYMENT_NOTE }).eq("id", payment.id)
+    : await query.delete().eq("id", payment.id);
+
+  if (error) throw error;
 }
 
 export async function createFinanceExpense(input) {

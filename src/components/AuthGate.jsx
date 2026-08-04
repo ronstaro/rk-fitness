@@ -63,9 +63,7 @@ export default function AuthGate({ children }) {
           setError("לא ניתן לבדוק את מצב ההתחברות. נסה להתחבר מחדש.");
         }
       } finally {
-        if (active && !data.session) {
-          setLoading(false);
-        }
+        if (active) setLoading(false);
       }
     }
 

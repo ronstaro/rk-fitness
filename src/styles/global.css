@@ -1852,3 +1852,62 @@ body.ltr .today-card.warn-border { border-right: none; border-left: 3px solid #F
   .weekly-goal-progress { grid-template-columns: 75px 1fr 38px; gap: 9px; padding: 12px; }
   .weekly-goal-score strong { font-size: 19px; }
 }
+
+/* ── Trainee home ─────────────────────────────────────────── */
+.trainee-home { max-width: 1180px; margin: 0 auto; }
+.trainee-home-welcome {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 18px;
+  margin-bottom: 18px; padding: 22px; border-radius: 14px;
+  background: linear-gradient(135deg, var(--burg-d), var(--burg)); color: #fff;
+}
+.trainee-home-welcome span:first-child { display: block; margin-bottom: 5px; font-size: 13px; opacity: .82; }
+.trainee-home-welcome h2 { font-size: 23px; line-height: 1.25; }
+.trainee-home-welcome p { margin-top: 7px; font-size: 13px; opacity: .82; }
+.trainee-home-welcome .badge { flex-shrink: 0; border: 1px solid rgba(255, 255, 255, .24); background: rgba(255, 255, 255, .13); color: #fff; }
+.trainee-home-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-bottom: 18px; }
+.trainee-home-metric { min-height: 118px; padding: 16px; border: 1px solid var(--gray-100); border-radius: 12px; background: #fff; }
+.trainee-home-metric > span { display: block; color: var(--gray-400); font-size: 11px; }
+.trainee-home-metric strong { display: block; margin: 5px 0 2px; color: var(--gray-900); font-size: 28px; line-height: 1.2; }
+.trainee-home-metric small { color: var(--gray-400); font-size: 11px; }
+.trainee-home-metric .progress-bar { margin-top: 12px; }
+.trainee-home-layout { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(280px, .75fr); align-items: start; gap: 16px; }
+.trainee-home-side { display: grid; gap: 16px; }
+.trainee-home-panel { padding: 18px; }
+.trainee-home-panel .section-title { margin-bottom: 14px; }
+.trainee-home-empty { padding: 24px 10px; color: var(--gray-400); font-size: 13px; text-align: center; }
+.trainee-program-days { display: grid; gap: 10px; }
+.trainee-program-day { padding: 13px; border: 1px solid var(--gray-100); border-radius: 10px; background: var(--gray-50); }
+.trainee-program-day-title { display: flex; align-items: center; gap: 10px; }
+.trainee-program-day-title > span { display: grid; place-items: center; width: 30px; height: 30px; flex: 0 0 30px; border-radius: 50%; background: var(--burg); color: #fff; font-size: 12px; font-weight: 700; }
+.trainee-program-day-title strong, .trainee-program-day-title small { display: block; }
+.trainee-program-day-title strong { font-size: 14px; }
+.trainee-program-day-title small { color: var(--gray-400); font-size: 10px; }
+.trainee-exercise-list { display: grid; gap: 6px; margin-top: 11px; }
+.trainee-exercise { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 10px; border-radius: 8px; background: #fff; font-size: 12px; }
+.trainee-exercise small { color: var(--gray-400); white-space: nowrap; }
+.trainee-session-list { display: grid; gap: 8px; }
+.trainee-session { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--gray-100); }
+.trainee-session:last-child { border-bottom: 0; }
+.trainee-session strong, .trainee-session small { display: block; }
+.trainee-session strong { font-size: 12px; }
+.trainee-session small { margin-top: 2px; color: var(--gray-400); font-size: 10px; }
+.trainee-home-goal { color: var(--gray-900); font-size: 15px; font-weight: 600; }
+.trainee-home-end-date { display: block; margin-top: 6px; }
+.trainee-home-state { padding: 54px 16px; color: var(--gray-400); text-align: center; }
+.trainee-home-state strong { display: block; margin-bottom: 5px; color: var(--gray-900); font-size: 16px; }
+.trainee-home-state p { margin-bottom: 12px; }
+
+@media (max-width: 860px) {
+  .trainee-home-layout { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 560px) {
+  .trainee-home-welcome { padding: 18px; }
+  .trainee-home-welcome h2 { font-size: 20px; }
+  .trainee-home-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .trainee-home-metric { min-height: 105px; padding: 13px; }
+  .trainee-home-metric:last-child { grid-column: 1 / -1; }
+  .trainee-home-metric strong { font-size: 24px; }
+  .trainee-home-panel { padding: 15px; }
+  .trainee-exercise { align-items: flex-start; flex-direction: column; gap: 2px; }
+}

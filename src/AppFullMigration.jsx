@@ -2,6 +2,7 @@
 import { fetchTrainees, createTrainee, updateTrainee, updateTraineeStatus, deleteTrainee } from "./services/traineesService.js";
 import { fetchSessions } from "./services/sessionsService.js";
 import { fetchActivePrograms } from "./services/programsService.js";
+import { fetchTraineeHomeData } from "./services/traineeHomeService.js";
 import Dashboard from "./components/Dashboard.jsx";
 import Finance from "./components/Finance.jsx";
 import Leads from "./components/Leads.jsx";
@@ -939,37 +940,172 @@ function Trainees({ onOpenPrograms }) {
 
 
 function TraineeHome() {
+  const [homeData, setHomeData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const [reloadKey, setReloadKey] = useState(0);
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadHome() {
+      setLoading(true);
+      setLoadError("");
+
+      try {
+        const data = await fetchTraineeHomeData();
+        if (active) setHomeData(data);
+      } catch (error) {
+        console.warn("Trainee home fetch failed:", error?.name);
+        if (active) setLoadError("לא ניתן לטעון את אזור המתאמן כרגע.");
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+
+    loadHome();
+    return () => {
+      active = false;
+    };
+  }, [reloadKey]);
+
+  function formatDate(value) {
+    if (!value) return "לא הוגדר";
+    return new Date(`${value}T12:00:00`).toLocaleDateString("he-IL", {
+      day: "numeric",
+      month: "short",
+    });
+  }
+
+  function formatTime(value) {
+    return value ? value.slice(0, 5) : "";
+  }
+
+  if (loading) {
+    return <div className="trainee-home-state">טוען את אזור המתאמן...</div>;
+  }
+
+  if (loadError) {
+    return (
+      <div className="trainee-home-state">
+        <p>{loadError}</p>
+        <button type="button" className="btn btn-outline btn-sm" onClick={() => setReloadKey((key) => key + 1)}>
+          נסה שוב
+        </button>
+      </div>
+    );
+  }
+
+  if (!homeData?.trainee) {
+    return (
+      <div className="trainee-home-state">
+        <strong>החשבון עדיין לא שויך למתאמן</strong>
+        <p>יש לפנות למאמנת כדי להשלים את החיבור לחשבון.</p>
+      </div>
+    );
+  }
+
+  const { trainee, sessions, program, days } = homeData;
+  const completedSessions = sessions.filter((session) => session.status === "הושלם").length;
+  const weeklyTarget = program?.sessions_per_week ?? sessions.length;
+  const progressPercent = weeklyTarget > 0
+    ? Math.min(100, Math.round((completedSessions / weeklyTarget) * 100))
+    : 0;
+
   return (
-    <div>
-      <div style={{ marginBottom: 20 }}>
-        <h2 style={{ margin: 0, fontSize: 20, color: "#1E1C19" }}>אזור מתאמן</h2>
-        <p style={{ margin: "4px 0 0", fontSize: 13, color: "#9E9A90" }}>תוכנית שבועית, התקדמות ומשימות</p>
-      </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16, marginBottom: 24 }}>
-        <div style={{ background: "#fff", borderRadius: 10, border: "0.5px solid #EDEBE6", padding: 16 }}>
-          <div style={{ fontSize: 11, textTransform: "uppercase", color: "#9E9A90", marginBottom: 6 }}>אימוני השבוע</div>
-          <div style={{ fontSize: 28, fontWeight: 700 }}>—</div>
+    <div className="trainee-home">
+      <section className="trainee-home-welcome">
+        <div>
+          <span>שלום {trainee.full_name} 👋</span>
+          <h2>{program ? program.name : "אזור המתאמן שלך"}</h2>
+          <p>{program?.goal || trainee.main_goal || "התוכנית והאימונים שלך במקום אחד"}</p>
         </div>
-        <div style={{ background: "#fff", borderRadius: 10, border: "0.5px solid #EDEBE6", padding: 16 }}>
-          <div style={{ fontSize: 11, textTransform: "uppercase", color: "#9E9A90", marginBottom: 6 }}>יעד נוכחי</div>
-          <div style={{ fontSize: 28, fontWeight: 700 }}>—</div>
+        <span className="badge badge-burg">{trainee.training_type || "מתאמן"}</span>
+      </section>
+
+      <div className="trainee-home-metrics">
+        <article className="trainee-home-metric">
+          <span>אימוני השבוע</span>
+          <strong>{sessions.length}</strong>
+          <small>{completedSessions} הושלמו</small>
+        </article>
+        <article className="trainee-home-metric">
+          <span>יעד שבועי</span>
+          <strong>{weeklyTarget || "—"}</strong>
+          <small>{program ? "לפי התוכנית הפעילה" : "טרם הוגדר"}</small>
+        </article>
+        <article className="trainee-home-metric">
+          <span>השלמה</span>
+          <strong>{weeklyTarget ? `${progressPercent}%` : "—"}</strong>
+          <div className="progress-bar">
+            <div className="progress-fill green" style={{ width: `${progressPercent}%` }} />
+          </div>
+        </article>
+      </div>
+
+      <div className="trainee-home-layout">
+        <section className="card trainee-home-panel">
+          <div className="section-title">📝 התוכנית השבועית</div>
+          {!program ? (
+            <div className="trainee-home-empty">אין תוכנית פעילה כרגע</div>
+          ) : days.length === 0 ? (
+            <div className="trainee-home-empty">התוכנית פעילה, אך עדיין לא נוספו לה ימי אימון</div>
+          ) : (
+            <div className="trainee-program-days">
+              {days.map((day) => (
+                <article className="trainee-program-day" key={day.id}>
+                  <div className="trainee-program-day-title">
+                    <span>{day.day_order}</span>
+                    <div>
+                      <strong>{day.name}</strong>
+                      <small>{day.exercises.length} תרגילים</small>
+                    </div>
+                  </div>
+                  <div className="trainee-exercise-list">
+                    {day.exercises.map((exercise) => (
+                      <div className="trainee-exercise" key={exercise.id}>
+                        <span>{exercise.name}</span>
+                        <small>{exercise.sets} סטים × {exercise.reps}</small>
+                      </div>
+                    ))}
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+        </section>
+
+        <div className="trainee-home-side">
+          <section className="card trainee-home-panel">
+            <div className="section-title">📅 אימוני השבוע</div>
+            {sessions.length === 0 ? (
+              <div className="trainee-home-empty">אין אימונים מתוכננים השבוע</div>
+            ) : (
+              <div className="trainee-session-list">
+                {sessions.map((session) => (
+                  <article className="trainee-session" key={session.id}>
+                    <div>
+                      <strong>{formatDate(session.session_date)} · {formatTime(session.start_time)}</strong>
+                      <small>{session.training_type} · {session.duration_minutes} דקות</small>
+                    </div>
+                    <span className={`badge ${session.status === "הושלם" ? "badge-active" : "badge-new"}`}>
+                      {session.status}
+                    </span>
+                  </article>
+                ))}
+              </div>
+            )}
+          </section>
+
+          <section className="card trainee-home-panel">
+            <div className="section-title">🎯 היעד שלי</div>
+            <p className="trainee-home-goal">{program?.goal || trainee.main_goal || "עדיין לא הוגדר יעד"}</p>
+            {trainee.success_metric && <small className="muted">מדד הצלחה: {trainee.success_metric}</small>}
+            {program?.end_date && (
+              <small className="muted trainee-home-end-date">סיום התוכנית: {formatDate(program.end_date)}</small>
+            )}
+          </section>
         </div>
-        <div style={{ background: "#fff", borderRadius: 10, border: "0.5px solid #EDEBE6", padding: 16 }}>
-          <div style={{ fontSize: 11, textTransform: "uppercase", color: "#9E9A90", marginBottom: 6 }}>התקדמות</div>
-          <div style={{ fontSize: 28, fontWeight: 700 }}>—</div>
-        </div>
-      </div>
-      <div style={{ background: "#fff", borderRadius: 12, border: "0.5px solid #EDEBE6", padding: 20, marginBottom: 16 }}>
-        <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 12 }}>תוכנית שבועית</div>
-        <div style={{ fontSize: 14, color: "#9E9A90", textAlign: "center", padding: "24px 0" }}>אין תוכנית עדיין</div>
-      </div>
-      <div style={{ background: "#fff", borderRadius: 12, border: "0.5px solid #EDEBE6", padding: 20, marginBottom: 16 }}>
-        <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 12 }}>יעדים והתקדמות</div>
-        <div style={{ fontSize: 14, color: "#9E9A90", textAlign: "center", padding: "24px 0" }}>אין נתונים עדיין</div>
-      </div>
-      <div style={{ background: "#fff", borderRadius: 12, border: "0.5px solid #EDEBE6", padding: 20 }}>
-        <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 8 }}>הודעה מהמאמן</div>
-        <div style={{ fontSize: 14, color: "#9E9A90" }}>אין הודעות</div>
       </div>
     </div>
   );

@@ -2,7 +2,7 @@
 import { fetchTrainees, createTrainee, updateTrainee, updateTraineeStatus, deleteTrainee } from "./services/traineesService.js";
 import { fetchSessions } from "./services/sessionsService.js";
 import { fetchActivePrograms } from "./services/programsService.js";
-import { fetchTraineeHomeData } from "./services/traineeHomeService.js";
+import { fetchTraineeHomeData, fetchTraineeProfile } from "./services/traineeHomeService.js";
 import Dashboard from "./components/Dashboard.jsx";
 import Finance from "./components/Finance.jsx";
 import Leads from "./components/Leads.jsx";
@@ -939,6 +939,133 @@ function Trainees({ onOpenPrograms }) {
 }
 
 
+function TraineeProfile() {
+  const [profile, setProfile] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const [reloadKey, setReloadKey] = useState(0);
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadProfile() {
+      setLoading(true);
+      setLoadError("");
+
+      try {
+        const data = await fetchTraineeProfile();
+        if (active) setProfile(data);
+      } catch (error) {
+        console.warn("Trainee profile fetch failed:", error?.name);
+        if (active) setLoadError("לא ניתן לטעון את הפרופיל כרגע.");
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+
+    loadProfile();
+    return () => {
+      active = false;
+    };
+  }, [reloadKey]);
+
+  function formatProfileDate(value) {
+    if (!value) return "לא הוזן";
+    return new Date(`${value}T12:00:00`).toLocaleDateString("he-IL", {
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    });
+  }
+
+  function profileAge(value) {
+    if (!value) return null;
+    const birthDate = new Date(`${value}T12:00:00`);
+    const today = new Date();
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const monthDifference = today.getMonth() - birthDate.getMonth();
+    if (monthDifference < 0 || (monthDifference === 0 && today.getDate() < birthDate.getDate())) {
+      age -= 1;
+    }
+    return age >= 0 ? age : null;
+  }
+
+  function profileInitials(fullName) {
+    return (fullName || "")
+      .trim()
+      .split(/\s+/)
+      .slice(0, 2)
+      .map((part) => part[0])
+      .join("") || "RK";
+  }
+
+  if (loading) {
+    return <div className="trainee-home-state">טוען את הפרופיל...</div>;
+  }
+
+  if (loadError) {
+    return (
+      <div className="trainee-home-state">
+        <p>{loadError}</p>
+        <button type="button" className="btn btn-outline btn-sm" onClick={() => setReloadKey((key) => key + 1)}>
+          נסה שוב
+        </button>
+      </div>
+    );
+  }
+
+  if (!profile) {
+    return (
+      <div className="trainee-home-state">
+        <strong>החשבון עדיין לא שויך למתאמן</strong>
+        <p>יש לפנות למאמנת כדי להשלים את החיבור לחשבון.</p>
+      </div>
+    );
+  }
+
+  const age = profileAge(profile.birth_date);
+
+  return (
+    <div className="trainee-profile trainee-self-profile slide-in">
+      <section className="trainee-profile-hero">
+        <div className="trainee-profile-identity">
+          <div className="avatar avatar-lg">{profileInitials(profile.full_name)}</div>
+          <div>
+            <span className="trainee-self-profile-label">הפרופיל שלי</span>
+            <h2>{profile.full_name}</h2>
+            <div className="trainee-card-badges">
+              <span className="badge badge-new">{profile.training_type || "סוג אימון לא הוגדר"}</span>
+            </div>
+          </div>
+        </div>
+        <p className="trainee-self-profile-sync">הפרטים מעודכנים לפי הנתונים אצל רוני</p>
+      </section>
+
+      <div className="trainee-profile-grid">
+        <section className="card trainee-detail-card">
+          <div className="section-title">👤 פרטים אישיים</div>
+          <div className="trainee-detail-list">
+            <div><span className="trainee-detail-icon">📞</span><span><small>טלפון</small><strong>{profile.phone || "לא הוזן"}</strong></span></div>
+            <div><span className="trainee-detail-icon">🎂</span><span><small>גיל</small><strong>{age ?? "לא הוזן"}</strong></span></div>
+            <div><span className="trainee-detail-icon">📅</span><span><small>תאריך לידה</small><strong>{formatProfileDate(profile.birth_date)}</strong></span></div>
+            <div><span className="trainee-detail-icon">🏁</span><span><small>תחילת אימון</small><strong>{formatProfileDate(profile.start_date)}</strong></span></div>
+          </div>
+        </section>
+
+        <section className="card trainee-detail-card">
+          <div className="section-title">🏋️ פרטי האימון</div>
+          <div className="trainee-detail-list">
+            <div><span className="trainee-detail-icon">🏋️</span><span><small>סוג אימון</small><strong>{profile.training_type || "לא הוזן"}</strong></span></div>
+            <div><span className="trainee-detail-icon">🎯</span><span><small>יעד מרכזי</small><strong>{profile.main_goal || "לא הוזן"}</strong></span></div>
+            <div><span className="trainee-detail-icon">📈</span><span><small>מדד הצלחה</small><strong>{profile.success_metric || "לא הוזן"}</strong></span></div>
+          </div>
+        </section>
+      </div>
+    </div>
+  );
+}
+
+
 function TraineeHome() {
   const [homeData, setHomeData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -1324,6 +1451,7 @@ const VIEW_TITLES = {
   revenue:        "כספים",
   settings:       "הגדרות",
   "trainee-home": "בית",
+  "trainee-profile": "הפרופיל שלי",
   workout:        "האימון שלי",
   progress:       "ההתקדמות שלי",
 };
@@ -1366,6 +1494,7 @@ const TRAINEE_GROUPS = [
     label: "תפריט",
     items: [
       { id: "trainee-home", icon: "🏠", label: "בית" },
+      { id: "trainee-profile", icon: "👤", label: "הפרופיל שלי" },
       { id: "workout",      icon: "🏋️",  label: "האימון שלי" },
       { id: "progress",     icon: "📈", label: "ההתקדמות שלי" },
     ],
@@ -1501,6 +1630,7 @@ export default function AppFullMigration({ onLogout, signingOut = false, signOut
           {view === "revenue"      && <Finance />}
           {view === "settings"     && <Settings />}
           {view === "trainee-home" && <TraineeHome />}
+          {view === "trainee-profile" && <TraineeProfile />}
           {view === "workout"      && <Workout />}
           {view === "progress"     && <Progress />}
         </div>

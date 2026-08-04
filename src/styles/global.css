@@ -1056,6 +1056,19 @@ body.ltr .today-card.warn-border { border-right: none; border-left: 3px solid #F
   margin-bottom: 7px;
 }
 .trainee-profile-actions { justify-content: flex-end; flex-wrap: wrap; }
+.trainee-self-profile-label {
+  display: block;
+  margin-bottom: 3px;
+  color: var(--gray-400);
+  font-size: 11px;
+}
+.trainee-self-profile-sync {
+  max-width: 230px;
+  color: var(--gray-500);
+  font-size: 12px;
+  line-height: 1.55;
+  text-align: left;
+}
 .trainee-status-select { width: auto; min-width: 125px; padding-block: 7px; }
 .trainee-edit-card { margin-bottom: 18px; }
 .trainee-profile-grid {
@@ -1263,6 +1276,7 @@ body.ltr .today-card.warn-border { border-right: none; border-left: 3px solid #F
     flex-direction: column;
   }
   .trainee-profile-actions { justify-content: flex-start; }
+  .trainee-self-profile-sync { max-width: none; text-align: right; }
   .trainee-profile-grid { grid-template-columns: 1fr; }
 
   .programs-list-toolbar { align-items: stretch; flex-direction: column; }

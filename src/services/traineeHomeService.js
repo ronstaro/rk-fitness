@@ -20,22 +20,8 @@ function currentWeekRange() {
 }
 
 export async function fetchTraineeHomeData() {
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser();
+  const trainee = await fetchTraineeProfile();
 
-  if (authError || !user) {
-    throw new Error("לא ניתן לזהות את המשתמש המחובר");
-  }
-
-  const { data: trainee, error: traineeError } = await supabase
-    .from("trainees")
-    .select("id, full_name, start_date, training_type, status, main_goal, success_metric")
-    .eq("user_id", user.id)
-    .maybeSingle();
-
-  if (traineeError) throw traineeError;
   if (!trainee) {
     return { trainee: null, sessions: [], program: null, days: [] };
   }
@@ -108,4 +94,13 @@ export async function fetchTraineeHomeData() {
     program,
     days,
   };
+}
+
+export async function fetchTraineeProfile() {
+  const { data, error } = await supabase
+    .rpc("get_my_trainee_profile")
+    .maybeSingle();
+
+  if (error) throw error;
+  return data ?? null;
 }

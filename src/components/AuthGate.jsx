@@ -1,5 +1,6 @@
 import { useEffect, useState, cloneElement } from "react";
 import { supabase, isSupabaseConfigured } from "../lib/supabase.js";
+import { getAccessContext } from "../services/accessService.js";
 
 const CENTER = {
   display: "flex",
@@ -13,6 +14,7 @@ const CENTER = {
 
 export default function AuthGate({ children }) {
   const [session, setSession] = useState(null);
+  const [accessContext, setAccessContext] = useState(null);
   const [loading, setLoading] = useState(true);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -29,13 +31,30 @@ export default function AuthGate({ children }) {
 
     let active = true;
 
+    async function loadAccessContext() {
+      try {
+        const context = await getAccessContext();
+        if (active) setAccessContext(context);
+      } catch (accessError) {
+        console.warn("Access check failed:", accessError?.name);
+        if (active) {
+          setAccessContext(null);
+          setError("לא ניתן לבדוק את הרשאות החשבון. נסה להתחבר מחדש.");
+        }
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+
     async function loadSession() {
       try {
         const { data, error: sessionError } = await supabase.auth.getSession();
         if (sessionError) throw sessionError;
 
-        if (active) {
-          setSession(data.session);
+        if (active) setSession(data.session);
+
+        if (data.session) {
+          await loadAccessContext();
         }
       } catch (sessionError) {
         console.warn("Session check failed:", sessionError?.name);
@@ -44,7 +63,7 @@ export default function AuthGate({ children }) {
           setError("לא ניתן לבדוק את מצב ההתחברות. נסה להתחבר מחדש.");
         }
       } finally {
-        if (active) {
+        if (active && !data.session) {
           setLoading(false);
         }
       }
@@ -53,7 +72,16 @@ export default function AuthGate({ children }) {
     loadSession();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, newSession) => {
-      if (active) setSession(newSession);
+      if (active) {
+        setSession(newSession);
+        setAccessContext(null);
+        if (newSession) {
+          setLoading(true);
+          setTimeout(loadAccessContext, 0);
+        } else {
+          setLoading(false);
+        }
+      }
     });
 
     return () => {
@@ -138,10 +166,39 @@ export default function AuthGate({ children }) {
 
   // ── Authenticated ─────────────────────────────────────────────────────────
   if (session) {
+    if (!accessContext) {
+      return (
+        <div style={CENTER}>
+          <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>לא ניתן לאמת הרשאות</div>
+          <div style={{ color: "#615E57", fontSize: 14, marginBottom: 16 }}>
+            נסה להתנתק ולהתחבר מחדש.
+          </div>
+          <button onClick={handleLogout} disabled={signingOut} style={{ ...inputStyle, cursor: "pointer" }}>
+            {signingOut ? "מתנתק..." : "התנתקות"}
+          </button>
+        </div>
+      );
+    }
+
+    if (accessContext?.role === "admin" && !accessContext.businessOwnerId) {
+      return (
+        <div style={CENTER}>
+          <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>אין הרשאת ניהול פעילה</div>
+          <div style={{ color: "#615E57", fontSize: 14, marginBottom: 16 }}>
+            החשבון מחובר, אך עדיין לא שויך לעסק.
+          </div>
+          <button onClick={handleLogout} disabled={signingOut} style={{ ...inputStyle, cursor: "pointer" }}>
+            {signingOut ? "מתנתק..." : "התנתקות"}
+          </button>
+        </div>
+      );
+    }
+
     return cloneElement(children, {
       onLogout: handleLogout,
       signingOut,
       signOutError,
+      accountRole: accessContext?.role,
     });
   }
 

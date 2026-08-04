@@ -1,4 +1,5 @@
 import { supabase } from "../lib/supabase.js";
+import { getBusinessOwnerId } from "./accessService.js";
 
 export async function fetchTrainees() {
   const { data, error } = await supabase
@@ -11,19 +12,12 @@ export async function fetchTrainees() {
 }
 
 export async function createTrainee(input) {
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser();
-
-  if (authError || !user) {
-    throw new Error("לא ניתן לקבל את פרטי המשתמש המחובר");
-  }
+  const ownerId = await getBusinessOwnerId();
 
   const { data, error } = await supabase
     .from("trainees")
     .insert({
-      owner_id: user.id,
+      owner_id: ownerId,
       full_name: input.full_name,
       phone: input.phone,
       birth_date: input.birth_date ?? null,

@@ -1,4 +1,5 @@
 import { supabase } from "../lib/supabase.js";
+import { getBusinessOwnerId } from "./accessService.js";
 
 function leadPayload(input) {
   return {
@@ -32,16 +33,12 @@ export async function fetchLeads() {
 }
 
 export async function createLead(input) {
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser();
-  if (authError || !user) throw new Error("לא ניתן לקבל את פרטי המשתמש המחובר");
+  const ownerId = await getBusinessOwnerId();
 
   const { data, error } = await supabase
     .from("leads")
     .insert({
-      owner_id: user.id,
+      owner_id: ownerId,
       ...leadPayload(input),
     })
     .select()

@@ -1,17 +1,5 @@
 import { supabase } from "../lib/supabase.js";
-
-async function getCurrentUserId() {
-  const {
-    data: { user },
-    error,
-  } = await supabase.auth.getUser();
-
-  if (error || !user) {
-    throw new Error("לא ניתן לקבל את פרטי המשתמש המחובר");
-  }
-
-  return user.id;
-}
+import { getBusinessOwnerId } from "./accessService.js";
 
 export async function fetchWeeklyGoalNotes(weekStart) {
   const { data, error } = await supabase
@@ -24,7 +12,7 @@ export async function fetchWeeklyGoalNotes(weekStart) {
 }
 
 export async function saveWeeklyGoalNote({ traineeId, weekStart, note }) {
-  const ownerId = await getCurrentUserId();
+  const ownerId = await getBusinessOwnerId();
   const normalizedNote = note.trim();
 
   if (!normalizedNote) {

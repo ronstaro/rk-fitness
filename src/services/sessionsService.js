@@ -1,4 +1,5 @@
 import { supabase } from "../lib/supabase.js";
+import { getBusinessOwnerId } from "./accessService.js";
 
 export async function fetchSessions() {
   const { data, error } = await supabase
@@ -12,19 +13,12 @@ export async function fetchSessions() {
 }
 
 export async function createSession(input) {
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser();
-
-  if (authError || !user) {
-    throw new Error("Unable to get the current user");
-  }
+  const ownerId = await getBusinessOwnerId();
 
   const { data, error } = await supabase
     .from("training_sessions")
     .insert({
-      owner_id: user.id,
+      owner_id: ownerId,
       trainee_id: input.traineeId,
       session_date: input.date,
       start_time: input.startTime,

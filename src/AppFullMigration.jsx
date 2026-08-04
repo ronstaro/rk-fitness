@@ -1254,13 +1254,14 @@ function NavItem({ item, active, onClick }) {
   );
 }
 
-export default function AppFullMigration({ onLogout, signingOut = false, signOutError = "" }) {
-  const [view, setView] = useState("dashboard");
-  const [role, setRole] = useState("admin");
+export default function AppFullMigration({ onLogout, signingOut = false, signOutError = "", accountRole = "trainee" }) {
+  const [view, setView] = useState(accountRole === "admin" ? "dashboard" : "trainee-home");
+  const [role, setRole] = useState(accountRole);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [selectedProgramTraineeId, setSelectedProgramTraineeId] = useState("");
 
   function toggleRole() {
+    if (accountRole !== "admin") return;
     const next = role === "admin" ? "trainee" : "admin";
     setRole(next);
     setView(next === "admin" ? "dashboard" : "trainee-home");
@@ -1310,9 +1311,11 @@ export default function AppFullMigration({ onLogout, signingOut = false, signOut
         </div>
 
         <div className="sidebar-bottom">
-          <button className="nav-role-btn" style={{ width: "100%" }} onClick={toggleRole}>
-            {role === "admin" ? "מעבר לתצוגת מתאמן" : "מעבר לתצוגת מנהל"}
-          </button>
+          {accountRole === "admin" && (
+            <button className="nav-role-btn" style={{ width: "100%" }} onClick={toggleRole}>
+              {role === "admin" ? "מעבר לתצוגת מתאמן" : "מעבר לתצוגת מנהל"}
+            </button>
+          )}
         </div>
       </div>
       {sidebarOpen && (

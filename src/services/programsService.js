@@ -1,17 +1,5 @@
 import { supabase } from "../lib/supabase.js";
-
-async function getCurrentUserId() {
-  const {
-    data: { user },
-    error,
-  } = await supabase.auth.getUser();
-
-  if (error || !user) {
-    throw new Error("לא ניתן לקבל את פרטי המשתמש המחובר");
-  }
-
-  return user.id;
-}
+import { getBusinessOwnerId } from "./accessService.js";
 
 export async function fetchPrograms() {
   const { data, error } = await supabase
@@ -65,7 +53,7 @@ export async function fetchProgramDetails(programId) {
 }
 
 export async function createProgram(input) {
-  const ownerId = await getCurrentUserId();
+  const ownerId = await getBusinessOwnerId();
   const { data, error } = await supabase
     .from("workout_programs")
     .insert({
@@ -137,7 +125,7 @@ export async function deleteProgram(id) {
 }
 
 export async function createProgramDay(input) {
-  const ownerId = await getCurrentUserId();
+  const ownerId = await getBusinessOwnerId();
   const { data, error } = await supabase
     .from("program_days")
     .insert({
@@ -176,7 +164,7 @@ export async function deleteProgramDay(id) {
 }
 
 export async function createProgramExercise(input) {
-  const ownerId = await getCurrentUserId();
+  const ownerId = await getBusinessOwnerId();
   const { data, error } = await supabase
     .from("program_exercises")
     .insert({

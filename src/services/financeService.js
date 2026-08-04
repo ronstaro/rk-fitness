@@ -1,4 +1,5 @@
 import { supabase } from "../lib/supabase.js";
+import { getBusinessOwnerId } from "./accessService.js";
 
 const DEFAULT_SETTINGS = {
   vat_rate: 18,
@@ -7,19 +8,6 @@ const DEFAULT_SETTINGS = {
 };
 
 const REMOVED_PAYMENT_NOTE = "__removed_by_admin__";
-
-async function getCurrentUserId() {
-  const {
-    data: { user },
-    error,
-  } = await supabase.auth.getUser();
-
-  if (error || !user) {
-    throw new Error("לא ניתן לקבל את פרטי המשתמש המחובר");
-  }
-
-  return user.id;
-}
 
 function addMonths(monthStart, amount) {
   const [year, month] = monthStart.split("-").map(Number);
@@ -71,7 +59,7 @@ async function ensureMonthlyPayments(ownerId, monthStart, trainees, payments) {
 }
 
 export async function fetchFinanceData(monthStart) {
-  const ownerId = await getCurrentUserId();
+  const ownerId = await getBusinessOwnerId();
   const trendStart = addMonths(monthStart, -11);
   const currentMonth = `${new Date().getFullYear()}-${String(
     new Date().getMonth() + 1
@@ -175,7 +163,7 @@ export async function updateMonthlyPayment(id, paymentStatus) {
 }
 
 export async function createMonthlyPayment(input) {
-  const ownerId = await getCurrentUserId();
+  const ownerId = await getBusinessOwnerId();
   const { data, error } = await supabase
     .from("trainee_monthly_payments")
     .insert({
@@ -226,7 +214,7 @@ export async function deleteMonthlyPayment(payment) {
 }
 
 export async function createFinanceExpense(input) {
-  const ownerId = await getCurrentUserId();
+  const ownerId = await getBusinessOwnerId();
   const { data, error } = await supabase
     .from("finance_expenses")
     .insert({
@@ -269,7 +257,7 @@ export async function deleteFinanceExpense(id) {
 }
 
 export async function updateFinanceSettings(input) {
-  const ownerId = await getCurrentUserId();
+  const ownerId = await getBusinessOwnerId();
   const { data, error } = await supabase
     .from("finance_settings")
     .upsert({

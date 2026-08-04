@@ -2,7 +2,7 @@
 import { fetchTrainees, createTrainee, updateTrainee, updateTraineeStatus, deleteTrainee } from "./services/traineesService.js";
 import { fetchSessions } from "./services/sessionsService.js";
 import { fetchActivePrograms } from "./services/programsService.js";
-import { fetchTraineeHomeData, fetchTraineeProfile } from "./services/traineeHomeService.js";
+import { fetchTraineeHomeData, fetchTraineeProfile, fetchTraineeProgramData } from "./services/traineeHomeService.js";
 import Dashboard from "./components/Dashboard.jsx";
 import Finance from "./components/Finance.jsx";
 import Leads from "./components/Leads.jsx";
@@ -1240,38 +1240,166 @@ function TraineeHome() {
 
 
 function Workout() {
+  const [programData, setProgramData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const [reloadKey, setReloadKey] = useState(0);
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadProgram() {
+      setLoading(true);
+      setLoadError("");
+
+      try {
+        const data = await fetchTraineeProgramData();
+        if (active) setProgramData(data);
+      } catch (error) {
+        console.warn("Trainee program fetch failed:", error?.name);
+        if (active) setLoadError("לא ניתן לטעון את תוכנית האימון כרגע.");
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+
+    loadProgram();
+    return () => {
+      active = false;
+    };
+  }, [reloadKey]);
+
+  function formatProgramDate(value) {
+    if (!value) return "לא הוגדר";
+    return new Date(`${value}T12:00:00`).toLocaleDateString("he-IL", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    });
+  }
+
+  function formatRest(seconds) {
+    if (seconds == null) return "לא הוגדר";
+    if (seconds < 60) return `${seconds} שנ׳`;
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    return remainingSeconds ? `${minutes}:${String(remainingSeconds).padStart(2, "0")} דק׳` : `${minutes} דק׳`;
+  }
+
+  if (loading) {
+    return <div className="trainee-home-state">טוען את תוכנית האימון...</div>;
+  }
+
+  if (loadError) {
+    return (
+      <div className="trainee-home-state">
+        <p>{loadError}</p>
+        <button type="button" className="btn btn-outline btn-sm" onClick={() => setReloadKey((key) => key + 1)}>
+          נסה שוב
+        </button>
+      </div>
+    );
+  }
+
+  if (!programData?.trainee) {
+    return (
+      <div className="trainee-home-state">
+        <strong>החשבון עדיין לא שויך למתאמן</strong>
+        <p>יש לפנות לרוני כדי להשלים את החיבור לחשבון.</p>
+      </div>
+    );
+  }
+
+  const { program, days } = programData;
+
+  if (!program) {
+    return (
+      <div className="trainee-workout slide-in">
+        <section className="trainee-workout-hero">
+          <span>תוכנית האימון שלי</span>
+          <h2>התוכנית הבאה שלך בבנייה</h2>
+          <p>כשרוני תפעיל עבורך תוכנית, היא תופיע כאן באופן אוטומטי.</p>
+        </section>
+        <div className="trainee-home-state trainee-workout-empty">
+          <strong>אין תוכנית פעילה כרגע</strong>
+          <p>אפשר לפנות לרוני לקבלת עדכון.</p>
+        </div>
+      </div>
+    );
+  }
+
+  const exercises = days.flatMap((day) => day.exercises);
+  const totalSets = exercises.reduce((sum, exercise) => sum + exercise.sets, 0);
+
   return (
-    <div>
-      <div style={{ marginBottom: 20 }}>
-        <h2 style={{ margin: 0, fontSize: 20, color: "#1E1C19" }}>אימון</h2>
-        <p style={{ margin: "4px 0 0", fontSize: 13, color: "#9E9A90" }}>תרגילים, סטים ומשוב</p>
-      </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16, marginBottom: 24 }}>
-        <div style={{ background: "#fff", borderRadius: 10, border: "0.5px solid #EDEBE6", padding: 16 }}>
-          <div style={{ fontSize: 11, color: "#9E9A90", marginBottom: 6 }}>תרגילים</div>
-          <div style={{ fontSize: 28, fontWeight: 700 }}>--</div>
+    <div className="trainee-workout slide-in">
+      <section className="trainee-workout-hero">
+        <span>תוכנית האימון שלי</span>
+        <h2>{program.name}</h2>
+        <p>{program.goal || "התוכנית הפעילה שלך מרוני"}</p>
+        <div className="trainee-workout-dates">
+          <small>התחלה: {formatProgramDate(program.start_date)}</small>
+          <small>סיום: {formatProgramDate(program.end_date)}</small>
         </div>
-        <div style={{ background: "#fff", borderRadius: 10, border: "0.5px solid #EDEBE6", padding: 16 }}>
-          <div style={{ fontSize: 11, color: "#9E9A90", marginBottom: 6 }}>סטים</div>
-          <div style={{ fontSize: 28, fontWeight: 700 }}>--</div>
+      </section>
+
+      <div className="trainee-workout-metrics">
+        <article><span>ימי אימון</span><strong>{days.length}</strong></article>
+        <article><span>תרגילים</span><strong>{exercises.length}</strong></article>
+        <article><span>סה״כ סטים</span><strong>{totalSets}</strong></article>
+        <article><span>יעד שבועי</span><strong>{program.sessions_per_week ?? "—"}</strong></article>
+      </div>
+
+      {program.notes && (
+        <section className="trainee-workout-note">
+          <span>💬</span>
+          <div><strong>הערה מרוני</strong><p>{program.notes}</p></div>
+        </section>
+      )}
+
+      {days.length === 0 ? (
+        <div className="trainee-home-state trainee-workout-empty">
+          <strong>התוכנית עדיין ללא ימי אימון</strong>
+          <p>רוני תוסיף אותם כאן לאחר השלמת התוכנית.</p>
         </div>
-        <div style={{ background: "#fff", borderRadius: 10, border: "0.5px solid #EDEBE6", padding: 16 }}>
-          <div style={{ fontSize: 11, color: "#9E9A90", marginBottom: 6 }}>משוב</div>
-          <div style={{ fontSize: 28, fontWeight: 700 }}>--</div>
+      ) : (
+        <div className="trainee-workout-days">
+          {days.map((day) => (
+            <section className="card trainee-workout-day" key={day.id}>
+              <header className="trainee-workout-day-header">
+                <span>{day.day_order}</span>
+                <div>
+                  <h3>{day.name}</h3>
+                  <p>{day.exercises.length} תרגילים</p>
+                </div>
+              </header>
+
+              {day.notes && <p className="trainee-workout-day-note">{day.notes}</p>}
+
+              {day.exercises.length === 0 ? (
+                <div className="trainee-workout-no-exercises">עדיין לא נוספו תרגילים ליום הזה.</div>
+              ) : (
+                <div className="trainee-workout-exercises">
+                  {day.exercises.map((exercise) => (
+                    <article className="trainee-workout-exercise" key={exercise.id}>
+                      <div className="trainee-workout-exercise-name">
+                        <span>{exercise.exercise_order}</span>
+                        <div><strong>{exercise.name}</strong>{exercise.notes && <p>{exercise.notes}</p>}</div>
+                      </div>
+                      <dl className="trainee-workout-exercise-data">
+                        <div><dt>סטים</dt><dd>{exercise.sets}</dd></div>
+                        <div><dt>חזרות</dt><dd>{exercise.reps}</dd></div>
+                        <div><dt>RIR</dt><dd>{exercise.target_rir ?? "—"}</dd></div>
+                        <div><dt>מנוחה</dt><dd>{formatRest(exercise.rest_seconds)}</dd></div>
+                      </dl>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </section>
+          ))}
         </div>
-      </div>
-      <div style={{ background: "#fff", borderRadius: 12, border: "0.5px solid #EDEBE6", padding: 20, marginBottom: 16 }}>
-        <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 12 }}>תוכנית אימון</div>
-        <div style={{ fontSize: 14, color: "#9E9A90" }}>אין תוכנית עדיין</div>
-      </div>
-      <div style={{ background: "#fff", borderRadius: 12, border: "0.5px solid #EDEBE6", padding: 20, marginBottom: 16 }}>
-        <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 12 }}>רשימת תרגילים</div>
-        <div style={{ fontSize: 14, color: "#9E9A90" }}>אין תרגילים להצגה</div>
-      </div>
-      <div style={{ background: "#fff", borderRadius: 12, border: "0.5px solid #EDEBE6", padding: 20 }}>
-        <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 8 }}>משוב והערות</div>
-        <div style={{ fontSize: 14, color: "#9E9A90" }}>אין משוב עדיין</div>
-      </div>
+      )}
     </div>
   );
 }
@@ -1452,7 +1580,7 @@ const VIEW_TITLES = {
   settings:       "הגדרות",
   "trainee-home": "בית",
   "trainee-profile": "הפרופיל שלי",
-  workout:        "האימון שלי",
+  workout:        "תוכנית האימון שלי",
   progress:       "ההתקדמות שלי",
 };
 
@@ -1495,7 +1623,7 @@ const TRAINEE_GROUPS = [
     items: [
       { id: "trainee-home", icon: "🏠", label: "בית" },
       { id: "trainee-profile", icon: "👤", label: "הפרופיל שלי" },
-      { id: "workout",      icon: "🏋️",  label: "האימון שלי" },
+      { id: "workout",      icon: "🏋️",  label: "תוכנית האימון שלי" },
       { id: "progress",     icon: "📈", label: "ההתקדמות שלי" },
     ],
   },

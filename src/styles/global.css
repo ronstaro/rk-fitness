@@ -1911,8 +1911,71 @@ body.ltr .today-card.warn-border { border-right: none; border-left: 3px solid #F
 .trainee-home-state strong { display: block; margin-bottom: 5px; color: var(--gray-900); font-size: 16px; }
 .trainee-home-state p { margin-bottom: 12px; }
 
+/* ── Trainee workout program ──────────────────────────────── */
+.trainee-workout { max-width: 1050px; margin: 0 auto; }
+.trainee-workout-hero {
+  margin-bottom: 16px; padding: 24px; border-radius: 14px;
+  background: linear-gradient(135deg, var(--burg-d), var(--burg)); color: #fff;
+}
+.trainee-workout-hero > span { display: block; margin-bottom: 5px; font-size: 12px; opacity: .78; }
+.trainee-workout-hero h2 { font-size: 25px; line-height: 1.25; }
+.trainee-workout-hero > p { max-width: 650px; margin-top: 7px; font-size: 13px; opacity: .84; }
+.trainee-workout-dates { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+.trainee-workout-dates small {
+  padding: 4px 10px; border: 1px solid rgba(255, 255, 255, .2); border-radius: 20px;
+  background: rgba(255, 255, 255, .1); font-size: 10px;
+}
+.trainee-workout-metrics {
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 16px;
+}
+.trainee-workout-metrics article {
+  padding: 14px 16px; border: 1px solid var(--gray-100); border-radius: 10px; background: #fff;
+}
+.trainee-workout-metrics span { display: block; color: var(--gray-400); font-size: 10px; }
+.trainee-workout-metrics strong { display: block; margin-top: 3px; color: var(--burg); font-size: 22px; line-height: 1.2; }
+.trainee-workout-note {
+  display: flex; align-items: flex-start; gap: 11px; margin-bottom: 16px; padding: 14px 16px;
+  border: 1px solid #F1DFC0; border-radius: 10px; background: var(--mustard-pale);
+}
+.trainee-workout-note > span { font-size: 18px; }
+.trainee-workout-note strong { display: block; color: var(--mustard-d); font-size: 12px; }
+.trainee-workout-note p { margin-top: 2px; color: var(--gray-600); font-size: 12px; white-space: pre-wrap; }
+.trainee-workout-days { display: grid; gap: 14px; }
+.trainee-workout-day { padding: 18px; }
+.trainee-workout-day-header { display: flex; align-items: center; gap: 11px; }
+.trainee-workout-day-header > span {
+  display: grid; place-items: center; width: 36px; height: 36px; flex: 0 0 36px;
+  border-radius: 50%; background: var(--burg); color: #fff; font-size: 13px; font-weight: 700;
+}
+.trainee-workout-day-header h3 { font-size: 16px; }
+.trainee-workout-day-header p { margin-top: 1px; color: var(--gray-400); font-size: 10px; }
+.trainee-workout-day-note {
+  margin-top: 11px; padding: 9px 11px; border-radius: 8px;
+  background: var(--gray-50); color: var(--gray-600); font-size: 11px; white-space: pre-wrap;
+}
+.trainee-workout-exercises { display: grid; gap: 9px; margin-top: 14px; }
+.trainee-workout-exercise {
+  display: grid; grid-template-columns: minmax(180px, 1fr) minmax(340px, 1.2fr);
+  align-items: center; gap: 16px; padding: 13px 14px;
+  border: 1px solid var(--gray-100); border-radius: 10px; background: var(--gray-50);
+}
+.trainee-workout-exercise-name { display: flex; align-items: flex-start; gap: 9px; min-width: 0; }
+.trainee-workout-exercise-name > span {
+  display: grid; place-items: center; width: 25px; height: 25px; flex: 0 0 25px;
+  border-radius: 7px; background: var(--burg-pale); color: var(--burg); font-size: 10px; font-weight: 700;
+}
+.trainee-workout-exercise-name strong { display: block; font-size: 13px; }
+.trainee-workout-exercise-name p { margin-top: 2px; color: var(--gray-400); font-size: 10px; white-space: pre-wrap; }
+.trainee-workout-exercise-data { display: grid; grid-template-columns: repeat(4, minmax(62px, 1fr)); gap: 7px; }
+.trainee-workout-exercise-data div { padding: 7px 8px; border-radius: 7px; background: #fff; text-align: center; }
+.trainee-workout-exercise-data dt { color: var(--gray-400); font-size: 9px; }
+.trainee-workout-exercise-data dd { margin-top: 1px; color: var(--gray-900); font-size: 11px; font-weight: 600; }
+.trainee-workout-no-exercises { margin-top: 14px; padding: 18px; color: var(--gray-400); font-size: 12px; text-align: center; }
+.trainee-workout-empty { border: 1px solid var(--gray-100); border-radius: 12px; background: #fff; }
+
 @media (max-width: 860px) {
   .trainee-home-layout { grid-template-columns: 1fr; }
+  .trainee-workout-exercise { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 560px) {
@@ -1924,4 +1987,10 @@ body.ltr .today-card.warn-border { border-right: none; border-left: 3px solid #F
   .trainee-home-metric strong { font-size: 24px; }
   .trainee-home-panel { padding: 15px; }
   .trainee-exercise { align-items: flex-start; flex-direction: column; gap: 2px; }
+  .trainee-workout-hero { padding: 19px; }
+  .trainee-workout-hero h2 { font-size: 21px; }
+  .trainee-workout-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .trainee-workout-day { padding: 15px; }
+  .trainee-workout-exercise { padding: 11px; }
+  .trainee-workout-exercise-data { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }

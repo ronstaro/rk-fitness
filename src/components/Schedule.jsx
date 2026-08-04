@@ -663,7 +663,7 @@ export default function Schedule() {
                   className="form-input"
                   type="number"
                   min="1"
-                  step="5"
+                  step="1"
                   value={form.durationMinutes}
                   onChange={(event) =>
                     handleField("durationMinutes", event.target.value)
@@ -758,4 +758,3 @@ export default function Schedule() {
       )}
     </div>
   );
-}

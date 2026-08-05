@@ -2076,6 +2076,59 @@ body.ltr .today-card.warn-border { border-right: none; border-left: 3px solid #F
 .trainee-workout-finish-bar strong { font-size: 12px; }
 .trainee-workout-finish-bar span { margin-top: 2px; color: var(--gray-400); font-size: 9px; }
 
+/* ── Completed workout history and reviews ───────────────── */
+.workout-history { margin-top: 24px; }
+.workout-history-heading, .workout-reviews-heading {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 13px;
+}
+.workout-history-heading h3, .workout-reviews-heading h2 { margin: 0; color: var(--gray-900); font-size: 18px; }
+.workout-history-heading p, .workout-reviews-heading p { margin-top: 3px; color: var(--gray-400); font-size: 11px; }
+.workout-reviews { max-width: 1050px; margin: 0 auto; }
+.workout-reviews-metrics, .completed-workout-summary {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-bottom: 16px;
+}
+.workout-reviews-metrics article, .completed-workout-summary article {
+  padding: 13px 15px; border: 1px solid var(--gray-100); border-radius: 10px; background: #fff;
+}
+.workout-reviews-metrics span, .completed-workout-summary span { display: block; color: var(--gray-400); font-size: 10px; }
+.workout-reviews-metrics strong, .completed-workout-summary strong { display: block; margin-top: 3px; color: var(--burg); font-size: 20px; }
+.completed-workouts-list { display: grid; gap: 11px; }
+.completed-workouts-empty {
+  padding: 34px 16px; border: 1px dashed var(--gray-200); border-radius: 11px;
+  background: #fff; color: var(--gray-400); font-size: 12px; text-align: center;
+}
+.completed-workout-card { overflow: hidden; padding: 0; }
+.completed-workout-card.open { border-color: var(--burg-pale); }
+.completed-workout-card-toggle {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px; width: 100%;
+  padding: 15px 17px; border: 0; background: #fff; color: inherit; font: inherit; text-align: right; cursor: pointer;
+}
+.completed-workout-card-toggle:hover { background: var(--gray-50); }
+.completed-workout-card-toggle strong, .completed-workout-card-toggle small { display: block; }
+.completed-workout-card-toggle strong { color: var(--gray-900); font-size: 13px; }
+.completed-workout-card-toggle small { margin-top: 3px; color: var(--gray-400); font-size: 10px; }
+.completed-workout-card-badges { display: flex; align-items: center; flex: 0 0 auto; gap: 7px; }
+.completed-workout-details { padding: 16px; border-top: 1px solid var(--gray-100); background: var(--gray-50); }
+.completed-workout-summary article { background: #fff; }
+.completed-workout-summary strong { font-size: 15px; }
+.completed-workout-exercises { display: grid; gap: 11px; }
+.completed-workout-exercise { padding: 14px; border: 1px solid var(--gray-100); border-radius: 10px; background: #fff; }
+.completed-workout-exercise > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.completed-workout-exercise .trainee-workout-exercise-name small { display: block; margin-top: 2px; color: var(--gray-400); font-size: 9px; }
+.completed-workout-sets { display: grid; gap: 5px; margin-top: 12px; }
+.completed-workout-set {
+  display: grid; grid-template-columns: 42px repeat(4, minmax(55px, 1fr)); align-items: center; gap: 6px;
+  min-height: 34px; padding: 6px 8px; border-radius: 8px; background: var(--gray-50); text-align: center;
+}
+.completed-workout-set strong { color: var(--burg); font-size: 11px; }
+.completed-workout-set span { color: var(--gray-600); font-size: 10px; }
+.completed-workout-set.labels { min-height: auto; padding-top: 0; padding-bottom: 0; background: transparent; }
+.completed-workout-set.labels span { color: var(--gray-400); font-size: 8px; }
+.completed-workout-note { margin-top: 10px; padding: 9px 10px; border-radius: 8px; background: var(--mustard-pale); color: var(--gray-600); font-size: 10px; white-space: pre-wrap; }
+.completed-workout-video { display: grid; gap: 7px; margin-top: 10px; }
+.completed-workout-video > span { color: var(--gray-600); font-size: 10px; font-weight: 600; }
+.completed-workout-video video { width: 100%; max-height: 380px; border-radius: 9px; background: #171515; }
+
 @media (max-width: 860px) {
   .trainee-home-layout { grid-template-columns: 1fr; }
   .trainee-workout-exercise { grid-template-columns: 1fr; }
@@ -2121,4 +2174,15 @@ body.ltr .today-card.warn-border { border-right: none; border-left: 3px solid #F
   .trainee-live-video-button { min-height: 48px; font-size: 13px; }
   .trainee-workout-finish-bar { bottom: 8px; align-items: stretch; flex-direction: column; gap: 9px; }
   .trainee-workout-finish-bar .btn { width: 100%; }
+  .workout-history-heading, .workout-reviews-heading { align-items: flex-start; flex-direction: column; }
+  .workout-reviews-heading .btn { width: 100%; }
+  .workout-reviews-metrics, .completed-workout-summary { gap: 7px; }
+  .workout-reviews-metrics article, .completed-workout-summary article { padding: 11px 9px; }
+  .workout-reviews-metrics strong, .completed-workout-summary strong { font-size: 16px; }
+  .completed-workout-card-toggle { align-items: flex-start; flex-direction: column; padding: 14px; }
+  .completed-workout-card-badges { width: 100%; flex-wrap: wrap; }
+  .completed-workout-details { padding: 11px; }
+  .completed-workout-exercise { padding: 11px; }
+  .completed-workout-exercise > header { align-items: stretch; flex-direction: column; }
+  .completed-workout-set { grid-template-columns: 30px repeat(4, minmax(0, 1fr)); gap: 3px; padding: 7px 4px; }
 }

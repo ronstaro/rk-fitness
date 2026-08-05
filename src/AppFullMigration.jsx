@@ -3,7 +3,7 @@ import { fetchTrainees, createTrainee, updateTrainee, updateTraineeStatus, delet
 import { fetchSessions } from "./services/sessionsService.js";
 import { fetchActivePrograms } from "./services/programsService.js";
 import { fetchTraineeHomeData, fetchTraineeProfile, fetchTraineeProgramData } from "./services/traineeHomeService.js";
-import { fetchOpenWorkout, finishWorkout, startWorkout, updateWorkoutExercise, updateWorkoutSet, uploadExerciseVideo } from "./services/workoutExecutionService.js";
+import { fetchCompletedWorkouts, fetchOpenWorkout, finishWorkout, startWorkout, updateWorkoutExercise, updateWorkoutSet, uploadExerciseVideo } from "./services/workoutExecutionService.js";
 import Dashboard from "./components/Dashboard.jsx";
 import Finance from "./components/Finance.jsx";
 import Leads from "./components/Leads.jsx";
@@ -1240,6 +1240,144 @@ function TraineeHome() {
 }
 
 
+function formatCompletedWorkoutDate(value) {
+  if (!value) return "לא הוגדר";
+  return new Date(value).toLocaleString("he-IL", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function formatWorkoutDuration(startedAt, completedAt) {
+  if (!startedAt || !completedAt) return "—";
+  const minutes = Math.max(0, Math.round((new Date(completedAt) - new Date(startedAt)) / 60000));
+  if (minutes < 60) return `${minutes} דקות`;
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  return remainingMinutes ? `${hours} ש׳ ${remainingMinutes} דק׳` : `${hours} שעות`;
+}
+
+function CompletedWorkoutDetails({ workout }) {
+  const completedSets = workout.exercises
+    .flatMap((exercise) => exercise.sets)
+    .filter((workoutSet) => workoutSet.is_completed).length;
+  const totalSets = workout.exercises.flatMap((exercise) => exercise.sets).length;
+
+  return (
+    <div className="completed-workout-details">
+      <div className="completed-workout-summary">
+        <article><span>משך</span><strong>{formatWorkoutDuration(workout.started_at, workout.completed_at)}</strong></article>
+        <article><span>תרגילים</span><strong>{workout.exercises.length}</strong></article>
+        <article><span>סטים שתועדו</span><strong>{completedSets}/{totalSets}</strong></article>
+      </div>
+
+      <div className="completed-workout-exercises">
+        {workout.exercises.map((exercise) => (
+          <section className="completed-workout-exercise" key={exercise.id}>
+            <header>
+              <div className="trainee-workout-exercise-name">
+                <span>{exercise.exercise_order}</span>
+                <div>
+                  <strong>{exercise.exercise_name}</strong>
+                  <small>יעד: {exercise.prescribed_sets} סטים × {exercise.prescribed_reps} · {exercise.target_weight_kg == null ? "ללא משקל יעד" : `${exercise.target_weight_kg} ק״ג`}</small>
+                </div>
+              </div>
+              <span className={`badge ${exercise.is_completed ? "badge-active" : "badge-warn"}`}>
+                {exercise.is_completed ? "הושלם" : "חלקי"}
+              </span>
+            </header>
+
+            <div className="completed-workout-sets">
+              <div className="completed-workout-set labels" aria-hidden="true">
+                <span>סט</span><span>משקל</span><span>חזרות</span><span>RIR</span><span>מצב</span>
+              </div>
+              {exercise.sets.map((workoutSet) => (
+                <div className="completed-workout-set" key={workoutSet.id}>
+                  <strong>{workoutSet.set_order}</strong>
+                  <span>{workoutSet.weight_kg == null ? "—" : `${workoutSet.weight_kg} ק״ג`}</span>
+                  <span>{workoutSet.completed_reps ?? "—"}</span>
+                  <span>{workoutSet.rir ?? "—"}</span>
+                  <span>{workoutSet.is_completed ? "✓" : "—"}</span>
+                </div>
+              ))}
+            </div>
+
+            {exercise.trainee_notes && (
+              <p className="completed-workout-note">💬 {exercise.trainee_notes}</p>
+            )}
+
+            {exercise.video_url && (
+              <div className="completed-workout-video">
+                <span>📹 סרטון מהמתאמן</span>
+                <video controls playsInline preload="metadata" src={exercise.video_url}>
+                  הדפדפן לא תומך בצפייה בסרטון.
+                </video>
+              </div>
+            )}
+          </section>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function CompletedWorkoutsList({ workouts, traineeNamesById = {}, emptyText }) {
+  const [openWorkoutId, setOpenWorkoutId] = useState("");
+
+  if (workouts.length === 0) {
+    return <div className="completed-workouts-empty">{emptyText}</div>;
+  }
+
+  return (
+    <div className="completed-workouts-list">
+      {workouts.map((workout) => {
+        const isOpen = openWorkoutId === workout.id;
+        const traineeName = traineeNamesById[workout.trainee_id];
+        const hasVideo = workout.exercises.some((exercise) => exercise.video_path);
+        return (
+          <article className={`card completed-workout-card ${isOpen ? "open" : ""}`} key={workout.id}>
+            <button
+              type="button"
+              className="completed-workout-card-toggle"
+              aria-expanded={isOpen}
+              onClick={() => setOpenWorkoutId(isOpen ? "" : workout.id)}
+            >
+              <div>
+                <strong>{traineeName ? `${traineeName} · ` : ""}{workout.day_name}</strong>
+                <small>{workout.program_name} · {formatCompletedWorkoutDate(workout.completed_at)}</small>
+              </div>
+              <div className="completed-workout-card-badges">
+                {hasVideo && <span className="badge badge-burg">📹 סרטון</span>}
+                <span className="badge badge-active">הושלם וננעל</span>
+                <span aria-hidden="true">{isOpen ? "⌃" : "⌄"}</span>
+              </div>
+            </button>
+            {isOpen && <CompletedWorkoutDetails workout={workout} />}
+          </article>
+        );
+      })}
+    </div>
+  );
+}
+
+function WorkoutHistory({ workouts }) {
+  return (
+    <section className="workout-history">
+      <div className="workout-history-heading">
+        <div>
+          <h3>🕘 אימונים קודמים</h3>
+          <p>האימונים שסיימת נשמרים לצפייה בלבד ואינם ניתנים לעריכה.</p>
+        </div>
+        <span className="badge badge-new">{workouts.length} אימונים</span>
+      </div>
+      <CompletedWorkoutsList workouts={workouts} emptyText="עדיין אין אימונים שהושלמו." />
+    </section>
+  );
+}
+
 function Workout() {
   const [programData, setProgramData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -1263,10 +1401,13 @@ function Workout() {
 
       try {
         const data = await fetchTraineeProgramData();
-        const activeWorkout = data.trainee
-          ? await fetchOpenWorkout(data.trainee.id)
-          : null;
-        if (active) setProgramData({ ...data, activeWorkout });
+        const [activeWorkout, completedWorkouts] = data.trainee
+          ? await Promise.all([
+              fetchOpenWorkout(data.trainee.id),
+              fetchCompletedWorkouts({ traineeId: data.trainee.id, limit: 20 }),
+            ])
+          : [null, []];
+        if (active) setProgramData({ ...data, activeWorkout, completedWorkouts });
       } catch (error) {
         console.warn("Trainee program fetch failed:", error?.name);
         if (active) setLoadError("לא ניתן לטעון את תוכנית האימון כרגע.");
@@ -1486,7 +1627,7 @@ function Workout() {
     );
   }
 
-  const { program, days, activeWorkout } = programData;
+  const { program, days, activeWorkout, completedWorkouts = [] } = programData;
 
   if (activeWorkout) {
     const allSets = activeWorkout.exercises.flatMap((exercise) => exercise.sets);
@@ -1646,6 +1787,8 @@ function Workout() {
           ))}
         </div>
 
+        <WorkoutHistory workouts={completedWorkouts} />
+
         <div className="trainee-workout-finish-bar">
           <div><strong>סיימת את האימון?</strong><span>לאחר הסיום האימון יינעל לעריכה.</span></div>
           <button type="button" className="btn btn-primary" disabled={finishing} onClick={handleFinishWorkout}>
@@ -1668,6 +1811,7 @@ function Workout() {
           <strong>אין תוכנית פעילה כרגע</strong>
           <p>אפשר לפנות לרוני לקבלת עדכון.</p>
         </div>
+        <WorkoutHistory workouts={completedWorkouts} />
       </div>
     );
   }
@@ -1758,6 +1902,8 @@ function Workout() {
           ))}
         </div>
       )}
+
+      <WorkoutHistory workouts={completedWorkouts} />
     </div>
   );
 }
@@ -1802,38 +1948,84 @@ function Progress() {
 
 
 function Reviews() {
+  const [workouts, setWorkouts] = useState([]);
+  const [traineeNamesById, setTraineeNamesById] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const [reloadKey, setReloadKey] = useState(0);
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadReviews() {
+      setLoading(true);
+      setLoadError("");
+
+      try {
+        const [completedWorkouts, trainees] = await Promise.all([
+          fetchCompletedWorkouts({ limit: 100 }),
+          fetchTrainees(),
+        ]);
+        if (!active) return;
+        setWorkouts(completedWorkouts);
+        setTraineeNamesById(
+          Object.fromEntries(trainees.map((trainee) => [trainee.id, trainee.full_name]))
+        );
+      } catch (error) {
+        console.warn("Workout reviews fetch failed:", error?.name);
+        if (active) setLoadError("לא ניתן לטעון את סקירות האימונים כרגע.");
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+
+    loadReviews();
+    return () => {
+      active = false;
+    };
+  }, [reloadKey]);
+
+  const workoutsWithVideos = workouts.filter((workout) =>
+    workout.exercises.some((exercise) => exercise.video_path)
+  ).length;
+  const workoutsWithNotes = workouts.filter((workout) =>
+    workout.exercises.some((exercise) => exercise.trainee_notes)
+  ).length;
+
   return (
-    <div>
-      <div style={{ marginBottom: 20 }}>
-        <h2 style={{ margin: 0, fontSize: 20, color: "#1E1C19" }}>סקירות</h2>
-        <p style={{ margin: "4px 0 0", fontSize: 13, color: "#9E9A90" }}>מעקב אחרי אימונים, משובים ומשימות לבדיקה</p>
-      </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16, marginBottom: 24 }}>
-        <div style={{ background: "#fff", borderRadius: 10, border: "0.5px solid #EDEBE6", padding: 16 }}>
-          <div style={{ fontSize: 11, color: "#9E9A90", marginBottom: 6 }}>ממתינים לסקירה</div>
-          <div style={{ fontSize: 28, fontWeight: 700 }}>--</div>
+    <div className="workout-reviews slide-in">
+      <div className="workout-reviews-heading">
+        <div>
+          <h2>📋 סקירות אימונים</h2>
+          <p>כל אימון שהסתיים, כולל הסטים, ההערות והסרטונים שהמתאמן שמר.</p>
         </div>
-        <div style={{ background: "#fff", borderRadius: 10, border: "0.5px solid #EDEBE6", padding: 16 }}>
-          <div style={{ fontSize: 11, color: "#9E9A90", marginBottom: 6 }}>משובים חדשים</div>
-          <div style={{ fontSize: 28, fontWeight: 700 }}>--</div>
+        <button type="button" className="btn btn-outline btn-sm" disabled={loading} onClick={() => setReloadKey((key) => key + 1)}>
+          {loading ? "טוען..." : "רענון"}
+        </button>
+      </div>
+
+      <div className="workout-reviews-metrics">
+        <article><span>אימונים שהושלמו</span><strong>{workouts.length}</strong></article>
+        <article><span>אימונים עם סרטון</span><strong>{workoutsWithVideos}</strong></article>
+        <article><span>אימונים עם הערות</span><strong>{workoutsWithNotes}</strong></article>
+      </div>
+
+      {loadError ? (
+        <div className="trainee-home-state">
+          <p>{loadError}</p>
+          <button type="button" className="btn btn-outline btn-sm" onClick={() => setReloadKey((key) => key + 1)}>
+            נסה שוב
+          </button>
         </div>
-        <div style={{ background: "#fff", borderRadius: 10, border: "0.5px solid #EDEBE6", padding: 16 }}>
-          <div style={{ fontSize: 11, color: "#9E9A90", marginBottom: 6 }}>דורשים פעולה</div>
-          <div style={{ fontSize: 28, fontWeight: 700 }}>--</div>
-        </div>
-      </div>
-      <div style={{ background: "#fff", borderRadius: 12, border: "0.5px solid #EDEBE6", padding: 20, marginBottom: 16 }}>
-        <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 12 }}>תור לסקירה</div>
-        <div style={{ fontSize: 14, color: "#9E9A90" }}>אין אימונים לסקירה</div>
-      </div>
-      <div style={{ background: "#fff", borderRadius: 12, border: "0.5px solid #EDEBE6", padding: 20, marginBottom: 16 }}>
-        <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 12 }}>משובים ממתאמנים</div>
-        <div style={{ fontSize: 14, color: "#9E9A90" }}>אין משובים חדשים</div>
-      </div>
-      <div style={{ background: "#fff", borderRadius: 12, border: "0.5px solid #EDEBE6", padding: 20 }}>
-        <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 8 }}>משימות לפעולה</div>
-        <div style={{ fontSize: 14, color: "#9E9A90" }}>אין משימות פתוחות</div>
-      </div>
+      ) : loading ? (
+        <div className="trainee-home-state">טוען אימונים שהושלמו...</div>
+      ) : (
+        <CompletedWorkoutsList
+          workouts={workouts}
+          traineeNamesById={traineeNamesById}
+          emptyText="עדיין אין אימונים שהושלמו לסקירה."
+        />
+      )}
     </div>
   );
 }

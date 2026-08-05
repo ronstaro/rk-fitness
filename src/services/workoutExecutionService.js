@@ -15,6 +15,55 @@ function nullableNumber(value) {
   return Number.isFinite(number) ? number : null;
 }
 
+async function attachWorkoutDetails(workouts) {
+  if (workouts.length === 0) return [];
+
+  const workoutIds = workouts.map((workout) => workout.id);
+  const { data: exercises, error: exercisesError } = await supabase
+    .from("workout_log_exercises")
+    .select("id, workout_log_id, exercise_order, exercise_name, prescribed_sets, prescribed_reps, target_weight_kg, target_rir, rest_seconds, trainer_notes, trainee_notes, is_completed, video_path, video_uploaded_at")
+    .in("workout_log_id", workoutIds)
+    .order("exercise_order", { ascending: true });
+
+  if (exercisesError) throw exercisesError;
+
+  const exerciseIds = (exercises ?? []).map((exercise) => exercise.id);
+  let sets = [];
+
+  if (exerciseIds.length > 0) {
+    const { data: setRows, error: setsError } = await supabase
+      .from("workout_log_sets")
+      .select("id, workout_log_exercise_id, set_order, weight_kg, completed_reps, rir, previous_weight_kg, previous_reps, previous_rir, is_completed")
+      .in("workout_log_exercise_id", exerciseIds)
+      .order("set_order", { ascending: true });
+
+    if (setsError) throw setsError;
+    sets = setRows ?? [];
+  }
+
+  const exercisesWithVideos = await Promise.all(
+    (exercises ?? []).map(async (exercise) => {
+      if (!exercise.video_path) return { ...exercise, video_url: null };
+
+      const { data } = await supabase.storage
+        .from(WORKOUT_VIDEO_BUCKET)
+        .createSignedUrl(exercise.video_path, 60 * 60);
+
+      return { ...exercise, video_url: data?.signedUrl ?? null };
+    })
+  );
+
+  return workouts.map((workout) => ({
+    ...workout,
+    exercises: exercisesWithVideos
+      .filter((exercise) => exercise.workout_log_id === workout.id)
+      .map((exercise) => ({
+        ...exercise,
+        sets: sets.filter((set) => set.workout_log_exercise_id === exercise.id),
+      })),
+  }));
+}
+
 export async function fetchOpenWorkout(traineeId) {
   const { data: workout, error: workoutError } = await supabase
     .from("workout_logs")
@@ -67,6 +116,24 @@ export async function fetchOpenWorkout(traineeId) {
       sets: sets.filter((set) => set.workout_log_exercise_id === exercise.id),
     })),
   };
+}
+
+export async function fetchCompletedWorkouts({ traineeId, limit = 50 } = {}) {
+  let query = supabase
+    .from("workout_logs")
+    .select("id, trainee_id, program_name, program_goal, day_name, day_order, status, started_at, completed_at")
+    .eq("status", "completed")
+    .order("completed_at", { ascending: false })
+    .limit(limit);
+
+  if (traineeId) {
+    query = query.eq("trainee_id", traineeId);
+  }
+
+  const { data: workouts, error } = await query;
+  if (error) throw error;
+
+  return attachWorkoutDetails(workouts ?? []);
 }
 
 export async function startWorkout(programDayId) {

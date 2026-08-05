@@ -1942,13 +1942,15 @@ body.ltr .today-card.warn-border { border-right: none; border-left: 3px solid #F
 .trainee-workout-note p { margin-top: 2px; color: var(--gray-600); font-size: 12px; white-space: pre-wrap; }
 .trainee-workout-days { display: grid; gap: 14px; }
 .trainee-workout-day { padding: 18px; }
-.trainee-workout-day-header { display: flex; align-items: center; gap: 11px; }
-.trainee-workout-day-header > span {
+.trainee-workout-day-header { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.trainee-workout-day-heading { display: flex; align-items: center; gap: 11px; }
+.trainee-workout-day-heading > span {
   display: grid; place-items: center; width: 36px; height: 36px; flex: 0 0 36px;
   border-radius: 50%; background: var(--burg); color: #fff; font-size: 13px; font-weight: 700;
 }
 .trainee-workout-day-header h3 { font-size: 16px; }
 .trainee-workout-day-header p { margin-top: 1px; color: var(--gray-400); font-size: 10px; }
+.trainee-workout-start { flex: 0 0 auto; }
 .trainee-workout-day-note {
   margin-top: 11px; padding: 9px 11px; border-radius: 8px;
   background: var(--gray-50); color: var(--gray-600); font-size: 11px; white-space: pre-wrap;
@@ -1972,6 +1974,73 @@ body.ltr .today-card.warn-border { border-right: none; border-left: 3px solid #F
 .trainee-workout-exercise-data dd { margin-top: 1px; color: var(--gray-900); font-size: 11px; font-weight: 600; }
 .trainee-workout-no-exercises { margin-top: 14px; padding: 18px; color: var(--gray-400); font-size: 12px; text-align: center; }
 .trainee-workout-empty { border: 1px solid var(--gray-100); border-radius: 12px; background: #fff; }
+.trainee-workout-feedback { margin-bottom: 14px; padding: 11px 13px; border-radius: 9px; font-size: 12px; }
+.trainee-workout-feedback.success { border: 1px solid #BFE8D0; background: var(--success-bg); color: var(--success); }
+.trainee-workout-feedback.error { border: 1px solid #F3C8C5; background: var(--danger-bg); color: var(--danger); }
+
+/* ── Live workout execution ───────────────────────────────── */
+.trainee-workout-live { padding-bottom: 92px; }
+.trainee-workout-live-hero {
+  display: flex; align-items: flex-end; justify-content: space-between; gap: 18px;
+  margin-bottom: 14px; padding: 22px; border-radius: 14px;
+  background: linear-gradient(135deg, var(--burg-d), var(--burg)); color: #fff;
+}
+.trainee-workout-live-hero span { display: block; margin-bottom: 5px; font-size: 11px; opacity: .78; }
+.trainee-workout-live-hero h2 { font-size: 24px; line-height: 1.2; }
+.trainee-workout-live-hero p { margin-top: 4px; font-size: 12px; opacity: .82; }
+.trainee-workout-live-hero small {
+  flex: 0 0 auto; padding: 5px 9px; border: 1px solid rgba(255, 255, 255, .2);
+  border-radius: 20px; background: rgba(255, 255, 255, .1); font-size: 10px;
+}
+.trainee-workout-live-metrics {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px;
+}
+.trainee-workout-live-metrics article { padding: 13px 15px; border: 1px solid var(--gray-100); border-radius: 10px; background: #fff; }
+.trainee-workout-live-metrics span { display: block; color: var(--gray-400); font-size: 10px; }
+.trainee-workout-live-metrics strong { display: block; margin-top: 3px; color: var(--burg); font-size: 20px; }
+.trainee-workout-live-exercises { display: grid; gap: 14px; }
+.trainee-live-exercise { padding: 17px; transition: border-color .2s ease, opacity .2s ease; }
+.trainee-live-exercise.completed { border-color: #BFE8D0; }
+.trainee-live-exercise-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
+.trainee-live-exercise-header .trainee-workout-exercise-name p { font-size: 10px; }
+.trainee-exercise-check {
+  flex: 0 0 auto; min-height: 34px; padding: 7px 11px; border: 1px solid var(--gray-200);
+  border-radius: 8px; background: #fff; color: var(--gray-600); font: inherit; font-size: 11px;
+  font-weight: 600; cursor: pointer;
+}
+.trainee-exercise-check.checked { border-color: #BFE8D0; background: var(--success-bg); color: var(--success); }
+.trainee-exercise-check:disabled { cursor: wait; opacity: .6; }
+.trainee-live-trainer-note {
+  margin-top: 11px; padding: 9px 11px; border-radius: 8px;
+  background: var(--mustard-pale); color: var(--gray-600); font-size: 11px; white-space: pre-wrap;
+}
+.trainee-live-sets { display: grid; gap: 7px; margin-top: 14px; }
+.trainee-live-set {
+  display: grid; grid-template-columns: 44px repeat(3, minmax(92px, 1fr)) 58px;
+  align-items: center; gap: 8px;
+}
+.trainee-live-set > strong, .trainee-live-rpe {
+  display: grid; place-items: center; height: 38px; border-radius: 8px;
+  background: var(--gray-50); color: var(--gray-600); font-size: 11px;
+}
+.trainee-live-set label span { display: none; }
+.trainee-live-set input { width: 100%; min-height: 38px; padding: 7px 8px; text-align: center; }
+.trainee-live-set input:disabled { background: var(--gray-50); opacity: .65; }
+.trainee-live-set-labels { color: var(--gray-400); font-size: 9px; text-align: center; }
+.trainee-live-set-labels span { padding-bottom: 1px; }
+.trainee-live-exercise-note { display: block; margin-top: 13px; }
+.trainee-live-exercise-note > span { display: block; margin-bottom: 5px; color: var(--gray-600); font-size: 10px; font-weight: 600; }
+.trainee-live-exercise-note textarea { min-height: 58px; resize: vertical; }
+.trainee-live-exercise-note small { display: block; margin-top: 4px; color: var(--gray-400); font-size: 9px; text-align: left; }
+.trainee-workout-finish-bar {
+  position: sticky; bottom: 12px; z-index: 4; display: flex; align-items: center;
+  justify-content: space-between; gap: 18px; margin-top: 16px; padding: 13px 15px;
+  border: 1px solid var(--gray-200); border-radius: 12px; background: rgba(255, 255, 255, .96);
+  box-shadow: 0 8px 28px rgba(34, 27, 27, .12); backdrop-filter: blur(8px);
+}
+.trainee-workout-finish-bar strong, .trainee-workout-finish-bar span { display: block; }
+.trainee-workout-finish-bar strong { font-size: 12px; }
+.trainee-workout-finish-bar span { margin-top: 2px; color: var(--gray-400); font-size: 9px; }
 
 @media (max-width: 860px) {
   .trainee-home-layout { grid-template-columns: 1fr; }
@@ -1991,6 +2060,29 @@ body.ltr .today-card.warn-border { border-right: none; border-left: 3px solid #F
   .trainee-workout-hero h2 { font-size: 21px; }
   .trainee-workout-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .trainee-workout-day { padding: 15px; }
+  .trainee-workout-day-header { align-items: stretch; flex-direction: column; }
+  .trainee-workout-start { width: 100%; }
   .trainee-workout-exercise { padding: 11px; }
   .trainee-workout-exercise-data { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .trainee-workout-live { padding-bottom: 70px; }
+  .trainee-workout-live-hero { align-items: flex-start; flex-direction: column; padding: 18px; }
+  .trainee-workout-live-hero h2 { font-size: 21px; }
+  .trainee-workout-live-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
+  .trainee-workout-live-metrics article { padding: 11px 9px; }
+  .trainee-workout-live-metrics strong { font-size: 17px; }
+  .trainee-live-exercise { padding: 13px; }
+  .trainee-live-exercise-header { align-items: stretch; flex-direction: column; }
+  .trainee-exercise-check { width: 100%; }
+  .trainee-live-set-labels { display: none; }
+  .trainee-live-set {
+    grid-template-columns: 34px repeat(3, minmax(0, 1fr)); gap: 6px;
+    padding: 9px; border: 1px solid var(--gray-100); border-radius: 9px; background: var(--gray-50);
+  }
+  .trainee-live-set > strong { grid-row: 1 / 3; height: 100%; background: var(--burg-pale); color: var(--burg); }
+  .trainee-live-set label span { display: block; margin-bottom: 3px; color: var(--gray-400); font-size: 8px; text-align: center; }
+  .trainee-live-set input { min-height: 36px; padding: 6px 4px; background: #fff; }
+  .trainee-live-rpe { grid-column: 2 / -1; height: 28px; }
+  .trainee-live-rpe::before { content: "RPE "; margin-left: 3px; color: var(--gray-400); }
+  .trainee-workout-finish-bar { bottom: 8px; align-items: stretch; flex-direction: column; gap: 9px; }
+  .trainee-workout-finish-bar .btn { width: 100%; }
 }

@@ -1,0 +1,111 @@
+import { supabase } from "../lib/supabase.js";
+
+function nullableNumber(value) {
+  if (value === "" || value == null) return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+export async function fetchOpenWorkout(traineeId) {
+  const { data: workout, error: workoutError } = await supabase
+    .from("workout_logs")
+    .select("id, trainee_id, program_name, program_goal, day_name, day_order, status, started_at")
+    .eq("trainee_id", traineeId)
+    .eq("status", "in_progress")
+    .maybeSingle();
+
+  if (workoutError) throw workoutError;
+  if (!workout) return null;
+
+  const { data: exercises, error: exercisesError } = await supabase
+    .from("workout_log_exercises")
+    .select("id, workout_log_id, exercise_order, exercise_name, prescribed_sets, prescribed_reps, target_rir, rest_seconds, trainer_notes, trainee_notes, is_completed")
+    .eq("workout_log_id", workout.id)
+    .order("exercise_order", { ascending: true });
+
+  if (exercisesError) throw exercisesError;
+
+  const exerciseIds = (exercises ?? []).map((exercise) => exercise.id);
+  let sets = [];
+
+  if (exerciseIds.length > 0) {
+    const { data: setRows, error: setsError } = await supabase
+      .from("workout_log_sets")
+      .select("id, workout_log_exercise_id, set_order, weight_kg, completed_reps, rir")
+      .in("workout_log_exercise_id", exerciseIds)
+      .order("set_order", { ascending: true });
+
+    if (setsError) throw setsError;
+    sets = setRows ?? [];
+  }
+
+  return {
+    ...workout,
+    exercises: (exercises ?? []).map((exercise) => ({
+      ...exercise,
+      sets: sets.filter((set) => set.workout_log_exercise_id === exercise.id),
+    })),
+  };
+}
+
+export async function startWorkout(programDayId) {
+  const { data, error } = await supabase.rpc("start_my_workout", {
+    p_program_day_id: programDayId,
+  });
+
+  if (error) throw error;
+  return data;
+}
+
+export async function updateWorkoutSet(setId, changes) {
+  const payload = {};
+
+  if (Object.hasOwn(changes, "weight_kg")) {
+    payload.weight_kg = nullableNumber(changes.weight_kg);
+  }
+  if (Object.hasOwn(changes, "completed_reps")) {
+    payload.completed_reps = nullableNumber(changes.completed_reps);
+  }
+  if (Object.hasOwn(changes, "rir")) {
+    payload.rir = nullableNumber(changes.rir);
+  }
+
+  const { data, error } = await supabase
+    .from("workout_log_sets")
+    .update(payload)
+    .eq("id", setId)
+    .select("id, weight_kg, completed_reps, rir")
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+export async function updateWorkoutExercise(exerciseId, changes) {
+  const payload = {};
+
+  if (Object.hasOwn(changes, "trainee_notes")) {
+    payload.trainee_notes = changes.trainee_notes?.trim() || null;
+  }
+  if (Object.hasOwn(changes, "is_completed")) {
+    payload.is_completed = Boolean(changes.is_completed);
+  }
+
+  const { data, error } = await supabase
+    .from("workout_log_exercises")
+    .update(payload)
+    .eq("id", exerciseId)
+    .select("id, trainee_notes, is_completed")
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+export async function finishWorkout(workoutId) {
+  const { error } = await supabase.rpc("finish_my_workout", {
+    p_workout_id: workoutId,
+  });
+
+  if (error) throw error;
+}

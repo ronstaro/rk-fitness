@@ -3,6 +3,7 @@ import { fetchTrainees, createTrainee, updateTrainee, updateTraineeStatus, delet
 import { fetchSessions } from "./services/sessionsService.js";
 import { fetchActivePrograms } from "./services/programsService.js";
 import { fetchTraineeHomeData, fetchTraineeProfile, fetchTraineeProgramData } from "./services/traineeHomeService.js";
+import { fetchOpenWorkout, finishWorkout, startWorkout, updateWorkoutExercise, updateWorkoutSet } from "./services/workoutExecutionService.js";
 import Dashboard from "./components/Dashboard.jsx";
 import Finance from "./components/Finance.jsx";
 import Leads from "./components/Leads.jsx";
@@ -1244,6 +1245,12 @@ function Workout() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
+  const [startingDayId, setStartingDayId] = useState("");
+  const [savingSetIds, setSavingSetIds] = useState({});
+  const [savingExerciseIds, setSavingExerciseIds] = useState({});
+  const [finishing, setFinishing] = useState(false);
+  const [actionError, setActionError] = useState("");
+  const [notice, setNotice] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -1254,7 +1261,10 @@ function Workout() {
 
       try {
         const data = await fetchTraineeProgramData();
-        if (active) setProgramData(data);
+        const activeWorkout = data.trainee
+          ? await fetchOpenWorkout(data.trainee.id)
+          : null;
+        if (active) setProgramData({ ...data, activeWorkout });
       } catch (error) {
         console.warn("Trainee program fetch failed:", error?.name);
         if (active) setLoadError("לא ניתן לטעון את תוכנית האימון כרגע.");
@@ -1286,6 +1296,124 @@ function Workout() {
     return remainingSeconds ? `${minutes}:${String(remainingSeconds).padStart(2, "0")} דק׳` : `${minutes} דק׳`;
   }
 
+  function formatWorkoutStart(value) {
+    return new Date(value).toLocaleString("he-IL", {
+      day: "numeric",
+      month: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }
+
+  function updateSetState(exerciseId, setId, changes) {
+    setProgramData((current) => ({
+      ...current,
+      activeWorkout: {
+        ...current.activeWorkout,
+        exercises: current.activeWorkout.exercises.map((exercise) =>
+          exercise.id === exerciseId
+            ? {
+                ...exercise,
+                sets: exercise.sets.map((set) =>
+                  set.id === setId ? { ...set, ...changes } : set
+                ),
+              }
+            : exercise
+        ),
+      },
+    }));
+  }
+
+  function updateExerciseState(exerciseId, changes) {
+    setProgramData((current) => ({
+      ...current,
+      activeWorkout: {
+        ...current.activeWorkout,
+        exercises: current.activeWorkout.exercises.map((exercise) =>
+          exercise.id === exerciseId ? { ...exercise, ...changes } : exercise
+        ),
+      },
+    }));
+  }
+
+  async function handleStartWorkout(day) {
+    setStartingDayId(day.id);
+    setActionError("");
+    setNotice("");
+
+    try {
+      await startWorkout(day.id);
+      setNotice(`האימון “${day.name}” התחיל. הנתונים נשמרים אוטומטית.`);
+      setReloadKey((key) => key + 1);
+    } catch (error) {
+      console.warn("Workout start failed:", error?.name);
+      setActionError("לא ניתן להתחיל את האימון כרגע. נסה שוב.");
+    } finally {
+      setStartingDayId("");
+    }
+  }
+
+  async function handleSetSave(exerciseId, workoutSet, field) {
+    setSavingSetIds((current) => ({ ...current, [workoutSet.id]: true }));
+    setActionError("");
+
+    try {
+      const savedSet = await updateWorkoutSet(workoutSet.id, {
+        [field]: workoutSet[field],
+      });
+      updateSetState(exerciseId, workoutSet.id, savedSet);
+    } catch (error) {
+      console.warn("Workout set save failed:", error?.name);
+      setActionError("אחד הסטים לא נשמר. בדוק את הערך ונסה שוב.");
+    } finally {
+      setSavingSetIds((current) => ({ ...current, [workoutSet.id]: false }));
+    }
+  }
+
+  async function handleExerciseSave(exercise, changes) {
+    setSavingExerciseIds((current) => ({ ...current, [exercise.id]: true }));
+    setActionError("");
+
+    try {
+      const savedExercise = await updateWorkoutExercise(exercise.id, changes);
+      updateExerciseState(exercise.id, savedExercise);
+    } catch (error) {
+      console.warn("Workout exercise save failed:", error?.name);
+      setActionError("השינוי בתרגיל לא נשמר. נסה שוב.");
+    } finally {
+      setSavingExerciseIds((current) => ({ ...current, [exercise.id]: false }));
+    }
+  }
+
+  async function handleFinishWorkout() {
+    const workout = programData.activeWorkout;
+    const emptySets = workout.exercises
+      .flatMap((exercise) => exercise.sets)
+      .filter((set) => set.completed_reps === "" || set.completed_reps == null)
+      .length;
+
+    if (emptySets > 0) {
+      const shouldFinish = window.confirm(
+        `נשארו ${emptySets} סטים ללא מספר חזרות. לסיים את האימון בכל זאת?`
+      );
+      if (!shouldFinish) return;
+    }
+
+    setFinishing(true);
+    setActionError("");
+
+    try {
+      await finishWorkout(workout.id);
+      setNotice("האימון הסתיים ונשמר בהצלחה.");
+      setReloadKey((key) => key + 1);
+    } catch (error) {
+      console.warn("Workout finish failed:", error?.name);
+      setActionError("לא ניתן לסיים את האימון כרגע. הנתונים שכבר הזנת נשמרו.");
+    } finally {
+      setFinishing(false);
+    }
+  }
+
   if (loading) {
     return <div className="trainee-home-state">טוען את תוכנית האימון...</div>;
   }
@@ -1310,7 +1438,107 @@ function Workout() {
     );
   }
 
-  const { program, days } = programData;
+  const { program, days, activeWorkout } = programData;
+
+  if (activeWorkout) {
+    const allSets = activeWorkout.exercises.flatMap((exercise) => exercise.sets);
+    const recordedSets = allSets.filter(
+      (set) => set.completed_reps !== "" && set.completed_reps != null
+    ).length;
+    const completedExercises = activeWorkout.exercises.filter(
+      (exercise) => exercise.is_completed
+    ).length;
+
+    return (
+      <div className="trainee-workout trainee-workout-live slide-in">
+        <section className="trainee-workout-live-hero">
+          <div>
+            <span>אימון בביצוע · נשמר אוטומטית</span>
+            <h2>{activeWorkout.day_name}</h2>
+            <p>{activeWorkout.program_name}</p>
+          </div>
+          <small>התחלה: {formatWorkoutStart(activeWorkout.started_at)}</small>
+        </section>
+
+        {notice && <div className="trainee-workout-feedback success">{notice}</div>}
+        {actionError && <div className="trainee-workout-feedback error">{actionError}</div>}
+
+        <div className="trainee-workout-live-metrics">
+          <article><span>תרגילים</span><strong>{completedExercises}/{activeWorkout.exercises.length}</strong></article>
+          <article><span>סטים שתועדו</span><strong>{recordedSets}/{allSets.length}</strong></article>
+          <article><span>התקדמות</span><strong>{allSets.length ? Math.round((recordedSets / allSets.length) * 100) : 0}%</strong></article>
+        </div>
+
+        <div className="trainee-workout-live-exercises">
+          {activeWorkout.exercises.map((exercise) => (
+            <section className={`card trainee-live-exercise ${exercise.is_completed ? "completed" : ""}`} key={exercise.id}>
+              <header className="trainee-live-exercise-header">
+                <div className="trainee-workout-exercise-name">
+                  <span>{exercise.exercise_order}</span>
+                  <div>
+                    <strong>{exercise.exercise_name}</strong>
+                    <p>{exercise.prescribed_sets} סטים × {exercise.prescribed_reps} · RIR יעד {exercise.target_rir ?? "—"} · מנוחה {formatRest(exercise.rest_seconds)}</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className={`trainee-exercise-check ${exercise.is_completed ? "checked" : ""}`}
+                  disabled={savingExerciseIds[exercise.id]}
+                  onClick={() => handleExerciseSave(exercise, { is_completed: !exercise.is_completed })}
+                >
+                  {exercise.is_completed ? "✓ הושלם" : "סימון כהושלם"}
+                </button>
+              </header>
+
+              {exercise.trainer_notes && (
+                <p className="trainee-live-trainer-note">💬 {exercise.trainer_notes}</p>
+              )}
+
+              <div className="trainee-live-sets">
+                <div className="trainee-live-set trainee-live-set-labels" aria-hidden="true">
+                  <span>סט</span><span>משקל (ק״ג)</span><span>חזרות</span><span>RIR</span><span>RPE</span>
+                </div>
+                {exercise.sets.map((workoutSet) => {
+                  const rirValue = workoutSet.rir === "" || workoutSet.rir == null
+                    ? null
+                    : Number(workoutSet.rir);
+                  return (
+                    <div className="trainee-live-set" key={workoutSet.id}>
+                      <strong>{workoutSet.set_order}</strong>
+                      <label><span>משקל (ק״ג)</span><input type="number" min="0" max="2000" step="0.25" inputMode="decimal" value={workoutSet.weight_kg ?? ""} disabled={savingSetIds[workoutSet.id]} onChange={(event) => updateSetState(exercise.id, workoutSet.id, { weight_kg: event.target.value })} onBlur={() => handleSetSave(exercise.id, workoutSet, "weight_kg")} /></label>
+                      <label><span>חזרות</span><input type="number" min="0" max="1000" step="1" inputMode="numeric" value={workoutSet.completed_reps ?? ""} disabled={savingSetIds[workoutSet.id]} onChange={(event) => updateSetState(exercise.id, workoutSet.id, { completed_reps: event.target.value })} onBlur={() => handleSetSave(exercise.id, workoutSet, "completed_reps")} /></label>
+                      <label><span>RIR</span><input type="number" min="0" max="10" step="0.5" inputMode="decimal" value={workoutSet.rir ?? ""} disabled={savingSetIds[workoutSet.id]} onChange={(event) => updateSetState(exercise.id, workoutSet.id, { rir: event.target.value })} onBlur={() => handleSetSave(exercise.id, workoutSet, "rir")} /></label>
+                      <span className="trainee-live-rpe">{rirValue == null ? "—" : Math.max(0, 10 - rirValue)}</span>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <label className="trainee-live-exercise-note">
+                <span>הערה לתרגיל</span>
+                <textarea
+                  rows="2"
+                  placeholder="לדוגמה: הרגיש קל יותר מהשבוע שעבר"
+                  value={exercise.trainee_notes ?? ""}
+                  disabled={savingExerciseIds[exercise.id]}
+                  onChange={(event) => updateExerciseState(exercise.id, { trainee_notes: event.target.value })}
+                  onBlur={() => handleExerciseSave(exercise, { trainee_notes: exercise.trainee_notes ?? "" })}
+                />
+                <small>{savingExerciseIds[exercise.id] ? "שומר..." : "נשמר ביציאה מהשדה"}</small>
+              </label>
+            </section>
+          ))}
+        </div>
+
+        <div className="trainee-workout-finish-bar">
+          <div><strong>סיימת את האימון?</strong><span>לאחר הסיום האימון יינעל לעריכה.</span></div>
+          <button type="button" className="btn btn-primary" disabled={finishing} onClick={handleFinishWorkout}>
+            {finishing ? "מסיים..." : "סיום אימון"}
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (!program) {
     return (
@@ -1357,6 +1585,9 @@ function Workout() {
         </section>
       )}
 
+      {notice && <div className="trainee-workout-feedback success">{notice}</div>}
+      {actionError && <div className="trainee-workout-feedback error">{actionError}</div>}
+
       {days.length === 0 ? (
         <div className="trainee-home-state trainee-workout-empty">
           <strong>התוכנית עדיין ללא ימי אימון</strong>
@@ -1367,11 +1598,21 @@ function Workout() {
           {days.map((day) => (
             <section className="card trainee-workout-day" key={day.id}>
               <header className="trainee-workout-day-header">
-                <span>{day.day_order}</span>
-                <div>
-                  <h3>{day.name}</h3>
-                  <p>{day.exercises.length} תרגילים</p>
+                <div className="trainee-workout-day-heading">
+                  <span>{day.day_order}</span>
+                  <div>
+                    <h3>{day.name}</h3>
+                    <p>{day.exercises.length} תרגילים</p>
+                  </div>
                 </div>
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm trainee-workout-start"
+                  disabled={startingDayId === day.id || day.exercises.length === 0}
+                  onClick={() => handleStartWorkout(day)}
+                >
+                  {startingDayId === day.id ? "מתחיל..." : "התחלת אימון"}
+                </button>
               </header>
 
               {day.notes && <p className="trainee-workout-day-note">{day.notes}</p>}

@@ -1575,6 +1575,16 @@ function Workout() {
   }
 
   async function handleFinishWorkout() {
+    const hasPendingSaves =
+      Object.values(savingSetIds).some(Boolean)
+      || Object.values(savingExerciseIds).some(Boolean)
+      || Object.values(uploadingVideoIds).some(Boolean);
+
+    if (hasPendingSaves) {
+      setActionError("יש להמתין לסיום שמירת הנתונים והסרטונים לפני סיום האימון.");
+      return;
+    }
+
     const workout = programData.activeWorkout;
     const emptySets = workout.exercises
       .flatMap((exercise) => exercise.sets)
@@ -1635,6 +1645,10 @@ function Workout() {
     const completedExercises = activeWorkout.exercises.filter(
       (exercise) => exercise.is_completed
     ).length;
+    const hasPendingSaves =
+      Object.values(savingSetIds).some(Boolean)
+      || Object.values(savingExerciseIds).some(Boolean)
+      || Object.values(uploadingVideoIds).some(Boolean);
 
     return (
       <div className="trainee-workout trainee-workout-live slide-in">
@@ -1790,9 +1804,12 @@ function Workout() {
         <WorkoutHistory workouts={completedWorkouts} />
 
         <div className="trainee-workout-finish-bar">
-          <div><strong>סיימת את האימון?</strong><span>לאחר הסיום האימון יינעל לעריכה.</span></div>
-          <button type="button" className="btn btn-primary" disabled={finishing} onClick={handleFinishWorkout}>
-            {finishing ? "מסיים..." : "סיום אימון"}
+          <div>
+            <strong>{hasPendingSaves ? "שומר את הנתונים..." : "סיימת את האימון?"}</strong>
+            <span>{hasPendingSaves ? "יש להמתין לפני נעילת האימון." : "לאחר הסיום האימון יינעל לעריכה."}</span>
+          </div>
+          <button type="button" className="btn btn-primary" disabled={finishing || hasPendingSaves} onClick={handleFinishWorkout}>
+            {finishing ? "מסיים..." : hasPendingSaves ? "שומר..." : "סיום אימון"}
           </button>
         </div>
       </div>

@@ -34,6 +34,7 @@ const EMPTY_EXERCISE = {
   exerciseOrder: "",
   sets: "3",
   reps: "",
+  targetWeightKg: "",
   targetRir: "",
   restSeconds: "",
   notes: "",
@@ -452,6 +453,8 @@ export default function Programs({ initialTraineeId = "" }) {
       exerciseOrder: String(exercise.exercise_order),
       sets: String(exercise.sets),
       reps: exercise.reps,
+      targetWeightKg:
+        exercise.target_weight_kg == null ? "" : String(exercise.target_weight_kg),
       targetRir: exercise.target_rir == null ? "" : String(exercise.target_rir),
       restSeconds:
         exercise.rest_seconds == null ? "" : String(exercise.rest_seconds),
@@ -464,6 +467,10 @@ export default function Programs({ initialTraineeId = "" }) {
     const name = exerciseForm.name.trim();
     const order = Number(exerciseForm.exerciseOrder);
     const sets = Number(exerciseForm.sets);
+    const targetWeightKg =
+      exerciseForm.targetWeightKg === ""
+        ? null
+        : Number(exerciseForm.targetWeightKg);
     const targetRir =
       exerciseForm.targetRir === "" ? null : Number(exerciseForm.targetRir);
     const restSeconds =
@@ -485,6 +492,13 @@ export default function Programs({ initialTraineeId = "" }) {
       return;
     }
     if (
+      targetWeightKg != null &&
+      (Number.isNaN(targetWeightKg) || targetWeightKg < 0 || targetWeightKg > 2000)
+    ) {
+      setActionError("משקל היעד צריך להיות בין 0 ל־2,000 ק״ג.");
+      return;
+    }
+    if (
       restSeconds != null &&
       (!Number.isInteger(restSeconds) || restSeconds < 0)
     ) {
@@ -500,6 +514,7 @@ export default function Programs({ initialTraineeId = "" }) {
       exercise_order: order,
       sets,
       reps: exerciseForm.reps.trim(),
+      target_weight_kg: targetWeightKg,
       target_rir: targetRir,
       rest_seconds: restSeconds,
       notes: exerciseForm.notes.trim() || null,
@@ -1636,6 +1651,23 @@ export default function Programs({ initialTraineeId = "" }) {
                                   placeholder="8-12"
                                 />
                               </Field>
+                              <Field label="משקל יעד (ק״ג)">
+                                <input
+                                  type="number"
+                                  min="0"
+                                  max="2000"
+                                  step="0.25"
+                                  inputMode="decimal"
+                                  value={exerciseForm.targetWeightKg}
+                                  onChange={(event) =>
+                                    setExerciseForm((form) => ({
+                                      ...form,
+                                      targetWeightKg: event.target.value,
+                                    }))
+                                  }
+                                  style={inputStyle}
+                                />
+                              </Field>
                               <Field label="RIR יעד">
                                 <input
                                   type="number"
@@ -1738,6 +1770,9 @@ export default function Programs({ initialTraineeId = "" }) {
                                   style={{ fontSize: 12, color: "#9E9A90" }}
                                 >
                                   {exercise.sets} סטים · {exercise.reps} חזרות
+                                  {exercise.target_weight_kg != null
+                                    ? ` · יעד ${exercise.target_weight_kg} ק״ג`
+                                    : ""}
                                   {exercise.target_rir != null
                                     ? ` · RIR ${exercise.target_rir}`
                                     : ""}

@@ -3,7 +3,7 @@ import { fetchTrainees, createTrainee, updateTrainee, updateTraineeStatus, delet
 import { fetchSessions } from "./services/sessionsService.js";
 import { fetchActivePrograms } from "./services/programsService.js";
 import { fetchTraineeHomeData, fetchTraineeProfile, fetchTraineeProgramData } from "./services/traineeHomeService.js";
-import { fetchOpenWorkout, finishWorkout, startWorkout, updateWorkoutExercise, updateWorkoutSet } from "./services/workoutExecutionService.js";
+import { fetchOpenWorkout, finishWorkout, startWorkout, updateWorkoutExercise, updateWorkoutSet, uploadExerciseVideo } from "./services/workoutExecutionService.js";
 import Dashboard from "./components/Dashboard.jsx";
 import Finance from "./components/Finance.jsx";
 import Leads from "./components/Leads.jsx";
@@ -1248,6 +1248,8 @@ function Workout() {
   const [startingDayId, setStartingDayId] = useState("");
   const [savingSetIds, setSavingSetIds] = useState({});
   const [savingExerciseIds, setSavingExerciseIds] = useState({});
+  const [uploadingVideoIds, setUploadingVideoIds] = useState({});
+  const [videoErrors, setVideoErrors] = useState({});
   const [finishing, setFinishing] = useState(false);
   const [actionError, setActionError] = useState("");
   const [notice, setNotice] = useState("");
@@ -1360,6 +1362,7 @@ function Workout() {
     try {
       const savedSet = await updateWorkoutSet(workoutSet.id, {
         [field]: workoutSet[field],
+        is_completed: true,
       });
       updateSetState(exerciseId, workoutSet.id, savedSet);
     } catch (error) {
@@ -1367,6 +1370,51 @@ function Workout() {
       setActionError("אחד הסטים לא נשמר. בדוק את הערך ונסה שוב.");
     } finally {
       setSavingSetIds((current) => ({ ...current, [workoutSet.id]: false }));
+    }
+  }
+
+  async function handleSetCompletion(exerciseId, workoutSet) {
+    setSavingSetIds((current) => ({ ...current, [workoutSet.id]: true }));
+    setActionError("");
+
+    try {
+      const savedSet = await updateWorkoutSet(workoutSet.id, {
+        is_completed: !workoutSet.is_completed,
+      });
+      updateSetState(exerciseId, workoutSet.id, savedSet);
+    } catch (error) {
+      console.warn("Workout set completion failed:", error?.name);
+      setActionError("סימון הסט לא נשמר. נסה שוב.");
+    } finally {
+      setSavingSetIds((current) => ({ ...current, [workoutSet.id]: false }));
+    }
+  }
+
+  async function handleVideoUpload(exercise, file) {
+    if (!file) return;
+
+    setUploadingVideoIds((current) => ({ ...current, [exercise.id]: true }));
+    setVideoErrors((current) => ({ ...current, [exercise.id]: "" }));
+
+    try {
+      const savedVideo = await uploadExerciseVideo({
+        traineeId: programData.trainee.id,
+        workoutId: programData.activeWorkout.id,
+        exerciseId: exercise.id,
+        file,
+        previousPath: exercise.video_path,
+      });
+      updateExerciseState(exercise.id, savedVideo);
+    } catch (error) {
+      console.warn("Workout video upload failed:", error?.name);
+      const message = error?.message === "video-too-large"
+        ? "הסרטון גדול מ־50MB. נסה לצלם קטע קצר יותר."
+        : error?.message === "unsupported-video"
+          ? "סוג הסרטון אינו נתמך. אפשר להעלות MP4, MOV, M4V או WebM."
+          : "הסרטון לא עלה. החיבור יכול להישמר לאימון ולנסות שוב.";
+      setVideoErrors((current) => ({ ...current, [exercise.id]: message }));
+    } finally {
+      setUploadingVideoIds((current) => ({ ...current, [exercise.id]: false }));
     }
   }
 
@@ -1389,12 +1437,12 @@ function Workout() {
     const workout = programData.activeWorkout;
     const emptySets = workout.exercises
       .flatMap((exercise) => exercise.sets)
-      .filter((set) => set.completed_reps === "" || set.completed_reps == null)
+      .filter((set) => !set.is_completed)
       .length;
 
     if (emptySets > 0) {
       const shouldFinish = window.confirm(
-        `נשארו ${emptySets} סטים ללא מספר חזרות. לסיים את האימון בכל זאת?`
+        `נשארו ${emptySets} סטים שלא סומנו כהושלמו. לסיים את האימון בכל זאת?`
       );
       if (!shouldFinish) return;
     }
@@ -1442,9 +1490,7 @@ function Workout() {
 
   if (activeWorkout) {
     const allSets = activeWorkout.exercises.flatMap((exercise) => exercise.sets);
-    const recordedSets = allSets.filter(
-      (set) => set.completed_reps !== "" && set.completed_reps != null
-    ).length;
+    const recordedSets = allSets.filter((set) => set.is_completed).length;
     const completedExercises = activeWorkout.exercises.filter(
       (exercise) => exercise.is_completed
     ).length;
@@ -1477,7 +1523,7 @@ function Workout() {
                   <span>{exercise.exercise_order}</span>
                   <div>
                     <strong>{exercise.exercise_name}</strong>
-                    <p>{exercise.prescribed_sets} סטים × {exercise.prescribed_reps} · RIR יעד {exercise.target_rir ?? "—"} · מנוחה {formatRest(exercise.rest_seconds)}</p>
+                    <p>{exercise.prescribed_sets} סטים · מנוחה {formatRest(exercise.rest_seconds)}</p>
                   </div>
                 </div>
                 <button
@@ -1494,24 +1540,94 @@ function Workout() {
                 <p className="trainee-live-trainer-note">💬 {exercise.trainer_notes}</p>
               )}
 
+              <div className="trainee-live-targets">
+                <article>
+                  <span>יעד משקל</span>
+                  <strong>{exercise.target_weight_kg == null ? "—" : `${exercise.target_weight_kg} ק״ג`}</strong>
+                </article>
+                <article>
+                  <span>יעד חזרות</span>
+                  <strong>{exercise.prescribed_reps}</strong>
+                </article>
+                <article>
+                  <span>יעד RIR</span>
+                  <strong>{exercise.target_rir ?? "—"}</strong>
+                </article>
+              </div>
+
               <div className="trainee-live-sets">
                 <div className="trainee-live-set trainee-live-set-labels" aria-hidden="true">
-                  <span>סט</span><span>משקל (ק״ג)</span><span>חזרות</span><span>RIR</span><span>RPE</span>
+                  <span>סט</span><span>משקל (ק״ג)</span><span>חזרות</span><span>RIR</span><span>בוצע</span>
                 </div>
                 {exercise.sets.map((workoutSet) => {
                   const rirValue = workoutSet.rir === "" || workoutSet.rir == null
                     ? null
                     : Number(workoutSet.rir);
                   return (
-                    <div className="trainee-live-set" key={workoutSet.id}>
+                    <div className={`trainee-live-set ${workoutSet.is_completed ? "completed" : ""}`} key={workoutSet.id}>
                       <strong>{workoutSet.set_order}</strong>
-                      <label><span>משקל (ק״ג)</span><input type="number" min="0" max="2000" step="0.25" inputMode="decimal" value={workoutSet.weight_kg ?? ""} disabled={savingSetIds[workoutSet.id]} onChange={(event) => updateSetState(exercise.id, workoutSet.id, { weight_kg: event.target.value })} onBlur={() => handleSetSave(exercise.id, workoutSet, "weight_kg")} /></label>
-                      <label><span>חזרות</span><input type="number" min="0" max="1000" step="1" inputMode="numeric" value={workoutSet.completed_reps ?? ""} disabled={savingSetIds[workoutSet.id]} onChange={(event) => updateSetState(exercise.id, workoutSet.id, { completed_reps: event.target.value })} onBlur={() => handleSetSave(exercise.id, workoutSet, "completed_reps")} /></label>
-                      <label><span>RIR</span><input type="number" min="0" max="10" step="0.5" inputMode="decimal" value={workoutSet.rir ?? ""} disabled={savingSetIds[workoutSet.id]} onChange={(event) => updateSetState(exercise.id, workoutSet.id, { rir: event.target.value })} onBlur={() => handleSetSave(exercise.id, workoutSet, "rir")} /></label>
-                      <span className="trainee-live-rpe">{rirValue == null ? "—" : Math.max(0, 10 - rirValue)}</span>
+                      <label>
+                        <span>משקל</span>
+                        <input aria-label={`משקל בסט ${workoutSet.set_order}`} type="number" min="0" max="2000" step="0.25" inputMode="decimal" value={workoutSet.weight_kg ?? ""} disabled={savingSetIds[workoutSet.id]} onFocus={(event) => event.currentTarget.select()} onChange={(event) => updateSetState(exercise.id, workoutSet.id, { weight_kg: event.target.value, is_completed: false })} onBlur={() => handleSetSave(exercise.id, workoutSet, "weight_kg")} />
+                        <small>קודם: {workoutSet.previous_weight_kg == null ? "—" : `${workoutSet.previous_weight_kg}`}</small>
+                      </label>
+                      <label>
+                        <span>חזרות</span>
+                        <input aria-label={`חזרות בסט ${workoutSet.set_order}`} type="number" min="0" max="1000" step="1" inputMode="numeric" value={workoutSet.completed_reps ?? ""} disabled={savingSetIds[workoutSet.id]} onFocus={(event) => event.currentTarget.select()} onChange={(event) => updateSetState(exercise.id, workoutSet.id, { completed_reps: event.target.value, is_completed: false })} onBlur={() => handleSetSave(exercise.id, workoutSet, "completed_reps")} />
+                        <small>קודם: {workoutSet.previous_reps ?? "—"}</small>
+                      </label>
+                      <label>
+                        <span>RIR</span>
+                        <input aria-label={`RIR בסט ${workoutSet.set_order}`} type="number" min="0" max="10" step="0.5" inputMode="decimal" value={workoutSet.rir ?? ""} disabled={savingSetIds[workoutSet.id]} onFocus={(event) => event.currentTarget.select()} onChange={(event) => updateSetState(exercise.id, workoutSet.id, { rir: event.target.value, is_completed: false })} onBlur={() => handleSetSave(exercise.id, workoutSet, "rir")} />
+                        <small>קודם: {workoutSet.previous_rir ?? "—"} · RPE {rirValue == null ? "—" : Math.max(0, 10 - rirValue)}</small>
+                      </label>
+                      <button
+                        type="button"
+                        className={`trainee-live-set-check ${workoutSet.is_completed ? "checked" : ""}`}
+                        aria-label={workoutSet.is_completed ? `בטל השלמת סט ${workoutSet.set_order}` : `סמן סט ${workoutSet.set_order} כהושלם`}
+                        disabled={savingSetIds[workoutSet.id]}
+                        onClick={() => handleSetCompletion(exercise.id, workoutSet)}
+                      >
+                        {savingSetIds[workoutSet.id] ? "…" : workoutSet.is_completed ? "✓" : "○"}
+                      </button>
                     </div>
                   );
                 })}
+              </div>
+
+              <div className="trainee-live-video">
+                {exercise.video_url ? (
+                  <video controls playsInline preload="metadata" src={exercise.video_url}>
+                    הדפדפן לא תומך בצפייה בסרטון.
+                  </video>
+                ) : (
+                  <div className="trainee-live-video-empty">
+                    <span>📹</span>
+                    <div><strong>צלם את התרגיל</strong><small>סרטון קצר יעזור לרוני לתת משוב מדויק</small></div>
+                  </div>
+                )}
+                <label className={`trainee-live-video-button ${uploadingVideoIds[exercise.id] ? "disabled" : ""}`}>
+                  <input
+                    type="file"
+                    accept="video/mp4,video/quicktime,video/webm,video/x-m4v"
+                    capture="environment"
+                    disabled={uploadingVideoIds[exercise.id]}
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      handleVideoUpload(exercise, file);
+                      event.target.value = "";
+                    }}
+                  />
+                  {uploadingVideoIds[exercise.id]
+                    ? "מעלה סרטון..."
+                    : exercise.video_path
+                      ? "📹 החלף סרטון"
+                      : "📹 צלם או העלה סרטון"}
+                </label>
+                <small className="trainee-live-video-hint">MP4, MOV, M4V או WebM · עד 50MB · הסרטון פרטי</small>
+                {videoErrors[exercise.id] && (
+                  <p className="trainee-live-video-error">{videoErrors[exercise.id]}</p>
+                )}
               </div>
 
               <label className="trainee-live-exercise-note">
@@ -1630,6 +1746,7 @@ function Workout() {
                       <dl className="trainee-workout-exercise-data">
                         <div><dt>סטים</dt><dd>{exercise.sets}</dd></div>
                         <div><dt>חזרות</dt><dd>{exercise.reps}</dd></div>
+                        <div><dt>משקל יעד</dt><dd>{exercise.target_weight_kg == null ? "—" : `${exercise.target_weight_kg} ק״ג`}</dd></div>
                         <div><dt>RIR</dt><dd>{exercise.target_rir ?? "—"}</dd></div>
                         <div><dt>מנוחה</dt><dd>{formatRest(exercise.rest_seconds)}</dd></div>
                       </dl>

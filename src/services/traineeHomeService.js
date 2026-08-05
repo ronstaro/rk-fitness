@@ -41,7 +41,7 @@ async function fetchActiveProgramWithDays(traineeId) {
 
   const { data: exercises, error: exercisesError } = await supabase
     .from("program_exercises")
-    .select("id, program_day_id, name, exercise_order, sets, reps, target_rir, rest_seconds, notes")
+    .select("id, program_day_id, name, exercise_order, sets, reps, target_weight_kg, target_rir, rest_seconds, notes")
     .in("program_day_id", programDays.map((day) => day.id))
     .order("exercise_order", { ascending: true });
 

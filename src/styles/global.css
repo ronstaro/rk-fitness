@@ -2129,9 +2129,52 @@ body.ltr .today-card.warn-border { border-right: none; border-left: 3px solid #F
 .completed-workout-video > span { color: var(--gray-600); font-size: 10px; font-weight: 600; }
 .completed-workout-video video { width: 100%; max-height: 380px; border-radius: 9px; background: #171515; }
 
+/* ── Trainee progress ─────────────────────────────────────── */
+.trainee-progress-page { max-width: 1050px; margin: 0 auto; }
+.trainee-progress-hero {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 18px;
+  margin-bottom: 16px; padding: 22px; border-radius: 14px;
+  background: linear-gradient(135deg, var(--burg-d), var(--burg)); color: #fff;
+}
+.trainee-progress-hero > div > span { display: block; margin-bottom: 5px; font-size: 12px; opacity: .78; }
+.trainee-progress-hero h2 { font-size: 24px; line-height: 1.25; }
+.trainee-progress-hero p { max-width: 650px; margin-top: 6px; font-size: 12px; opacity: .84; }
+.trainee-progress-hero .btn { flex: 0 0 auto; border: 1px solid rgba(255, 255, 255, .22); color: #fff; }
+.trainee-progress-hero .btn:hover { background: rgba(255, 255, 255, .12); }
+.trainee-progress-metrics {
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 16px;
+}
+.trainee-progress-metrics article { padding: 14px 15px; border: 1px solid var(--gray-100); border-radius: 10px; background: #fff; }
+.trainee-progress-metrics span, .trainee-progress-metrics small { display: block; }
+.trainee-progress-metrics span { color: var(--gray-400); font-size: 10px; }
+.trainee-progress-metrics strong { display: block; margin: 3px 0 2px; color: var(--burg); font-size: 23px; line-height: 1.2; }
+.trainee-progress-metrics small { color: var(--gray-400); font-size: 9px; }
+.trainee-progress-layout { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(280px, .75fr); gap: 14px; }
+.trainee-progress-panel { padding: 18px; }
+.trainee-progress-panel-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+.trainee-progress-panel-heading h3 { color: var(--gray-900); font-size: 14px; }
+.trainee-progress-panel-heading p { margin-top: 3px; color: var(--gray-400); font-size: 10px; }
+.trainee-progress-weeks { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; height: 180px; }
+.trainee-progress-weeks article { display: grid; grid-template-rows: 22px 1fr 20px; align-items: end; min-width: 0; text-align: center; }
+.trainee-progress-weeks strong { color: var(--burg); font-size: 13px; }
+.trainee-progress-weeks small { color: var(--gray-400); font-size: 9px; }
+.trainee-progress-week-track { position: relative; align-self: stretch; width: 100%; max-width: 52px; margin: 5px auto; overflow: hidden; border-radius: 8px 8px 3px 3px; background: var(--gray-50); }
+.trainee-progress-week-track span { position: absolute; right: 0; bottom: 0; left: 0; border-radius: inherit; background: linear-gradient(180deg, var(--burg), var(--burg-d)); transition: height .35s ease; }
+.trainee-progress-empty { margin-top: 12px; color: var(--gray-400); font-size: 10px; text-align: center; }
+.trainee-progress-milestones { display: grid; gap: 9px; }
+.trainee-progress-milestones article { display: flex; align-items: center; gap: 10px; padding: 10px; border: 1px solid var(--gray-100); border-radius: 9px; background: var(--gray-50); opacity: .62; }
+.trainee-progress-milestones article.achieved { border-color: #BFE8D0; background: var(--success-bg); opacity: 1; }
+.trainee-progress-milestones article > span { display: grid; place-items: center; width: 34px; height: 34px; flex: 0 0 34px; border-radius: 9px; background: #fff; font-size: 18px; }
+.trainee-progress-milestones strong, .trainee-progress-milestones small { display: block; }
+.trainee-progress-milestones strong { color: var(--gray-900); font-size: 11px; }
+.trainee-progress-milestones small { margin-top: 2px; color: var(--gray-400); font-size: 9px; }
+.trainee-progress-milestones .achieved small { color: var(--success); }
+.trainee-progress-recent { margin-top: 20px; }
+
 @media (max-width: 860px) {
   .trainee-home-layout { grid-template-columns: 1fr; }
   .trainee-workout-exercise { grid-template-columns: 1fr; }
+  .trainee-progress-layout { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 560px) {
@@ -2185,4 +2228,13 @@ body.ltr .today-card.warn-border { border-right: none; border-left: 3px solid #F
   .completed-workout-exercise { padding: 11px; }
   .completed-workout-exercise > header { align-items: stretch; flex-direction: column; }
   .completed-workout-set { grid-template-columns: 30px repeat(4, minmax(0, 1fr)); gap: 3px; padding: 7px 4px; }
+  .trainee-progress-hero { align-items: stretch; flex-direction: column; padding: 18px; }
+  .trainee-progress-hero h2 { font-size: 21px; }
+  .trainee-progress-hero .btn { width: 100%; }
+  .trainee-progress-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .trainee-progress-metrics article { padding: 12px; }
+  .trainee-progress-metrics strong { font-size: 20px; }
+  .trainee-progress-panel { padding: 15px; }
+  .trainee-progress-panel-heading { align-items: flex-start; flex-direction: column; }
+  .trainee-progress-weeks { gap: 6px; height: 165px; }
 }

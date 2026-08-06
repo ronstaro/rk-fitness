@@ -1926,39 +1926,211 @@ function Workout() {
 }
 
 
+function startOfProgressWeek(value) {
+  const date = new Date(value);
+  date.setHours(0, 0, 0, 0);
+  date.setDate(date.getDate() - date.getDay());
+  return date;
+}
+
+function buildProgressWeeks(workouts) {
+  const currentWeek = startOfProgressWeek(new Date());
+
+  return Array.from({ length: 4 }, (_, index) => {
+    const start = new Date(currentWeek);
+    start.setDate(currentWeek.getDate() - ((3 - index) * 7));
+    const end = new Date(start);
+    end.setDate(start.getDate() + 7);
+    const count = workouts.filter((workout) => {
+      const completedAt = new Date(workout.completed_at);
+      return completedAt >= start && completedAt < end;
+    }).length;
+
+    return {
+      key: start.toISOString(),
+      label: start.toLocaleDateString("he-IL", { day: "numeric", month: "short" }),
+      count,
+    };
+  });
+}
+
 function Progress() {
+  const [progressData, setProgressData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const [reloadKey, setReloadKey] = useState(0);
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadProgress() {
+      setLoading(true);
+      setLoadError("");
+
+      try {
+        const homeData = await fetchTraineeHomeData();
+        const workouts = homeData.trainee
+          ? await fetchCompletedWorkouts({ traineeId: homeData.trainee.id, limit: 100 })
+          : [];
+        if (active) setProgressData({ ...homeData, workouts });
+      } catch (error) {
+        console.warn("Trainee progress fetch failed:", error?.name);
+        if (active) setLoadError("לא ניתן לטעון את ההתקדמות כרגע.");
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+
+    loadProgress();
+    return () => {
+      active = false;
+    };
+  }, [reloadKey]);
+
+  if (loading) {
+    return <div className="trainee-home-state">טוען את ההתקדמות שלך...</div>;
+  }
+
+  if (loadError) {
+    return (
+      <div className="trainee-home-state">
+        <p>{loadError}</p>
+        <button type="button" className="btn btn-outline btn-sm" onClick={() => setReloadKey((key) => key + 1)}>
+          נסה שוב
+        </button>
+      </div>
+    );
+  }
+
+  if (!progressData?.trainee) {
+    return (
+      <div className="trainee-home-state">
+        <strong>החשבון עדיין לא שויך למתאמן</strong>
+        <p>יש לפנות לרוני כדי להשלים את החיבור לחשבון.</p>
+      </div>
+    );
+  }
+
+  const { trainee, program, workouts } = progressData;
+  const weeks = buildProgressWeeks(workouts);
+  const maxWeeklyWorkouts = Math.max(1, ...weeks.map((week) => week.count));
+  const monthStart = new Date();
+  monthStart.setDate(monthStart.getDate() - 30);
+  const recentMonthWorkouts = workouts.filter((workout) => new Date(workout.completed_at) >= monthStart).length;
+  const allSets = workouts.flatMap((workout) =>
+    workout.exercises.flatMap((exercise) => exercise.sets)
+  );
+  const completedSets = allSets.filter((workoutSet) => workoutSet.is_completed).length;
+  const recordedSetPercent = allSets.length > 0
+    ? Math.round((completedSets / allSets.length) * 100)
+    : 0;
+  const milestones = [
+    { target: 1, icon: "🌱", label: "האימון הראשון" },
+    { target: 5, icon: "⭐", label: "5 אימונים" },
+    { target: 10, icon: "🏅", label: "10 אימונים" },
+    { target: 25, icon: "🏆", label: "25 אימונים" },
+  ];
+  const achievedMilestones = milestones.filter((milestone) => workouts.length >= milestone.target).length;
+
   return (
-    <div>
-      <div style={{ marginBottom: 20 }}>
-        <h2 style={{ margin: 0, fontSize: 20, color: "#1E1C19" }}>התקדמות</h2>
-        <p style={{ margin: "4px 0 0", fontSize: 13, color: "#9E9A90" }}>יעדים, מדדים וסיכום התקדמות</p>
-      </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16, marginBottom: 24 }}>
-        <div style={{ background: "#fff", borderRadius: 10, border: "0.5px solid #EDEBE6", padding: 16 }}>
-          <div style={{ fontSize: 11, color: "#9E9A90", marginBottom: 6 }}>יעד פעיל</div>
-          <div style={{ fontSize: 28, fontWeight: 700 }}>--</div>
+    <div className="trainee-progress-page slide-in">
+      <section className="trainee-progress-hero">
+        <div>
+          <span>ההתקדמות שלי</span>
+          <h2>{program?.name || "הדרך שלך באימונים"}</h2>
+          <p>{program?.goal || trainee.main_goal || "כל אימון שהושלם מתווסף לסיכום שלך"}</p>
         </div>
-        <div style={{ background: "#fff", borderRadius: 10, border: "0.5px solid #EDEBE6", padding: 16 }}>
-          <div style={{ fontSize: 11, color: "#9E9A90", marginBottom: 6 }}>מדדים</div>
-          <div style={{ fontSize: 28, fontWeight: 700 }}>--</div>
+        <button type="button" className="btn btn-ghost btn-sm" onClick={() => setReloadKey((key) => key + 1)}>
+          רענון
+        </button>
+      </section>
+
+      <div className="trainee-progress-metrics">
+        <article>
+          <span>אימונים אחרונים</span>
+          <strong>{workouts.length}</strong>
+          <small>עד 100 אימונים שהושלמו</small>
+        </article>
+        <article>
+          <span>30 הימים האחרונים</span>
+          <strong>{recentMonthWorkouts}</strong>
+          <small>אימונים שהסתיימו</small>
+        </article>
+        <article>
+          <span>סטים שתועדו</span>
+          <strong>{completedSets}</strong>
+          <small>{allSets.length ? `${recordedSetPercent}% מהסטים באימונים` : "יתעדכן לאחר אימון"}</small>
+        </article>
+        <article>
+          <span>הישגים</span>
+          <strong>{achievedMilestones}/{milestones.length}</strong>
+          <small>אבני דרך שהושלמו</small>
+        </article>
+      </div>
+
+      <div className="trainee-progress-layout">
+        <section className="card trainee-progress-panel">
+          <div className="trainee-progress-panel-heading">
+            <div>
+              <h3>📊 עקביות בארבעת השבועות האחרונים</h3>
+              <p>מספר האימונים שהשלמת בכל שבוע</p>
+            </div>
+            {program?.sessions_per_week && (
+              <span className="badge badge-burg">יעד: {program.sessions_per_week} בשבוע</span>
+            )}
+          </div>
+          <div className="trainee-progress-weeks">
+            {weeks.map((week) => (
+              <article key={week.key}>
+                <strong>{week.count}</strong>
+                <div className="trainee-progress-week-track" aria-hidden="true">
+                  <span style={{ height: `${Math.max(week.count ? 16 : 4, (week.count / maxWeeklyWorkouts) * 100)}%` }} />
+                </div>
+                <small>{week.label}</small>
+              </article>
+            ))}
+          </div>
+          {workouts.length === 0 && (
+            <p className="trainee-progress-empty">לאחר סיום האימון הראשון תופיע כאן תמונת העקביות שלך.</p>
+          )}
+        </section>
+
+        <section className="card trainee-progress-panel">
+          <div className="trainee-progress-panel-heading">
+            <div>
+              <h3>🎯 אבני הדרך שלי</h3>
+              <p>הישגים שנפתחים לפי אימונים שהושלמו</p>
+            </div>
+          </div>
+          <div className="trainee-progress-milestones">
+            {milestones.map((milestone) => {
+              const achieved = workouts.length >= milestone.target;
+              return (
+                <article className={achieved ? "achieved" : ""} key={milestone.target}>
+                  <span>{milestone.icon}</span>
+                  <div>
+                    <strong>{milestone.label}</strong>
+                    <small>{achieved ? "הושלם" : `${Math.min(workouts.length, milestone.target)}/${milestone.target}`}</small>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        </section>
+      </div>
+
+      <section className="trainee-progress-recent">
+        <div className="workout-history-heading">
+          <div>
+            <h3>🕘 פעילות אחרונה</h3>
+            <p>שלושת האימונים האחרונים שהשלמת</p>
+          </div>
         </div>
-        <div style={{ background: "#fff", borderRadius: 10, border: "0.5px solid #EDEBE6", padding: 16 }}>
-          <div style={{ fontSize: 11, color: "#9E9A90", marginBottom: 6 }}>הישגים</div>
-          <div style={{ fontSize: 28, fontWeight: 700 }}>--</div>
-        </div>
-      </div>
-      <div style={{ background: "#fff", borderRadius: 12, border: "0.5px solid #EDEBE6", padding: 20, marginBottom: 16 }}>
-        <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 12 }}>יעדים</div>
-        <div style={{ fontSize: 14, color: "#9E9A90" }}>אין יעדים עדיין</div>
-      </div>
-      <div style={{ background: "#fff", borderRadius: 12, border: "0.5px solid #EDEBE6", padding: 20, marginBottom: 16 }}>
-        <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 12 }}>מדדים</div>
-        <div style={{ fontSize: 14, color: "#9E9A90" }}>אין מדדים להצגה</div>
-      </div>
-      <div style={{ background: "#fff", borderRadius: 12, border: "0.5px solid #EDEBE6", padding: 20 }}>
-        <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 8 }}>סיכום התקדמות</div>
-        <div style={{ fontSize: 14, color: "#9E9A90" }}>אין נתונים עדיין</div>
-      </div>
+        <CompletedWorkoutsList
+          workouts={workouts.slice(0, 3)}
+          emptyText="עדיין אין אימונים שהושלמו."
+        />
+      </section>
     </div>
   );
 }

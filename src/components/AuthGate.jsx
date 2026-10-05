@@ -1,6 +1,8 @@
-import { useEffect, useState, cloneElement } from "react";
+import { useEffect, useRef, useState, cloneElement } from "react";
 import { supabase, isSupabaseConfigured } from "../lib/supabase.js";
 import { getAccessContext } from "../services/accessService.js";
+import { clearPendingInvite, readPendingInvite } from "../services/invitationService.js";
+import { InviteAuthForm, InviteInvalidScreen, InviteLinking } from "./InviteFlow.jsx";
 
 const CENTER = {
   display: "flex",
@@ -22,6 +24,11 @@ export default function AuthGate({ children }) {
   const [error, setError] = useState("");
   const [signingOut, setSigningOut] = useState(false);
   const [signOutError, setSignOutError] = useState("");
+  // A pending `#invite=<token>` link. It is read once and removed from the URL.
+  const [invite, setInvite] = useState(() => (isSupabaseConfigured ? readPendingInvite() : null));
+  // True once the user signs up or signs in from the invite screen, so the
+  // invite is redeemed without asking again.
+  const inviteAuthRef = useRef(false);
 
   useEffect(() => {
     if (!isSupabaseConfigured) {
@@ -122,7 +129,27 @@ export default function AuthGate({ children }) {
     }
   }
 
+  function dismissInvite() {
+    clearPendingInvite();
+    inviteAuthRef.current = false;
+    setInvite(null);
+  }
+
+  async function handleInviteLinked() {
+    dismissInvite();
+    setLoading(true);
+    try {
+      setAccessContext(await getAccessContext());
+    } catch (accessError) {
+      console.warn("Access check failed:", accessError?.name);
+      setAccessContext(null);
+    } finally {
+      setLoading(false);
+    }
+  }
+
   async function handleLogout() {
+    inviteAuthRef.current = false;
     setSignOutError("");
     setSigningOut(true);
 
@@ -178,6 +205,26 @@ export default function AuthGate({ children }) {
       );
     }
 
+    if (invite) {
+      if (invite.malformed) {
+        return <InviteInvalidScreen onContinue={dismissInvite} continueLabel="המשך לאפליקציה" />;
+      }
+
+      return (
+        <InviteLinking
+          key={`${session.user.id}:${invite.token}`}
+          token={invite.token}
+          role={accessContext.role}
+          email={session.user.email}
+          autoAccept={inviteAuthRef.current}
+          onLinked={handleInviteLinked}
+          onDismiss={dismissInvite}
+          onLogout={handleLogout}
+          signingOut={signingOut}
+        />
+      );
+    }
+
     if (accessContext?.role === "admin" && !accessContext.businessOwnerId) {
       return (
         <div style={CENTER}>
@@ -198,6 +245,22 @@ export default function AuthGate({ children }) {
       signOutError,
       accountRole: accessContext?.role,
     });
+  }
+
+  // ── Invite landing (signed out) ──────────────────────────────────────────
+  if (invite) {
+    if (invite.malformed) {
+      return <InviteInvalidScreen onContinue={dismissInvite} />;
+    }
+
+    return (
+      <InviteAuthForm
+        onAuthStarted={() => {
+          inviteAuthRef.current = true;
+        }}
+        onCancel={dismissInvite}
+      />
+    );
   }
 
   // ── Login form ────────────────────────────────────────────────────────────

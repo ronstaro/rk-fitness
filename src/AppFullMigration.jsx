@@ -10,6 +10,7 @@ import Leads from "./components/Leads.jsx";
 import Programs from "./components/Programs.jsx";
 import Schedule from "./components/Schedule.jsx";
 import WeeklyGoals from "./components/WeeklyGoals.jsx";
+import TraineeInviteCard from "./components/TraineeInviteCard.jsx";
 
 function whatsappLink(phone) {
   let digits = phone.replace(/\D/g, "");
@@ -617,6 +618,13 @@ function Trainees({ onOpenPrograms }) {
                 <div><span className="trainee-detail-icon">📈</span><span><small>מדד הצלחה</small><strong>{selectedTrainee.success_metric || "לא הוזן"}</strong></span></div>
               </div>
             </section>
+
+            <TraineeInviteCard
+              traineeId={selectedTrainee.id}
+              traineeName={selectedTrainee.full_name}
+              isLinked={Boolean(selectedTrainee.user_id)}
+              whatsappUrl={selectedTrainee.phone ? whatsappLink(selectedTrainee.phone) : ""}
+            />
 
             <section className="card trainee-detail-card">
               <div className="section-title">💳 חבילה ותשלום</div>

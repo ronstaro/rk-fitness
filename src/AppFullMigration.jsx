@@ -1,5 +1,5 @@
 ﻿import { useEffect, useRef, useState } from "react";
-import { fetchTrainees, createTrainee, updateTrainee, updateTraineeStatus, deleteTrainee } from "./services/traineesService.js";
+import { fetchTrainees, createTrainee, updateTrainee, updateTraineeStatus, deleteTrainee, deleteTraineeErrorMessage } from "./services/traineesService.js";
 import { fetchSessions } from "./services/sessionsService.js";
 import { fetchActivePrograms } from "./services/programsService.js";
 import { fetchTraineeHomeData, fetchTraineeProfile, fetchTraineeProgramData } from "./services/traineeHomeService.js";
@@ -257,7 +257,17 @@ function Trainees({ onOpenPrograms }) {
   async function handleDelete(id) {
     if (actionLockRef.current || saving || rowActionId) return;
 
-    if (!window.confirm("למחוק את המתאמן לצמיתות? האימונים ותוכניות האימון המקושרים יימחקו. היסטוריית הכספים תישמר ללא קישור למתאמן.")) {
+    const trainee = trainees.find((t) => t.id === id);
+    const confirmText = [
+      "למחוק את המתאמן לצמיתות?",
+      "המתאמן וכל הנתונים הקשורים אליו (אימונים, תוכניות אימון, יומני אימון והזמנות) יימחקו לצמיתות. היסטוריית הכספים תישמר ללא קישור למתאמן.",
+      trainee?.user_id
+        ? "למתאמן יש חשבון התחברות מקושר: גם החשבון וההרשמה עם כתובת האימייל יימחקו."
+        : null,
+      "לא ניתן לבטל פעולה זו.",
+    ].filter(Boolean).join("\n\n");
+
+    if (!window.confirm(confirmText)) {
       return;
     }
 
@@ -269,8 +279,8 @@ function Trainees({ onOpenPrograms }) {
       await deleteTrainee(id);
       setTrainees((prev) => prev.filter((t) => t.id !== id));
     } catch (err) {
-      console.error("Trainee delete error:", err);
-      setRowError("לא ניתן למחוק את המתאמן.");
+      console.warn("Trainee delete failed:", err?.code);
+      setRowError(deleteTraineeErrorMessage(err));
     } finally {
       actionLockRef.current = false;
       setRowActionId(null);

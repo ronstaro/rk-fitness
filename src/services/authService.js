@@ -1,4 +1,5 @@
 import { supabase } from "../lib/supabase.js";
+import { appBaseUrl } from "../lib/appUrl.js";
 
 // Supabase sends auth email links back to the app root. A recovery link lands
 // as `#access_token=...&type=recovery`; an expired or reused link lands as
@@ -55,7 +56,7 @@ export const initialAuthRedirect = readAuthRedirect();
 
 export async function requestPasswordReset(email) {
   const { error } = await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: window.location.origin,
+    redirectTo: appBaseUrl(),
   });
 
   if (error) throw error;

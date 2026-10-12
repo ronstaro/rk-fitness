@@ -1,12 +1,13 @@
 import { supabase } from "../lib/supabase.js";
+import { appBaseUrl } from "../lib/appUrl.js";
 
 // The token travels in the URL fragment so it is never sent to the server
 // in request logs or Referer headers.
 export function buildInviteLink(token) {
-  return `${window.location.origin}/#invite=${encodeURIComponent(token)}`;
+  return `${appBaseUrl()}/#invite=${encodeURIComponent(token)}`;
 }
 
-// Invite links look like `${origin}/#invite=<token>` (see buildInviteLink).
+// Invite links look like `${appBaseUrl()}/#invite=<token>` (see buildInviteLink).
 // The token is a 43-char base64url string. It is moved out of the address bar
 // into sessionStorage as soon as the app loads, so it survives a reload of the
 // same tab but is not left in the URL or browser history.

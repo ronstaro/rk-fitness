@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "../lib/supabase.js";
+import { appBaseUrl } from "../lib/appUrl.js";
 import { acceptTraineeInvite, clearPendingInvite } from "../services/invitationService.js";
 
 const MIN_PASSWORD_LENGTH = 8;
@@ -200,7 +201,7 @@ export function InviteAuthForm({ onAuthStarted, onAwaitingConfirmation, onCancel
       const { data, error: authError } = await supabase.auth.signUp({
         email: trimmedEmail,
         password,
-        options: { emailRedirectTo: window.location.origin },
+        options: { emailRedirectTo: appBaseUrl() },
       });
 
       if (authError) {

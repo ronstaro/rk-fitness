@@ -30,11 +30,12 @@ const CARD = {
   gap: 16,
 };
 
+// 16px keeps iOS Safari from zooming the page when a field gets focus.
 const INPUT = {
   padding: "9px 12px",
   borderRadius: 8,
   border: "1px solid #E5E2DC",
-  fontSize: 14,
+  fontSize: 16,
   color: "#1E1C19",
   background: "#FAFAF8",
   outline: "none",
@@ -157,7 +158,7 @@ export function InviteInvalidScreen({ onContinue, continueLabel = "למסך הכ
 }
 
 // ── Signed out: create an account (or sign in) to accept the invite ──────
-export function InviteAuthForm({ onAuthStarted, onCancel }) {
+export function InviteAuthForm({ onAuthStarted, onAwaitingConfirmation, onCancel, onForgotPassword }) {
   const [mode, setMode] = useState("signup"); // signup | login | check-email
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -219,6 +220,7 @@ export function InviteAuthForm({ onAuthStarted, onCancel }) {
         return;
       }
 
+      onAwaitingConfirmation?.(trimmedEmail);
       setMode("check-email");
     } catch (authError) {
       console.warn("Sign-up request failed:", authError?.name);
@@ -266,9 +268,11 @@ export function InviteAuthForm({ onAuthStarted, onCancel }) {
           <Header subtitle="הזמנה להצטרפות" />
           <div style={{ fontSize: 17, fontWeight: 700, textAlign: "center" }}>כמעט סיימנו</div>
           <div style={MUTED}>
-            שלחנו קישור אישור לכתובת <span dir="ltr">{email.trim()}</span>.
+            שלחנו קישור אישור לכתובת <bdi dir="ltr">{email.trim()}</bdi>.
             <br />
-            לאחר אישור המייל, חזור ללשונית הזו והתחבר כדי להשלים את ההצטרפות.
+            לחץ על הקישור במייל. אם הוא נפתח באותו דפדפן, ההצטרפות תושלם שם בלחיצה אחת.
+            <br />
+            אם הקישור נפתח בדפדפן אחר, חזור ללשונית הזו והתחבר כדי להשלים את ההצטרפות.
           </div>
           <button type="button" style={primaryButton(false)} onClick={() => switchMode("login")}>
             אישרתי את המייל, להתחברות
@@ -337,6 +341,11 @@ export function InviteAuthForm({ onAuthStarted, onCancel }) {
           >
             {isSignup ? "כבר יש לי חשבון" : "אין לי חשבון, להרשמה"}
           </button>
+          {!isSignup && onForgotPassword && (
+            <button type="button" style={LINK_BUTTON} onClick={onForgotPassword} disabled={submitting}>
+              שכחתי סיסמה
+            </button>
+          )}
           <button type="button" style={LINK_BUTTON} onClick={onCancel} disabled={submitting}>
             לא עכשיו
           </button>
@@ -422,7 +431,7 @@ export function InviteLinking({
     title = "חיבור החשבון להזמנה";
     body = (
       <>
-        אתה מחובר כ־<span dir="ltr">{email}</span>.
+        אתה מחובר כ־<bdi dir="ltr">{email}</bdi>.
         <br />
         לחבר את החשבון הזה לאזור המתאמן שלך ב־R.K Fitness?
       </>

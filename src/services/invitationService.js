@@ -11,6 +11,13 @@ export function buildInviteLink(token) {
 // into sessionStorage as soon as the app loads, so it survives a reload of the
 // same tab but is not left in the URL or browser history.
 const PENDING_INVITE_KEY = "rk-fitness-pending-invite";
+// The email confirmation link often opens in a new tab (especially on mobile),
+// which has its own sessionStorage. After signup, the token is also kept in
+// localStorage, tied to the signup email and a short lifetime, so the tab that
+// opens from the confirmation email can offer to finish linking. The token is
+// still redeemed only through accept_trainee_invite.
+const INVITE_HANDOFF_KEY = "rk-fitness-invite-handoff";
+const INVITE_HANDOFF_TTL_MS = 24 * 60 * 60 * 1000;
 const INVITE_HASH_PREFIX = "#invite=";
 const TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/;
 
@@ -28,6 +35,51 @@ export function clearPendingInvite() {
   } catch {
     // Nothing to clear.
   }
+  try {
+    localStorage.removeItem(INVITE_HANDOFF_KEY);
+  } catch {
+    // Nothing to clear.
+  }
+}
+
+// Called after a signup that still needs email confirmation.
+export function saveInviteHandoff(token, email) {
+  if (!TOKEN_PATTERN.test(token ?? "") || !email) return;
+  try {
+    localStorage.setItem(
+      INVITE_HANDOFF_KEY,
+      JSON.stringify({ token, email: email.trim().toLowerCase(), savedAt: Date.now() }),
+    );
+  } catch {
+    // Storage unavailable; the user can still sign in from the original tab.
+  }
+}
+
+// Returns the handed-off invite when it belongs to `email`, otherwise null.
+// The entry is moved into this tab's sessionStorage, so it is used once.
+export function takeInviteHandoff(email) {
+  let entry = null;
+  try {
+    entry = JSON.parse(localStorage.getItem(INVITE_HANDOFF_KEY) ?? "null");
+  } catch {
+    entry = null;
+  }
+  if (!entry) return null;
+
+  const expired = !(Date.now() - entry.savedAt < INVITE_HANDOFF_TTL_MS);
+  if (expired || !TOKEN_PATTERN.test(entry.token ?? "")) {
+    clearPendingInvite();
+    return null;
+  }
+  if (!email || entry.email !== email.trim().toLowerCase()) return null;
+
+  try {
+    localStorage.removeItem(INVITE_HANDOFF_KEY);
+  } catch {
+    // Ignore; the token is single-use on the server anyway.
+  }
+  storePendingInvite(entry.token);
+  return { token: entry.token, malformed: false };
 }
 
 // Returns { token, malformed } when an invite is pending, otherwise null.

@@ -1,8 +1,18 @@
 import { useEffect, useRef, useState, cloneElement } from "react";
 import { supabase, isSupabaseConfigured } from "../lib/supabase.js";
 import { getAccessContext } from "../services/accessService.js";
-import { clearPendingInvite, readPendingInvite } from "../services/invitationService.js";
+import {
+  clearPendingInvite,
+  readPendingInvite,
+  saveInviteHandoff,
+  takeInviteHandoff,
+} from "../services/invitationService.js";
 import { InviteAuthForm, InviteInvalidScreen, InviteLinking } from "./InviteFlow.jsx";
+import { clearRecoveryFlag, initialAuthRedirect, storeRecoveryFlag } from "../services/authService.js";
+import { ForgotPasswordForm, ResetPasswordForm } from "./PasswordRecovery.jsx";
+
+const LINK_ERROR_NOTICE = "הקישור שנפתח אינו בתוקף או שכבר נעשה בו שימוש. אפשר להתחבר, או לבקש קישור חדש לאיפוס סיסמה.";
+const RECOVERY_EXPIRED_NOTICE = "קישור האיפוס אינו בתוקף. יש לבקש קישור חדש.";
 
 const CENTER = {
   display: "flex",
@@ -10,6 +20,8 @@ const CENTER = {
   alignItems: "center",
   justifyContent: "center",
   minHeight: "100vh",
+  padding: "24px 16px",
+  boxSizing: "border-box",
   fontFamily: "inherit",
   direction: "rtl",
 };
@@ -29,6 +41,11 @@ export default function AuthGate({ children }) {
   // True once the user signs up or signs in from the invite screen, so the
   // invite is redeemed without asking again.
   const inviteAuthRef = useRef(false);
+  // True while the user is signed in through a password recovery link and
+  // still has to choose a new password.
+  const [recovery, setRecovery] = useState(initialAuthRedirect.recovery);
+  const [signedOutView, setSignedOutView] = useState("login"); // login | forgot
+  const [notice, setNotice] = useState(initialAuthRedirect.linkError ? LINK_ERROR_NOTICE : "");
 
   useEffect(() => {
     if (!isSupabaseConfigured) {
@@ -60,6 +77,14 @@ export default function AuthGate({ children }) {
 
         if (active) setSession(data.session);
 
+        if (!data.session && initialAuthRedirect.recovery) {
+          clearRecoveryFlag();
+          if (active) {
+            setRecovery(false);
+            setNotice(RECOVERY_EXPIRED_NOTICE);
+          }
+        }
+
         if (data.session) {
           await loadAccessContext();
         }
@@ -76,8 +101,19 @@ export default function AuthGate({ children }) {
 
     loadSession();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, newSession) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, newSession) => {
+      if (event === "PASSWORD_RECOVERY") storeRecoveryFlag();
+      if (event === "SIGNED_OUT") clearRecoveryFlag();
+
       if (active) {
+        if (event === "PASSWORD_RECOVERY") setRecovery(true);
+        if (event === "SIGNED_OUT") setRecovery(false);
+        // Same user, fresh tokens or new password: keep the current screen
+        // instead of reloading access and remounting the app.
+        if ((event === "TOKEN_REFRESHED" || event === "USER_UPDATED") && newSession) {
+          setSession(newSession);
+          return;
+        }
         setSession(newSession);
         setAccessContext(null);
         if (newSession) {
@@ -95,9 +131,20 @@ export default function AuthGate({ children }) {
     };
   }, []);
 
+  // A tab opened from the confirmation email has no invite of its own; pick up
+  // the one saved at signup when it belongs to the signed-in email.
+  const sessionEmail = session?.user?.email ?? null;
+  useEffect(() => {
+    if (!sessionEmail || invite) return;
+    const handoff = takeInviteHandoff(sessionEmail);
+    if (handoff) setInvite(handoff);
+  }, [sessionEmail, invite]);
+
   async function handleLogin(e) {
     e.preventDefault();
+    if (submitting) return;
     setError("");
+    setNotice("");
 
     const trimmedEmail = email.trim();
     if (!trimmedEmail || !password) {
@@ -115,7 +162,11 @@ export default function AuthGate({ children }) {
       if (authError) {
         // Log sanitized info for development — no credentials
         console.warn("Login failed:", authError.status, authError.name);
-        if (authError.status === 400 || authError.message?.toLowerCase().includes("invalid")) {
+        if (authError.code === "email_not_confirmed") {
+          setError("יש לאשר קודם את כתובת האימייל דרך הקישור שנשלח אליך.");
+        } else if (authError.status === 429) {
+          setError("יותר מדי ניסיונות. נסה שוב בעוד כמה דקות.");
+        } else if (authError.status === 400 || authError.message?.toLowerCase().includes("invalid")) {
           setError("האימייל או הסיסמה אינם נכונים");
         } else {
           setError("לא ניתן להתחבר כרגע. נסה שוב.");
@@ -127,6 +178,22 @@ export default function AuthGate({ children }) {
     } finally {
       setSubmitting(false);
     }
+  }
+
+  function openForgotPassword() {
+    setError("");
+    setNotice("");
+    setSignedOutView("forgot");
+  }
+
+  function finishRecovery() {
+    clearRecoveryFlag();
+    setRecovery(false);
+  }
+
+  function requestNewResetLink() {
+    setSignedOutView("forgot");
+    handleLogout();
   }
 
   function dismissInvite() {
@@ -191,6 +258,19 @@ export default function AuthGate({ children }) {
 
   // ── Authenticated ─────────────────────────────────────────────────────────
   if (session) {
+    // A recovery link signs the user in; they choose a new password first.
+    if (recovery) {
+      return (
+        <ResetPasswordForm
+          email={session.user.email}
+          onDone={finishRecovery}
+          onCancel={handleLogout}
+          onRequestNewLink={requestNewResetLink}
+          signingOut={signingOut}
+        />
+      );
+    }
+
     if (!accessContext) {
       return (
         <div style={CENTER}>
@@ -247,6 +327,17 @@ export default function AuthGate({ children }) {
     });
   }
 
+  // ── Forgot password (signed out) ─────────────────────────────────────────
+  if (signedOutView === "forgot") {
+    return (
+      <ForgotPasswordForm
+        initialEmail={email.trim()}
+        invitePending={Boolean(invite && !invite.malformed)}
+        onBack={() => setSignedOutView("login")}
+      />
+    );
+  }
+
   // ── Invite landing (signed out) ──────────────────────────────────────────
   if (invite) {
     if (invite.malformed) {
@@ -258,7 +349,9 @@ export default function AuthGate({ children }) {
         onAuthStarted={() => {
           inviteAuthRef.current = true;
         }}
+        onAwaitingConfirmation={(signupEmail) => saveInviteHandoff(invite.token, signupEmail)}
         onCancel={dismissInvite}
+        onForgotPassword={openForgotPassword}
       />
     );
   }
@@ -311,8 +404,12 @@ export default function AuthGate({ children }) {
           />
         </div>
 
+        {notice && (
+          <div style={{ color: "#7C2D3E", fontSize: 13, textAlign: "center", lineHeight: 1.5 }}>{notice}</div>
+        )}
+
         {error && (
-          <div style={{ color: "#b91c1c", fontSize: 13, textAlign: "center" }}>{error}</div>
+          <div style={{ color: "#b91c1c", fontSize: 13, textAlign: "center" }} role="alert">{error}</div>
         )}
 
         <button
@@ -332,16 +429,35 @@ export default function AuthGate({ children }) {
         >
           {submitting ? "מתחבר..." : "כניסה"}
         </button>
+
+        <button
+          type="button"
+          onClick={openForgotPassword}
+          disabled={submitting}
+          style={{
+            background: "none",
+            border: "none",
+            color: "#7C2D3E",
+            fontSize: 13,
+            cursor: "pointer",
+            textDecoration: "underline",
+            padding: 0,
+            alignSelf: "center",
+          }}
+        >
+          שכחתי סיסמה
+        </button>
       </form>
     </div>
   );
 }
 
+// 16px keeps iOS Safari from zooming the page when a field gets focus.
 const inputStyle = {
   padding: "9px 12px",
   borderRadius: 8,
   border: "1px solid #E5E2DC",
-  fontSize: 14,
+  fontSize: 16,
   color: "#1E1C19",
   background: "#FAFAF8",
   outline: "none",

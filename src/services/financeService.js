@@ -32,9 +32,11 @@ async function ensureMonthlyPayments(ownerId, monthStart, trainees, payments) {
       trainee_name: trainee.full_name,
       package_name: trainee.package_name ?? null,
       amount: Number(trainee.package_price ?? 0),
+      // The trainee's usual method is only a prefill. The row is an expected
+      // payment until Roni records it as paid with its real date.
       payment_method: trainee.payment_method ?? null,
-      payment_status: "paid",
-      paid_at: localDateKey(),
+      payment_status: "unpaid",
+      paid_at: null,
     }));
 
   if (missingPayments.length === 0) return payments;

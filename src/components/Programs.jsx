@@ -14,7 +14,10 @@ import {
   updateProgram,
   updateProgramDay,
   updateProgramExercise,
+  removeExerciseDemoVideo,
+  uploadExerciseDemoVideo,
 } from "../services/programsService.js";
+import ExerciseDemoVideo from "./ExerciseDemoVideo.jsx";
 
 const EMPTY_PROGRAM = {
   traineeId: "",
@@ -585,6 +588,55 @@ export default function Programs({ initialTraineeId = "" }) {
     } catch (error) {
       console.error("Program exercise delete error:", error);
       setActionError("לא ניתן למחוק את התרגיל.");
+    } finally {
+      setActionKey("");
+    }
+  }
+
+  function replaceExercise(dayId, saved) {
+    setDays((current) =>
+      current.map((day) =>
+        day.id === dayId
+          ? {
+              ...day,
+              exercises: day.exercises.map((item) =>
+                item.id === saved.id ? saved : item
+              ),
+            }
+          : day
+      )
+    );
+  }
+
+  async function handleDemoVideoUpload(dayId, exercise, file) {
+    if (!file) return;
+    setActionKey(`demo-${exercise.id}`);
+    setActionError("");
+    try {
+      replaceExercise(dayId, await uploadExerciseDemoVideo(exercise, file));
+    } catch (error) {
+      console.error("Demo video upload error:", error);
+      setActionError(
+        error.message === "unsupported-video"
+          ? "סוג הקובץ לא נתמך. אפשר להעלות MP4, MOV, WEBM או M4V."
+          : error.message === "video-too-large"
+            ? "הסרטון גדול מדי. הגודל המרבי הוא 50MB."
+            : "לא ניתן להעלות את הסרטון. נסו שוב."
+      );
+    } finally {
+      setActionKey("");
+    }
+  }
+
+  async function handleDemoVideoRemove(dayId, exercise) {
+    if (!window.confirm(`להסיר את סרטון ההדגמה של "${exercise.name}"?`)) return;
+    setActionKey(`demo-${exercise.id}`);
+    setActionError("");
+    try {
+      replaceExercise(dayId, await removeExerciseDemoVideo(exercise));
+    } catch (error) {
+      console.error("Demo video remove error:", error);
+      setActionError("לא ניתן להסיר את הסרטון. נסו שוב.");
     } finally {
       setActionKey("");
     }
@@ -1798,6 +1850,63 @@ export default function Programs({ initialTraineeId = "" }) {
                                     {exercise.notes}
                                   </div>
                                 )}
+                                <div className="program-demo-video">
+                                  {actionKey === `demo-${exercise.id}` ? (
+                                    <span>מעדכן סרטון…</span>
+                                  ) : exercise.demo_video_path ? (
+                                    <>
+                                      <ExerciseDemoVideo
+                                        path={exercise.demo_video_path}
+                                        exerciseName={exercise.name}
+                                        className=""
+                                        style={secondaryButton(false)}
+                                      />
+                                      <label
+                                        className="program-demo-video-upload"
+                                        style={secondaryButton(busy)}
+                                      >
+                                        החלף סרטון
+                                        <input
+                                          type="file"
+                                          accept="video/mp4,video/quicktime,video/webm,video/x-m4v"
+                                          disabled={busy}
+                                          onChange={(event) => {
+                                            const file = event.target.files?.[0];
+                                            event.target.value = "";
+                                            handleDemoVideoUpload(day.id, exercise, file);
+                                          }}
+                                        />
+                                      </label>
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          handleDemoVideoRemove(day.id, exercise)
+                                        }
+                                        disabled={busy}
+                                        style={secondaryButton(busy, true)}
+                                      >
+                                        הסר סרטון
+                                      </button>
+                                    </>
+                                  ) : (
+                                    <label
+                                      className="program-demo-video-upload"
+                                      style={secondaryButton(busy)}
+                                    >
+                                      + הוסף סרטון הדגמה
+                                      <input
+                                        type="file"
+                                        accept="video/mp4,video/quicktime,video/webm,video/x-m4v"
+                                        disabled={busy}
+                                        onChange={(event) => {
+                                          const file = event.target.files?.[0];
+                                          event.target.value = "";
+                                          handleDemoVideoUpload(day.id, exercise, file);
+                                        }}
+                                      />
+                                    </label>
+                                  )}
+                                </div>
                               </div>
                               <div style={{ display: "flex", gap: 6 }}>
                                 <button

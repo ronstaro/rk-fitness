@@ -1094,6 +1094,8 @@ body.ltr .today-card.warn-border { border-right: none; border-left: 3px solid #F
 .trainee-detail-list > div > span:last-child { display: grid; min-width: 0; }
 .trainee-detail-list small { color: var(--gray-400); font-size: 11px; }
 .trainee-detail-list strong { color: var(--gray-900); font-size: 14px; font-weight: 400; overflow-wrap: anywhere; }
+.trainee-detail-list small.trainee-next-payment-note { margin-top: 2px; }
+.trainee-detail-list small.trainee-next-payment-note.overdue { color: var(--danger, #B42318); }
 .trainee-detail-list dt { color: var(--gray-400); font-size: 12px; }
 .trainee-detail-list dd { color: var(--gray-900); font-size: 13px; font-weight: 500; overflow-wrap: anywhere; }
 .trainee-program-name { font-size: 17px; font-weight: 700; color: var(--gray-900); }
@@ -1756,6 +1758,11 @@ body.ltr .today-card.warn-border { border-right: none; border-left: 3px solid #F
 .finance-status-select { width: 128px; padding-block: 6px; }
 .finance-status-select.unpaid { border-color: #E3B74F; background: #FFF9E9; color: var(--warn); }
 .finance-row-saving { display: block; margin-top: 3px; color: var(--gray-400); }
+.finance-paid-confirm { display: grid; gap: 6px; width: 160px; margin-top: 6px; padding: 8px; border: 1px solid var(--gray-100); border-radius: 8px; background: #fff; }
+.finance-paid-confirm label { display: grid; gap: 3px; font-size: 11px; color: var(--gray-600); }
+.finance-paid-confirm .form-input { padding-block: 5px; }
+.finance-paid-confirm-actions { display: flex; gap: 6px; }
+.finance-source-tag { display: block; margin-top: 2px; color: var(--gray-400); font-size: 11px; }
 .finance-empty { padding: 24px 8px; color: var(--gray-400); font-size: 13px; text-align: center; }
 .finance-payment-form {
   display: grid; grid-template-columns: repeat(4, minmax(140px, 1fr));
@@ -2238,3 +2245,14 @@ body.ltr .today-card.warn-border { border-right: none; border-left: 3px solid #F
   .trainee-progress-panel-heading { align-items: flex-start; flex-direction: column; }
   .trainee-progress-weeks { gap: 6px; height: 165px; }
 }
+
+/* ── EXERCISE DEMO VIDEOS ───────────────────────────────────────────── */
+.demo-video-modal { max-width: 640px; }
+.demo-video-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.demo-video-head .modal-title { margin-bottom: 12px; }
+.demo-video-player { display: block; width: 100%; max-height: 70vh; border-radius: 10px; background: #000; }
+.demo-video-error { color: var(--red, #C0392B); font-size: 13px; }
+.program-demo-video { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 6px; font-size: 12px; color: var(--gray-400); }
+.program-demo-video input[type="file"] { display: none; }
+.program-demo-video-upload { cursor: pointer; }
+.trainee-demo-video-button { margin-top: 8px; align-self: flex-start; }

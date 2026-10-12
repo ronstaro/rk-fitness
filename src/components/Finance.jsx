@@ -11,8 +11,7 @@ import {
   updateMonthlyPaymentDetails,
 } from "../services/financeService.js";
 import { useRememberedState } from "../lib/navigationMemory.js";
-
-const PAYMENT_METHODS = ["העברה בנקאית", "ביט", "פייבוקס", "אשראי", "מזומן", "אחר"];
+import { PAYMENT_METHODS, paymentMethodLabel } from "../lib/payments.js";
 
 const EXPENSE_CATEGORIES = [
   "ציוד",
@@ -108,6 +107,8 @@ export default function Finance() {
   const [savingSettings, setSavingSettings] = useState(false);
   const [settingsMessage, setSettingsMessage] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
+  // Marking a row as paid first asks for the date the money arrived.
+  const [paidConfirm, setPaidConfirm] = useState(null);
 
   useEffect(() => {
     let active = true;
@@ -200,6 +201,7 @@ export default function Finance() {
     const nextMonth = moveMonth(selectedMonth, amount);
     if (nextMonth > monthKey()) return;
     setSelectedMonth(nextMonth);
+    setPaidConfirm(null);
     setShowExpenseForm(false);
     setShowPaymentForm(false);
     setEditingPaymentId(null);
@@ -264,7 +266,14 @@ export default function Finance() {
       setPaymentError("יש למלא שם וסכום תקין.");
       return;
     }
-    if (paymentForm.paymentStatus === "paid" && !paymentForm.paidAt.startsWith(selectedMonth)) {
+    const originalPaidAt = editingPaymentId
+      ? data.payments.find((payment) => payment.id === editingPaymentId)?.paid_at
+      : null;
+    if (
+      paymentForm.paymentStatus === "paid" &&
+      !paymentForm.paidAt.startsWith(selectedMonth) &&
+      paymentForm.paidAt !== originalPaidAt
+    ) {
       setPaymentError("תאריך התשלום חייב להיות בחודש הנבחר.");
       return;
     }
@@ -328,13 +337,35 @@ export default function Finance() {
     }
   }
 
-  async function handlePaymentStatus(payment, status) {
+  function handlePaymentStatus(payment, status) {
+    if (rowActionId || status === payment.payment_status) return;
+    if (status === "paid") {
+      setPaidConfirm({ id: payment.id, paidAt: localDateKey() });
+      return;
+    }
+    const paidOn = payment.paid_at
+      ? ` תאריך התשלום (${new Date(`${payment.paid_at}T12:00:00`).toLocaleDateString("he-IL")}) יימחק.`
+      : "";
+    if (!window.confirm(`לסמן את התשלום של ${payment.trainee_name} כלא שולם?${paidOn}`)) return;
+    savePaymentStatus(payment, "unpaid");
+  }
+
+  function confirmPaid(payment) {
+    if (!paidConfirm?.paidAt || paidConfirm.paidAt > localDateKey()) {
+      setRowError("יש לבחור את התאריך שבו התקבל התשלום (לא תאריך עתידי).");
+      return;
+    }
+    savePaymentStatus(payment, "paid", paidConfirm.paidAt);
+  }
+
+  async function savePaymentStatus(payment, status, paidAt = null) {
     if (rowActionId) return;
     setRowActionId(payment.id);
     setRowError("");
 
     try {
-      const updated = await updateMonthlyPayment(payment.id, status);
+      const updated = await updateMonthlyPayment(payment.id, status, paidAt);
+      setPaidConfirm(null);
       setData((current) => ({
         ...current,
         payments: current.payments.map((item) =>
@@ -671,7 +702,10 @@ export default function Finance() {
                   const busy = rowActionId === payment.id;
                   return (
                     <tr key={payment.id} className={unpaid ? "finance-payment-unpaid" : ""}>
-                      <td><strong>{payment.trainee_name}</strong></td>
+                      <td>
+                        <strong>{payment.trainee_name}</strong>
+                        {payment.source === "manual" && <small className="finance-source-tag">נוסף ידנית</small>}
+                      </td>
                       <td>{payment.package_name || "לא הוגדרה"}</td>
                       <td>
                         {Number(payment.amount) === 0 ? (
@@ -680,7 +714,7 @@ export default function Finance() {
                           currency(payment.amount)
                         )}
                       </td>
-                      <td>{payment.payment_method || "לא הוגדר"}</td>
+                      <td>{paymentMethodLabel(payment.payment_method) || "לא הוגדר"}</td>
                       <td>
                         <select
                           className={`form-select finance-status-select${unpaid ? " unpaid" : ""}`}
@@ -693,6 +727,25 @@ export default function Finance() {
                           <option value="unpaid">לא שולם</option>
                         </select>
                         {busy && <small className="finance-row-saving">שומר...</small>}
+                        {paidConfirm?.id === payment.id && (
+                          <div className="finance-paid-confirm">
+                            <label>
+                              <span>התקבל בתאריך</span>
+                              <input
+                                className="form-input"
+                                type="date"
+                                max={localDateKey()}
+                                value={paidConfirm.paidAt}
+                                onChange={(event) => setPaidConfirm({ id: payment.id, paidAt: event.target.value })}
+                                disabled={busy}
+                              />
+                            </label>
+                            <div className="finance-paid-confirm-actions">
+                              <button type="button" className="btn btn-primary btn-sm" disabled={busy} onClick={() => confirmPaid(payment)}>אישור</button>
+                              <button type="button" className="btn btn-ghost btn-sm" disabled={busy} onClick={() => setPaidConfirm(null)}>ביטול</button>
+                            </div>
+                          </div>
+                        )}
                       </td>
                       <td>{payment.paid_at ? new Date(`${payment.paid_at}T12:00:00`).toLocaleDateString("he-IL") : "—"}</td>
                       <td>

@@ -1,13 +1,12 @@
 import { supabase } from "../lib/supabase.js";
 import { getBusinessOwnerId } from "./accessService.js";
+import { REMOVED_PAYMENT_NOTE } from "../lib/payments.js";
 
 const DEFAULT_SETTINGS = {
   vat_rate: 18,
   income_tax_rate: 0,
   prices_include_vat: true,
 };
-
-const REMOVED_PAYMENT_NOTE = "__removed_by_admin__";
 
 function addMonths(monthStart, amount) {
   const [year, month] = monthStart.split("-").map(Number);
@@ -21,42 +20,17 @@ function localDateKey(date = new Date()) {
   ).padStart(2, "0")}`;
 }
 
-async function ensureMonthlyPayments(ownerId, monthStart, trainees, payments) {
+// The server creates the month's expected rows (unpaid, no paid date) for
+// active trainees that have none yet, and returns all of the month's rows.
+async function ensureMonthlyPayments(monthStart, trainees, payments) {
   const existingTraineeIds = new Set(payments.map((payment) => payment.trainee_id));
-  const missingPayments = trainees
-    .filter((trainee) => !existingTraineeIds.has(trainee.id))
-    .map((trainee) => ({
-      owner_id: ownerId,
-      trainee_id: trainee.id,
-      billing_month: monthStart,
-      trainee_name: trainee.full_name,
-      package_name: trainee.package_name ?? null,
-      amount: Number(trainee.package_price ?? 0),
-      // The trainee's usual method is only a prefill. The row is an expected
-      // payment until Roni records it as paid with its real date.
-      payment_method: trainee.payment_method ?? null,
-      payment_status: "unpaid",
-      paid_at: null,
-    }));
+  if (trainees.every((trainee) => existingTraineeIds.has(trainee.id))) return payments;
 
-  if (missingPayments.length === 0) return payments;
-
-  const { error } = await supabase
-    .from("trainee_monthly_payments")
-    .upsert(missingPayments, {
-      onConflict: "owner_id,trainee_id,billing_month",
-      ignoreDuplicates: true,
-    });
+  const { data, error } = await supabase.rpc("ensure_monthly_payments", {
+    p_billing_month: monthStart,
+  });
 
   if (error) throw error;
-
-  const { data, error: fetchError } = await supabase
-    .from("trainee_monthly_payments")
-    .select("*")
-    .eq("billing_month", monthStart)
-    .order("trainee_name", { ascending: true });
-
-  if (fetchError) throw fetchError;
   return data;
 }
 
@@ -116,7 +90,6 @@ export async function fetchFinanceData(monthStart) {
   const ensuredPayments =
     monthStart === currentMonth
       ? await ensureMonthlyPayments(
-          ownerId,
           monthStart,
           traineesResult.data,
           paymentsResult.data
@@ -149,12 +122,13 @@ export async function fetchFinanceData(monthStart) {
   };
 }
 
-export async function updateMonthlyPayment(id, paymentStatus) {
+// paidAt is the date the money actually arrived; it defaults to today.
+export async function updateMonthlyPayment(id, paymentStatus, paidAt = null) {
   const { data, error } = await supabase
     .from("trainee_monthly_payments")
     .update({
       payment_status: paymentStatus,
-      paid_at: paymentStatus === "paid" ? localDateKey() : null,
+      paid_at: paymentStatus === "paid" ? paidAt || localDateKey() : null,
     })
     .eq("id", id)
     .select()
@@ -166,21 +140,64 @@ export async function updateMonthlyPayment(id, paymentStatus) {
 
 export async function createMonthlyPayment(input) {
   const ownerId = await getBusinessOwnerId();
+  const details = {
+    trainee_id: input.trainee_id || null,
+    billing_month: input.billing_month,
+    trainee_name: input.trainee_name,
+    package_name: input.package_name || null,
+    amount: input.amount,
+    payment_method: input.payment_method || null,
+    payment_status: input.payment_status,
+    paid_at: input.payment_status === "paid" ? input.paid_at : null,
+  };
+
+  // A row removed earlier still holds this trainee's month, so adding the
+  // payment again brings that row back instead of failing on the duplicate.
+  if (details.trainee_id) {
+    const { data: removed, error: removedError } = await supabase
+      .from("trainee_monthly_payments")
+      .select("id")
+      .eq("trainee_id", details.trainee_id)
+      .eq("billing_month", details.billing_month)
+      .eq("notes", REMOVED_PAYMENT_NOTE)
+      .maybeSingle();
+
+    if (removedError) throw removedError;
+    if (removed) {
+      const { data, error } = await supabase
+        .from("trainee_monthly_payments")
+        .update({ ...details, notes: null })
+        .eq("id", removed.id)
+        .eq("notes", REMOVED_PAYMENT_NOTE)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    }
+  }
+
   const { data, error } = await supabase
     .from("trainee_monthly_payments")
-    .insert({
-      owner_id: ownerId,
-      trainee_id: input.trainee_id || null,
-      billing_month: input.billing_month,
-      trainee_name: input.trainee_name,
-      package_name: input.package_name || null,
-      amount: input.amount,
-      payment_method: input.payment_method || null,
-      payment_status: input.payment_status,
-      paid_at: input.payment_status === "paid" ? input.paid_at : null,
-    })
+    .insert({ owner_id: ownerId, ...details, source: "manual" })
     .select()
     .single();
+
+  if (error) throw error;
+  return data;
+}
+
+// Payments actually marked paid for these trainees, for the next-payment date.
+export async function fetchPaidPayments(traineeIds) {
+  if (traineeIds.length === 0) return [];
+
+  const { data, error } = await supabase
+    .from("trainee_monthly_payments")
+    .select("trainee_id, payment_status, paid_at, notes")
+    .in("trainee_id", traineeIds)
+    .eq("payment_status", "paid")
+    .not("paid_at", "is", null)
+    .order("paid_at", { ascending: false });
 
   if (error) throw error;
   return data;

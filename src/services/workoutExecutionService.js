@@ -77,11 +77,33 @@ export async function fetchOpenWorkout(traineeId) {
 
   const { data: exercises, error: exercisesError } = await supabase
     .from("workout_log_exercises")
-    .select("id, workout_log_id, exercise_order, exercise_name, prescribed_sets, prescribed_reps, target_weight_kg, target_rir, rest_seconds, trainer_notes, trainee_notes, is_completed, video_path, video_uploaded_at")
+    .select("id, workout_log_id, exercise_order, exercise_name, prescribed_sets, prescribed_reps, target_weight_kg, target_rir, rest_seconds, trainer_notes, trainee_notes, is_completed, video_path, video_uploaded_at, source_program_exercise_id")
     .eq("workout_log_id", workout.id)
     .order("exercise_order", { ascending: true });
 
   if (exercisesError) throw exercisesError;
+
+  // The trainer's demo video stays on the program exercise; a missing one
+  // only hides the button.
+  const sourceIds = [
+    ...new Set((exercises ?? []).map((exercise) => exercise.source_program_exercise_id).filter(Boolean)),
+  ];
+  const demoVideoPaths = new Map();
+  if (sourceIds.length > 0) {
+    const { data: programExercises, error: demoError } = await supabase
+      .from("program_exercises")
+      .select("id, demo_video_path")
+      .in("id", sourceIds)
+      .not("demo_video_path", "is", null);
+
+    if (demoError) {
+      console.error("Demo videos load error:", demoError);
+    } else {
+      for (const row of programExercises ?? []) {
+        demoVideoPaths.set(row.id, row.demo_video_path);
+      }
+    }
+  }
 
   const exerciseIds = (exercises ?? []).map((exercise) => exercise.id);
   let sets = [];
@@ -113,6 +135,7 @@ export async function fetchOpenWorkout(traineeId) {
     ...workout,
     exercises: exercisesWithVideos.map((exercise) => ({
       ...exercise,
+      demo_video_path: demoVideoPaths.get(exercise.source_program_exercise_id) ?? null,
       sets: sets.filter((set) => set.workout_log_exercise_id === exercise.id),
     })),
   };

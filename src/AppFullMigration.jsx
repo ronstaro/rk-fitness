@@ -2,6 +2,8 @@
 import { fetchTrainees, createTrainee, updateTrainee, updateTraineeStatus, deleteTrainee, deleteTraineeErrorMessage } from "./services/traineesService.js";
 import { fetchSessions } from "./services/sessionsService.js";
 import { fetchActivePrograms } from "./services/programsService.js";
+import { fetchPaidPayments } from "./services/financeService.js";
+import { PAYMENT_METHODS, onlinePaymentState, onlinePaymentText, paymentMethodLabel } from "./lib/payments.js";
 import { fetchTraineeHomeData, fetchTraineeProfile, fetchTraineeProgramData } from "./services/traineeHomeService.js";
 import { fetchCompletedWorkouts, fetchOpenWorkout, finishWorkout, startWorkout, updateWorkoutExercise, updateWorkoutSet, uploadExerciseVideo } from "./services/workoutExecutionService.js";
 import Dashboard from "./components/Dashboard.jsx";
@@ -11,6 +13,7 @@ import Programs from "./components/Programs.jsx";
 import Schedule from "./components/Schedule.jsx";
 import WeeklyGoals from "./components/WeeklyGoals.jsx";
 import TraineeInviteCard from "./components/TraineeInviteCard.jsx";
+import ExerciseDemoVideo from "./components/ExerciseDemoVideo.jsx";
 import {
   claimNavigationMemory,
   clearNavigationMemory,
@@ -71,6 +74,8 @@ function Trainees({ onOpenPrograms }) {
   const [activeProgramsByTrainee, setActiveProgramsByTrainee] = useState({});
   const [sessions, setSessions] = useState([]);
   const [selectedTraineeId, setSelectedTraineeId] = useRememberedState("trainees:selected", "", isRememberedId);
+  const [paidPayments, setPaidPayments] = useState([]);
+  const [paidPaymentsError, setPaidPaymentsError] = useState(false);
   const actionLockRef = useRef(false);
 
   async function handleRetry() {
@@ -138,6 +143,29 @@ function Trainees({ onOpenPrograms }) {
       active = false;
     };
   }, []);
+
+  // Received payments of online trainees, for their next expected payment.
+  const onlineTraineeIds = trainees
+    .filter((t) => t.training_type === "אונליין")
+    .map((t) => t.id)
+    .join(",");
+  useEffect(() => {
+    if (!hasLoadedTrainees) return;
+    let active = true;
+    fetchPaidPayments(onlineTraineeIds ? onlineTraineeIds.split(",") : [])
+      .then((rows) => {
+        if (!active) return;
+        setPaidPayments(rows);
+        setPaidPaymentsError(false);
+      })
+      .catch((err) => {
+        console.error("Paid payments fetch error:", err);
+        if (active) setPaidPaymentsError(true);
+      });
+    return () => {
+      active = false;
+    };
+  }, [hasLoadedTrainees, onlineTraineeIds]);
 
   // A remembered trainee that was deleted meanwhile falls back to the list.
   useEffect(() => {
@@ -325,7 +353,10 @@ function Trainees({ onOpenPrograms }) {
 
   const statusOptions = ["פעיל", "בהקפאה", "דורש מעקב", "הסתיים"];
   const trainingTypeOptions = ["אישי", "אונליין", "קבוצתי"];
-  const paymentMethodOptions = ["אשראי", "העברה בנקאית", "Bit", "מזומן", "אחר"];
+  // A legacy value such as "Bit" stays selectable until it is changed.
+  const paymentMethodOptions = form.paymentMethod && !PAYMENT_METHODS.includes(form.paymentMethod)
+    ? [form.paymentMethod, ...PAYMENT_METHODS]
+    : PAYMENT_METHODS;
   const paymentStatusOptions = ["שולם", "ממתין לתשלום", "באיחור"];
   const selectedTrainee = trainees.find((trainee) => trainee.id === selectedTraineeId);
 
@@ -476,6 +507,8 @@ function Trainees({ onOpenPrograms }) {
     const age = ageFromBirthDate(selectedTrainee.birth_date);
     const years = trainingYears(selectedTrainee.start_date);
     const busy = rowActionId === selectedTrainee.id;
+    // If the payments could not be loaded, fall back to the manual date.
+    const onlinePayment = paidPaymentsError ? null : onlinePaymentState(selectedTrainee, paidPayments);
 
     return (
       <div className="trainee-profile slide-in">
@@ -602,10 +635,10 @@ function Trainees({ onOpenPrograms }) {
                 <input className="form-input" type="number" min="0" step="0.01" value={form.packagePrice} onChange={(event) => handleField("packagePrice", event.target.value)} placeholder="₪" />
               </div>
               <div className="form-group">
-                <label className="form-label">שיטת תשלום</label>
+                <label className="form-label">אמצעי תשלום רגיל</label>
                 <select className="form-select" value={form.paymentMethod} onChange={(event) => handleField("paymentMethod", event.target.value)}>
                   <option value="">לא הוגדר</option>
-                  {paymentMethodOptions.map((method) => <option key={method}>{method}</option>)}
+                  {paymentMethodOptions.map((method) => <option key={method} value={method}>{paymentMethodLabel(method)}</option>)}
                 </select>
               </div>
               <div className="form-group">
@@ -659,9 +692,31 @@ function Trainees({ onOpenPrograms }) {
               <div className="trainee-detail-list">
                 <div><span className="trainee-detail-icon">📦</span><span><small>חבילה</small><strong>{selectedTrainee.package_name || "לא הוזן"}</strong></span></div>
                 <div><span className="trainee-detail-icon">💰</span><span><small>מחיר</small><strong>{formatPrice(selectedTrainee.package_price)}</strong></span></div>
-                <div><span className="trainee-detail-icon">💳</span><span><small>שיטת תשלום</small><strong>{selectedTrainee.payment_method || "לא הוזן"}</strong></span></div>
+                <div><span className="trainee-detail-icon">💳</span><span><small>אמצעי תשלום רגיל</small><strong>{paymentMethodLabel(selectedTrainee.payment_method) || "לא הוזן"}</strong></span></div>
                 <div><span className="trainee-detail-icon">✅</span><span><small>סטטוס</small><strong>{selectedTrainee.payment_status || "לא הוזן"}</strong></span></div>
-                <div><span className="trainee-detail-icon">🗓️</span><span><small>תשלום הבא</small><strong>{formatDate(selectedTrainee.next_payment_date)}</strong></span></div>
+                {onlinePayment ? (
+                  <div>
+                    <span className="trainee-detail-icon">🗓️</span>
+                    <span>
+                      <small>תשלום הבא</small>
+                      <strong>
+                        {onlinePayment.nextDate
+                          ? `${formatDate(onlinePayment.nextDate)} · ${onlinePaymentText(onlinePayment)}`
+                          : "אין עדיין תשלום שהתקבל"}
+                      </strong>
+                      <small className={`trainee-next-payment-note${onlinePayment.status === "overdue" ? " overdue" : ""}`}>
+                        {onlinePayment.source === "calculated"
+                          ? `לפי התשלום האחרון שהתקבל (${formatDate(onlinePayment.anchorDate)})`
+                          : onlinePayment.source === "manual"
+                            ? "תאריך ידני מהפרופיל"
+                            : "יחושב אוטומטית אחרי שיסומן תשלום ב״כספים״"}
+                        {onlinePayment.hasFuturePaidAt && " · יש תשלום עם תאריך עתידי שלא נכלל בחישוב"}
+                      </small>
+                    </span>
+                  </div>
+                ) : (
+                  <div><span className="trainee-detail-icon">🗓️</span><span><small>תשלום הבא</small><strong>{formatDate(selectedTrainee.next_payment_date)}</strong></span></div>
+                )}
               </div>
             </section>
           </div>
@@ -833,10 +888,10 @@ function Trainees({ onOpenPrograms }) {
               <input type="number" min="0" step="0.01" value={form.packagePrice} onChange={(e) => handleField("packagePrice", e.target.value)} className="form-input" placeholder="₪" />
             </div>
             <div className="form-group">
-              <label className="form-label">שיטת תשלום</label>
+              <label className="form-label">אמצעי תשלום רגיל</label>
               <select value={form.paymentMethod} onChange={(e) => handleField("paymentMethod", e.target.value)} className="form-select">
                 <option value="">לא הוגדר</option>
-                {paymentMethodOptions.map((method) => <option key={method}>{method}</option>)}
+                {paymentMethodOptions.map((method) => <option key={method} value={method}>{paymentMethodLabel(method)}</option>)}
               </select>
             </div>
             <div className="form-group">
@@ -1723,6 +1778,8 @@ function Workout() {
                 <p className="trainee-live-trainer-note">💬 {exercise.trainer_notes}</p>
               )}
 
+              <ExerciseDemoVideo path={exercise.demo_video_path} exerciseName={exercise.exercise_name} className="btn btn-outline btn-sm trainee-demo-video-button" />
+
               <div className="trainee-live-targets">
                 <article>
                   <span>יעד משקל</span>
@@ -1930,7 +1987,11 @@ function Workout() {
                     <article className="trainee-workout-exercise" key={exercise.id}>
                       <div className="trainee-workout-exercise-name">
                         <span>{exercise.exercise_order}</span>
-                        <div><strong>{exercise.name}</strong>{exercise.notes && <p>{exercise.notes}</p>}</div>
+                        <div>
+                          <strong>{exercise.name}</strong>
+                          {exercise.notes && <p>{exercise.notes}</p>}
+                          <ExerciseDemoVideo path={exercise.demo_video_path} exerciseName={exercise.name} className="btn btn-outline btn-sm trainee-demo-video-button" />
+                        </div>
                       </div>
                       <dl className="trainee-workout-exercise-data">
                         <div><dt>סטים</dt><dd>{exercise.sets}</dd></div>

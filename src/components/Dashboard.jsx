@@ -4,6 +4,8 @@ import { fetchDashboardPayments } from "../services/dashboardService.js";
 import { fetchActivePrograms } from "../services/programsService.js";
 import { fetchSessions } from "../services/sessionsService.js";
 import { fetchTrainees } from "../services/traineesService.js";
+import { fetchPaidPayments } from "../services/financeService.js";
+import { onlinePaymentState, onlinePaymentText } from "../lib/payments.js";
 
 function localDateKey(date = new Date()) {
   const year = date.getFullYear();
@@ -67,6 +69,7 @@ export default function Dashboard({ onNavigate }) {
   const [sessions, setSessions] = useState([]);
   const [programs, setPrograms] = useState([]);
   const [payments, setPayments] = useState([]);
+  const [paidPayments, setPaidPayments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
 
@@ -87,6 +90,20 @@ export default function Dashboard({ onNavigate }) {
       setSessions(sessionRows);
       setPrograms(programRows);
       setPayments(paymentRows);
+
+      // The next-payment reminders are optional; the rest of the day still loads.
+      try {
+        setPaidPayments(
+          await fetchPaidPayments(
+            traineeRows
+              .filter((trainee) => trainee.status === "פעיל" && trainee.training_type === "אונליין")
+              .map((trainee) => trainee.id)
+          )
+        );
+      } catch (paidError) {
+        console.error("Dashboard paid payments error:", paidError);
+        setPaidPayments([]);
+      }
     } catch (error) {
       console.error("Dashboard load error:", error);
       setLoadError("לא ניתן לטעון את נתוני היום כרגע.");
@@ -137,6 +154,11 @@ export default function Dashboard({ onNavigate }) {
           trainee.birthdayInDays !== null && trainee.birthdayInDays <= 7
       )
       .sort((a, b) => a.birthdayInDays - b.birthdayInDays);
+    // Online trainees whose next payment is overdue or due within a few days.
+    const onlinePaymentsDue = activeTrainees
+      .map((trainee) => ({ trainee, state: onlinePaymentState(trainee, paidPayments) }))
+      .filter(({ state }) => state?.status === "overdue" || state?.status === "due-soon")
+      .sort((a, b) => a.state.daysUntil - b.state.daysUntil);
 
     const upcomingSessions = sessions
       .filter(
@@ -180,13 +202,14 @@ export default function Dashboard({ onNavigate }) {
       newLeads,
       followUps,
       unpaidPayments,
+      onlinePaymentsDue,
       monthlyIncome,
       birthdays,
       upcomingSessions,
       weeklyProgress,
       traineeNames,
     };
-  }, [leads, payments, programs, sessions, trainees]);
+  }, [leads, paidPayments, payments, programs, sessions, trainees]);
 
   if (loading) {
     return (
@@ -210,6 +233,7 @@ export default function Dashboard({ onNavigate }) {
   const openTasks =
     dashboard.followUps.length +
     dashboard.unpaidPayments.length +
+    dashboard.onlinePaymentsDue.length +
     dashboard.birthdays.length;
 
   return (
@@ -381,6 +405,22 @@ export default function Dashboard({ onNavigate }) {
                   <span>
                     <strong>תשלום ממתין: {payment.trainee_name}</strong>
                     <small>{formatCurrency(payment.amount)}</small>
+                  </span>
+                </button>
+              ))}
+              {dashboard.onlinePaymentsDue.slice(0, 3).map(({ trainee, state }) => (
+                <button
+                  type="button"
+                  className="dashboard-task-row"
+                  key={`online-payment-${trainee.id}`}
+                  onClick={() => onNavigate("revenue")}
+                >
+                  <span className="dashboard-task-icon">{state.status === "overdue" ? "⏰" : "🗓️"}</span>
+                  <span>
+                    <strong>תשלום אונליין: {trainee.full_name}</strong>
+                    <small>
+                      {formatDate(state.nextDate)} · {onlinePaymentText(state)}
+                    </small>
                   </span>
                 </button>
               ))}

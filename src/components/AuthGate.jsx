@@ -10,6 +10,7 @@ import {
 import { InviteAuthForm, InviteInvalidScreen, InviteLinking } from "./InviteFlow.jsx";
 import { clearRecoveryFlag, initialAuthRedirect, storeRecoveryFlag } from "../services/authService.js";
 import { ForgotPasswordForm, ResetPasswordForm } from "./PasswordRecovery.jsx";
+import { clearNavigationMemory } from "../lib/navigationMemory.js";
 
 const LINK_ERROR_NOTICE = "הקישור שנפתח אינו בתוקף או שכבר נעשה בו שימוש. אפשר להתחבר, או לבקש קישור חדש לאיפוס סיסמה.";
 const RECOVERY_EXPIRED_NOTICE = "קישור האיפוס אינו בתוקף. יש לבקש קישור חדש.";
@@ -46,6 +47,8 @@ export default function AuthGate({ children }) {
   const [recovery, setRecovery] = useState(initialAuthRedirect.recovery);
   const [signedOutView, setSignedOutView] = useState("login"); // login | forgot
   const [notice, setNotice] = useState(initialAuthRedirect.linkError ? LINK_ERROR_NOTICE : "");
+  // The user whose access context is currently loaded and shown.
+  const accessUserIdRef = useRef(null);
 
   useEffect(() => {
     if (!isSupabaseConfigured) {
@@ -55,13 +58,17 @@ export default function AuthGate({ children }) {
 
     let active = true;
 
-    async function loadAccessContext() {
+    async function loadAccessContext(userId) {
       try {
         const context = await getAccessContext();
-        if (active) setAccessContext(context);
+        if (active) {
+          accessUserIdRef.current = userId;
+          setAccessContext(context);
+        }
       } catch (accessError) {
         console.warn("Access check failed:", accessError?.name);
         if (active) {
+          accessUserIdRef.current = null;
           setAccessContext(null);
           setError("לא ניתן לבדוק את הרשאות החשבון. נסה להתחבר מחדש.");
         }
@@ -86,7 +93,7 @@ export default function AuthGate({ children }) {
         }
 
         if (data.session) {
-          await loadAccessContext();
+          await loadAccessContext(data.session.user.id);
         }
       } catch (sessionError) {
         console.warn("Session check failed:", sessionError?.name);
@@ -103,22 +110,32 @@ export default function AuthGate({ children }) {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, newSession) => {
       if (event === "PASSWORD_RECOVERY") storeRecoveryFlag();
-      if (event === "SIGNED_OUT") clearRecoveryFlag();
+      if (event === "SIGNED_OUT") {
+        clearRecoveryFlag();
+        clearNavigationMemory();
+      }
 
       if (active) {
         if (event === "PASSWORD_RECOVERY") setRecovery(true);
         if (event === "SIGNED_OUT") setRecovery(false);
         // Same user, fresh tokens or new password: keep the current screen
-        // instead of reloading access and remounting the app.
-        if ((event === "TOKEN_REFRESHED" || event === "USER_UPDATED") && newSession) {
+        // instead of reloading access and remounting the app. Supabase also
+        // sends SIGNED_IN for the same user every time the tab becomes visible
+        // again, which used to send the app back to its first screen.
+        const sameUser = Boolean(newSession) && newSession.user.id === accessUserIdRef.current;
+        if (
+          newSession &&
+          (event === "TOKEN_REFRESHED" || event === "USER_UPDATED" || (sameUser && event === "SIGNED_IN"))
+        ) {
           setSession(newSession);
           return;
         }
+        accessUserIdRef.current = null;
         setSession(newSession);
         setAccessContext(null);
         if (newSession) {
           setLoading(true);
-          setTimeout(loadAccessContext, 0);
+          setTimeout(() => loadAccessContext(newSession.user.id), 0);
         } else {
           setLoading(false);
         }
@@ -209,6 +226,7 @@ export default function AuthGate({ children }) {
       setAccessContext(await getAccessContext());
     } catch (accessError) {
       console.warn("Access check failed:", accessError?.name);
+      accessUserIdRef.current = null;
       setAccessContext(null);
     } finally {
       setLoading(false);
@@ -324,6 +342,7 @@ export default function AuthGate({ children }) {
       signingOut,
       signOutError,
       accountRole: accessContext?.role,
+      accountUserId: session.user.id,
     });
   }
 

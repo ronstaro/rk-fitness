@@ -10,6 +10,7 @@ import {
   updateMonthlyPayment,
   updateMonthlyPaymentDetails,
 } from "../services/financeService.js";
+import { useRememberedState } from "../lib/navigationMemory.js";
 
 const PAYMENT_METHODS = ["העברה בנקאית", "ביט", "פייבוקס", "אשראי", "מזומן", "אחר"];
 
@@ -83,7 +84,11 @@ function emptyPayment(selectedMonth) {
 }
 
 export default function Finance() {
-  const [selectedMonth, setSelectedMonth] = useState(monthKey);
+  const [selectedMonth, setSelectedMonth] = useRememberedState(
+    "revenue:month",
+    monthKey,
+    (value) => /^\d{4}-\d{2}$/.test(value) && value <= monthKey()
+  );
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
@@ -619,6 +624,10 @@ export default function Finance() {
               <label className="form-label">אמצעי תשלום</label>
               <select className="form-select" value={paymentForm.paymentMethod} onChange={(event) => setPaymentForm((form) => ({ ...form, paymentMethod: event.target.value }))}>
                 <option value="">לא הוגדר</option>
+                {/* Older rows may hold a method from the trainee profile list (e.g. "Bit"); show it instead of a blank choice. */}
+                {paymentForm.paymentMethod && !PAYMENT_METHODS.includes(paymentForm.paymentMethod) && (
+                  <option value={paymentForm.paymentMethod}>{paymentForm.paymentMethod}</option>
+                )}
                 {PAYMENT_METHODS.map((method) => <option key={method}>{method}</option>)}
               </select>
             </div>

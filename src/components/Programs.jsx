@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { fetchTrainees } from "../services/traineesService.js";
+import { useRememberedState } from "../lib/navigationMemory.js";
 import {
   activateProgram,
   createProgram,
@@ -89,8 +90,16 @@ function Field({ label, children }) {
 export default function Programs({ initialTraineeId = "" }) {
   const [trainees, setTrainees] = useState([]);
   const [programs, setPrograms] = useState([]);
-  const [selectedTraineeId, setSelectedTraineeId] = useState(initialTraineeId);
-  const [selectedProgramId, setSelectedProgramId] = useState("");
+  const [selectedTraineeId, setSelectedTraineeId] = useRememberedState(
+    "programs:trainee",
+    initialTraineeId,
+    (value) => typeof value === "string" && value.length <= 64
+  );
+  const [selectedProgramId, setSelectedProgramId] = useRememberedState(
+    "programs:program",
+    "",
+    (value) => typeof value === "string" && value.length <= 64
+  );
   const [days, setDays] = useState([]);
   const [loading, setLoading] = useState(true);
   const [detailsLoading, setDetailsLoading] = useState(false);
@@ -134,7 +143,9 @@ export default function Programs({ initialTraineeId = "" }) {
       setTrainees(traineeRows);
       setPrograms(programRows);
 
-      const requestedTraineeId = initialTraineeId || selectedTraineeId;
+      const requestedTraineeId = [initialTraineeId, selectedTraineeId].find(
+        (id) => id && traineeRows.some((trainee) => trainee.id === id)
+      ) || "";
       const firstProgram = requestedTraineeId
         ? programRows.find((program) => program.trainee_id === requestedTraineeId)
         : null;

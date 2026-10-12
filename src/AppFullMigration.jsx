@@ -11,6 +11,17 @@ import Programs from "./components/Programs.jsx";
 import Schedule from "./components/Schedule.jsx";
 import WeeklyGoals from "./components/WeeklyGoals.jsx";
 import TraineeInviteCard from "./components/TraineeInviteCard.jsx";
+import {
+  claimNavigationMemory,
+  clearNavigationMemory,
+  readNavigation,
+  useRememberedState,
+  writeNavigation,
+} from "./lib/navigationMemory.js";
+
+function isRememberedId(value) {
+  return typeof value === "string" && value.length > 0 && value.length <= 64;
+}
 
 function whatsappLink(phone) {
   let digits = phone.replace(/\D/g, "");
@@ -59,7 +70,7 @@ function Trainees({ onOpenPrograms }) {
   const [rowError, setRowError] = useState("");
   const [activeProgramsByTrainee, setActiveProgramsByTrainee] = useState({});
   const [sessions, setSessions] = useState([]);
-  const [selectedTraineeId, setSelectedTraineeId] = useState("");
+  const [selectedTraineeId, setSelectedTraineeId] = useRememberedState("trainees:selected", "", isRememberedId);
   const actionLockRef = useRef(false);
 
   async function handleRetry() {
@@ -127,6 +138,13 @@ function Trainees({ onOpenPrograms }) {
       active = false;
     };
   }, []);
+
+  // A remembered trainee that was deleted meanwhile falls back to the list.
+  useEffect(() => {
+    if (hasLoadedTrainees && selectedTraineeId && !trainees.some((t) => t.id === selectedTraineeId)) {
+      setSelectedTraineeId("");
+    }
+  }, [hasLoadedTrainees, selectedTraineeId, setSelectedTraineeId, trainees]);
 
   useEffect(() => {
     if (!hasLoadedTrainees) return;
@@ -1449,14 +1467,6 @@ function Workout() {
     });
   }
 
-  function formatRest(seconds) {
-    if (seconds == null) return "לא הוגדר";
-    if (seconds < 60) return `${seconds} שנ׳`;
-    const minutes = Math.floor(seconds / 60);
-    const remainingSeconds = seconds % 60;
-    return remainingSeconds ? `${minutes}:${String(remainingSeconds).padStart(2, "0")} דק׳` : `${minutes} דק׳`;
-  }
-
   function formatWorkoutStart(value) {
     return new Date(value).toLocaleString("he-IL", {
       day: "numeric",
@@ -1696,7 +1706,7 @@ function Workout() {
                   <span>{exercise.exercise_order}</span>
                   <div>
                     <strong>{exercise.exercise_name}</strong>
-                    <p>{exercise.prescribed_sets} סטים · מנוחה {formatRest(exercise.rest_seconds)}</p>
+                    <p>{exercise.prescribed_sets} סטים</p>
                   </div>
                 </div>
                 <button
@@ -1927,7 +1937,6 @@ function Workout() {
                         <div><dt>חזרות</dt><dd>{exercise.reps}</dd></div>
                         <div><dt>משקל יעד</dt><dd>{exercise.target_weight_kg == null ? "—" : `${exercise.target_weight_kg} ק״ג`}</dd></div>
                         <div><dt>RIR</dt><dd>{exercise.target_rir ?? "—"}</dd></div>
-                        <div><dt>מנוחה</dt><dd>{formatRest(exercise.rest_seconds)}</dd></div>
                       </dl>
                     </article>
                   ))}
@@ -2404,11 +2413,37 @@ function NavItem({ item, active, onClick }) {
   );
 }
 
-export default function AppFullMigration({ onLogout, signingOut = false, signOutError = "", accountRole = "trainee" }) {
-  const [view, setView] = useState(accountRole === "admin" ? "dashboard" : "trainee-home");
-  const [role, setRole] = useState(accountRole);
+const ADMIN_VIEWS = new Set(ADMIN_GROUPS.flatMap((group) => group.items.map((item) => item.id)).filter(Boolean));
+const TRAINEE_VIEWS = new Set(TRAINEE_GROUPS.flatMap((group) => group.items.map((item) => item.id)));
+
+function defaultView(role) {
+  return role === "admin" ? "dashboard" : "trainee-home";
+}
+
+// Only an admin account may come back to the admin side; a remembered view
+// must belong to the side it is restored on.
+function restoreScreen(accountRole, accountUserId) {
+  claimNavigationMemory(accountUserId);
+  const rememberedRole = readNavigation("app:role", accountRole);
+  const role = accountRole === "admin" && (rememberedRole === "admin" || rememberedRole === "trainee")
+    ? rememberedRole
+    : accountRole;
+  const allowedViews = role === "admin" ? ADMIN_VIEWS : TRAINEE_VIEWS;
+  const view = readNavigation("app:view", defaultView(role), (value) => allowedViews.has(value));
+  return { role, view };
+}
+
+export default function AppFullMigration({ onLogout, signingOut = false, signOutError = "", accountRole = "trainee", accountUserId = "" }) {
+  const [initialScreen] = useState(() => restoreScreen(accountRole, accountUserId));
+  const [view, setView] = useState(initialScreen.view);
+  const [role, setRole] = useState(initialScreen.role);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [selectedProgramTraineeId, setSelectedProgramTraineeId] = useState("");
+
+  useEffect(() => {
+    writeNavigation("app:role", role);
+    writeNavigation("app:view", view);
+  }, [role, view]);
 
   function toggleRole() {
     if (accountRole !== "admin") return;
@@ -2419,6 +2454,9 @@ export default function AppFullMigration({ onLogout, signingOut = false, signOut
   }
 
   function selectView(nextView) {
+    // Opening a screen from the menu starts it fresh, as before; only a reload
+    // or remount brings back the remembered record or month.
+    if (nextView !== view) clearNavigationMemory(`${nextView}:`);
     if (nextView === "programs") {
       setSelectedProgramTraineeId("");
     }
@@ -2427,6 +2465,7 @@ export default function AppFullMigration({ onLogout, signingOut = false, signOut
   }
 
   function openProgramsForTrainee(traineeId) {
+    clearNavigationMemory("programs:");
     setSelectedProgramTraineeId(traineeId);
     setView("programs");
     setSidebarOpen(false);

@@ -7,6 +7,7 @@ import {
   updateLead,
   updateLeadStatus,
 } from "../services/leadsService.js";
+import { useRememberedState } from "../lib/navigationMemory.js";
 
 const STATUSES = [
   "חדש",
@@ -335,7 +336,11 @@ export default function Leads() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [actionError, setActionError] = useState("");
-  const [selectedLeadId, setSelectedLeadId] = useState(null);
+  const [selectedLeadId, setSelectedLeadId] = useRememberedState(
+    "leads:selected",
+    null,
+    (value) => typeof value === "string" && value.length <= 64
+  );
   const [filter, setFilter] = useState("הכול");
   const [formLead, setFormLead] = useState(undefined);
   const [showForm, setShowForm] = useState(false);

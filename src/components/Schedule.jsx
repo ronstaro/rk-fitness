@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { fetchTrainees } from "../services/traineesService.js";
+import { readNavigation, writeNavigation } from "../lib/navigationMemory.js";
 import {
   createSession,
   deleteSession,
@@ -141,7 +142,10 @@ function hasOverlap(date, startTime, duration, sessions, ignoredId = null) {
 export default function Schedule() {
   const [sessions, setSessions] = useState([]);
   const [trainees, setTrainees] = useState([]);
-  const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date()));
+  const [weekStart, setWeekStart] = useState(() => {
+    const remembered = readNavigation("schedule:week", null, (value) => /^\d{4}-\d{2}-\d{2}$/.test(value));
+    return startOfWeek(remembered ? dateFromKey(remembered) : new Date());
+  });
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [showForm, setShowForm] = useState(false);
@@ -178,6 +182,10 @@ export default function Schedule() {
       setLoading(false);
     }
   }
+
+  useEffect(() => {
+    writeNavigation("schedule:week", localDateKey(weekStart));
+  }, [weekStart]);
 
   useEffect(() => {
     let active = true;

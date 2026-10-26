@@ -16,6 +16,7 @@ import {
   updateProgramExercise,
   removeExerciseDemoVideo,
   uploadExerciseDemoVideo,
+  validateExerciseDemoVideo,
 } from "../services/programsService.js";
 import ExerciseDemoVideo from "./ExerciseDemoVideo.jsx";
 
@@ -81,6 +82,102 @@ const secondaryButton = (disabled, danger = false) => ({
   opacity: disabled ? 0.6 : 1,
 });
 
+const DEMO_VIDEO_ACCEPT = "video/mp4,video/quicktime,video/webm,video/x-m4v";
+
+function demoVideoErrorMessage(error) {
+  if (error?.message === "unsupported-video") {
+    return "סוג הקובץ לא נתמך. אפשר להעלות MP4, MOV, WEBM או M4V.";
+  }
+  if (error?.message === "video-too-large") {
+    return "הסרטון גדול מדי. הגודל המרבי הוא 50MB.";
+  }
+  return "לא ניתן להעלות את הסרטון. נסו שוב.";
+}
+
+// The trainer's demo video for one program exercise. A new exercise has no
+// row yet, so its file waits here and is uploaded right after the save.
+function DemoVideoSection({
+  exercise,
+  exerciseName,
+  pendingFile,
+  busy,
+  working,
+  error,
+  onPick,
+  onRemove,
+  onClearPending,
+}) {
+  function picker(label) {
+    return (
+      <label className="program-demo-video-upload" style={secondaryButton(busy)}>
+        {label}
+        <input
+          type="file"
+          accept={DEMO_VIDEO_ACCEPT}
+          disabled={busy}
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            event.target.value = "";
+            if (file) onPick(file);
+          }}
+        />
+      </label>
+    );
+  }
+
+  return (
+    <div className="program-demo-video">
+      <span className="program-demo-video-title">🎬 סרטון הדגמה</span>
+      {working ? (
+        <span>מעדכן סרטון…</span>
+      ) : exercise?.demo_video_path ? (
+        <>
+          <ExerciseDemoVideo
+            path={exercise.demo_video_path}
+            exerciseName={exerciseName}
+            label="▶ צפייה בסרטון"
+            className=""
+            style={secondaryButton(false)}
+          />
+          {picker("החלפת סרטון")}
+          <button
+            type="button"
+            onClick={onRemove}
+            disabled={busy}
+            style={secondaryButton(busy, true)}
+          >
+            הסרת סרטון
+          </button>
+        </>
+      ) : pendingFile ? (
+        <>
+          <span className="program-demo-video-pending">
+            {pendingFile.name} · יעלה בשמירת התרגיל
+          </span>
+          <button
+            type="button"
+            onClick={onClearPending}
+            disabled={busy}
+            style={secondaryButton(busy)}
+          >
+            ביטול בחירה
+          </button>
+        </>
+      ) : (
+        <>
+          <span>אין סרטון</span>
+          {picker("העלאת סרטון")}
+        </>
+      )}
+      {error && (
+        <div className="program-demo-video-error" role="alert">
+          {error}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Field({ label, children }) {
   return (
     <div>
@@ -123,6 +220,8 @@ export default function Programs({ initialTraineeId = "" }) {
   const [exerciseDayId, setExerciseDayId] = useState("");
   const [editingExerciseId, setEditingExerciseId] = useState("");
   const [exerciseForm, setExerciseForm] = useState(EMPTY_EXERCISE);
+  const [newDemoFile, setNewDemoFile] = useState(null);
+  const [demoErrors, setDemoErrors] = useState({});
 
   const selectedProgram = programs.find((program) => program.id === selectedProgramId);
   const visiblePrograms = useMemo(
@@ -456,6 +555,8 @@ export default function Programs({ initialTraineeId = "" }) {
       ...EMPTY_EXERCISE,
       exerciseOrder: String(nextOrder),
     });
+    setNewDemoFile(null);
+    setDemoErrors({});
     setActionError("");
   }
 
@@ -474,6 +575,8 @@ export default function Programs({ initialTraineeId = "" }) {
         exercise.rest_seconds == null ? "" : String(exercise.rest_seconds),
       notes: exercise.notes || "",
     });
+    setNewDemoFile(null);
+    setDemoErrors({});
     setActionError("");
   }
 
@@ -535,9 +638,20 @@ export default function Programs({ initialTraineeId = "" }) {
     };
 
     try {
-      const saved = editingExerciseId
+      let saved = editingExerciseId
         ? await updateProgramExercise(editingExerciseId, payload)
         : await createProgramExercise(payload);
+
+      if (!editingExerciseId && newDemoFile) {
+        try {
+          saved = await uploadExerciseDemoVideo(saved, newDemoFile);
+        } catch (uploadError) {
+          console.error("Demo video upload error:", uploadError);
+          setDemoErrors({
+            [saved.id]: `התרגיל נשמר, אבל הסרטון לא עלה. ${demoVideoErrorMessage(uploadError)}`,
+          });
+        }
+      }
 
       setDays((current) =>
         current.map((day) => {
@@ -558,6 +672,7 @@ export default function Programs({ initialTraineeId = "" }) {
       setExerciseDayId("");
       setEditingExerciseId("");
       setExerciseForm(EMPTY_EXERCISE);
+      setNewDemoFile(null);
     } catch (error) {
       console.error("Program exercise save error:", error);
       setActionError("לא ניתן לשמור את התרגיל.");
@@ -608,21 +723,19 @@ export default function Programs({ initialTraineeId = "" }) {
     );
   }
 
+  function setDemoError(key, message) {
+    setDemoErrors((current) => ({ ...current, [key]: message }));
+  }
+
   async function handleDemoVideoUpload(dayId, exercise, file) {
     if (!file) return;
     setActionKey(`demo-${exercise.id}`);
-    setActionError("");
+    setDemoError(exercise.id, "");
     try {
       replaceExercise(dayId, await uploadExerciseDemoVideo(exercise, file));
     } catch (error) {
       console.error("Demo video upload error:", error);
-      setActionError(
-        error.message === "unsupported-video"
-          ? "סוג הקובץ לא נתמך. אפשר להעלות MP4, MOV, WEBM או M4V."
-          : error.message === "video-too-large"
-            ? "הסרטון גדול מדי. הגודל המרבי הוא 50MB."
-            : "לא ניתן להעלות את הסרטון. נסו שוב."
-      );
+      setDemoError(exercise.id, demoVideoErrorMessage(error));
     } finally {
       setActionKey("");
     }
@@ -631,15 +744,40 @@ export default function Programs({ initialTraineeId = "" }) {
   async function handleDemoVideoRemove(dayId, exercise) {
     if (!window.confirm(`להסיר את סרטון ההדגמה של "${exercise.name}"?`)) return;
     setActionKey(`demo-${exercise.id}`);
-    setActionError("");
+    setDemoError(exercise.id, "");
     try {
       replaceExercise(dayId, await removeExerciseDemoVideo(exercise));
     } catch (error) {
       console.error("Demo video remove error:", error);
-      setActionError("לא ניתן להסיר את הסרטון. נסו שוב.");
+      setDemoError(exercise.id, "לא ניתן להסיר את הסרטון. נסו שוב.");
     } finally {
       setActionKey("");
     }
+  }
+
+  function handlePickNewDemoVideo(file) {
+    try {
+      validateExerciseDemoVideo(file);
+      setNewDemoFile(file);
+      setDemoError("new", "");
+    } catch (error) {
+      setNewDemoFile(null);
+      setDemoError("new", demoVideoErrorMessage(error));
+    }
+  }
+
+  function renderDemoVideoSection(dayId, exercise) {
+    return (
+      <DemoVideoSection
+        exercise={exercise}
+        exerciseName={exercise.name}
+        busy={busy}
+        working={actionKey === `demo-${exercise.id}`}
+        error={demoErrors[exercise.id]}
+        onPick={(file) => handleDemoVideoUpload(dayId, exercise, file)}
+        onRemove={() => handleDemoVideoRemove(dayId, exercise)}
+      />
+    );
   }
 
   function formatDate(value) {
@@ -1774,6 +1912,23 @@ export default function Programs({ initialTraineeId = "" }) {
                                 style={{ ...inputStyle, marginTop: 8 }}
                               />
                             </Field>
+                            {(() => {
+                              const editingExercise = day.exercises.find(
+                                (exercise) => exercise.id === editingExerciseId
+                              );
+                              return editingExercise ? (
+                                renderDemoVideoSection(day.id, editingExercise)
+                              ) : (
+                                <DemoVideoSection
+                                  exerciseName={exerciseForm.name}
+                                  pendingFile={newDemoFile}
+                                  busy={busy}
+                                  error={demoErrors.new}
+                                  onPick={handlePickNewDemoVideo}
+                                  onClearPending={() => setNewDemoFile(null)}
+                                />
+                              );
+                            })()}
                             <div
                               style={{ display: "flex", gap: 8, marginTop: 10 }}
                             >
@@ -1791,6 +1946,7 @@ export default function Programs({ initialTraineeId = "" }) {
                                   setExerciseDayId("");
                                   setEditingExerciseId("");
                                   setExerciseForm(EMPTY_EXERCISE);
+                                  setNewDemoFile(null);
                                 }}
                                 disabled={busy}
                                 style={secondaryButton(busy)}
@@ -1850,63 +2006,8 @@ export default function Programs({ initialTraineeId = "" }) {
                                     {exercise.notes}
                                   </div>
                                 )}
-                                <div className="program-demo-video">
-                                  {actionKey === `demo-${exercise.id}` ? (
-                                    <span>מעדכן סרטון…</span>
-                                  ) : exercise.demo_video_path ? (
-                                    <>
-                                      <ExerciseDemoVideo
-                                        path={exercise.demo_video_path}
-                                        exerciseName={exercise.name}
-                                        className=""
-                                        style={secondaryButton(false)}
-                                      />
-                                      <label
-                                        className="program-demo-video-upload"
-                                        style={secondaryButton(busy)}
-                                      >
-                                        החלף סרטון
-                                        <input
-                                          type="file"
-                                          accept="video/mp4,video/quicktime,video/webm,video/x-m4v"
-                                          disabled={busy}
-                                          onChange={(event) => {
-                                            const file = event.target.files?.[0];
-                                            event.target.value = "";
-                                            handleDemoVideoUpload(day.id, exercise, file);
-                                          }}
-                                        />
-                                      </label>
-                                      <button
-                                        type="button"
-                                        onClick={() =>
-                                          handleDemoVideoRemove(day.id, exercise)
-                                        }
-                                        disabled={busy}
-                                        style={secondaryButton(busy, true)}
-                                      >
-                                        הסר סרטון
-                                      </button>
-                                    </>
-                                  ) : (
-                                    <label
-                                      className="program-demo-video-upload"
-                                      style={secondaryButton(busy)}
-                                    >
-                                      + הוסף סרטון הדגמה
-                                      <input
-                                        type="file"
-                                        accept="video/mp4,video/quicktime,video/webm,video/x-m4v"
-                                        disabled={busy}
-                                        onChange={(event) => {
-                                          const file = event.target.files?.[0];
-                                          event.target.value = "";
-                                          handleDemoVideoUpload(day.id, exercise, file);
-                                        }}
-                                      />
-                                    </label>
-                                  )}
-                                </div>
+                                {editingExerciseId !== exercise.id &&
+                                  renderDemoVideoSection(day.id, exercise)}
                               </div>
                               <div style={{ display: "flex", gap: 6 }}>
                                 <button

@@ -268,15 +268,20 @@ export async function deleteProgramExercise(id) {
   await removeUnusedDemoVideos((deleted ?? []).map((row) => row.demo_video_path));
 }
 
-// Uploads a new demo video for a program exercise. Every upload gets its own
-// file name, so a replaced video is never overwritten while someone watches it.
-export async function uploadExerciseDemoVideo(exercise, file) {
+// Lets the program builder reject a file before the exercise is saved.
+export function validateExerciseDemoVideo(file) {
   if (!file || !Object.hasOwn(DEMO_VIDEO_EXTENSIONS, file.type)) {
     throw new Error("unsupported-video");
   }
   if (file.size > MAX_DEMO_VIDEO_BYTES) {
     throw new Error("video-too-large");
   }
+}
+
+// Uploads a new demo video for a program exercise. Every upload gets its own
+// file name, so a replaced video is never overwritten while someone watches it.
+export async function uploadExerciseDemoVideo(exercise, file) {
+  validateExerciseDemoVideo(file);
 
   const ownerId = await getBusinessOwnerId();
   const path = `${ownerId}/${globalThis.crypto.randomUUID()}.${DEMO_VIDEO_EXTENSIONS[file.type]}`;

@@ -2255,4 +2255,7 @@ body.ltr .today-card.warn-border { border-right: none; border-left: 3px solid #F
 .program-demo-video { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 6px; font-size: 12px; color: var(--gray-400); }
 .program-demo-video input[type="file"] { display: none; }
 .program-demo-video-upload { cursor: pointer; }
+.program-demo-video-title { font-weight: 600; color: var(--burg); }
+.program-demo-video-pending { overflow-wrap: anywhere; }
+.program-demo-video-error { flex-basis: 100%; color: var(--red, #C0392B); font-size: 12px; }
 .trainee-demo-video-button { margin-top: 8px; align-self: flex-start; }

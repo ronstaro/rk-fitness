@@ -3,7 +3,7 @@ import { getExerciseDemoVideoUrl } from "../services/programsService.js";
 
 // Opens the trainer's demo video for one exercise. The private link is only
 // requested when the button is pressed, and expires after an hour.
-export default function ExerciseDemoVideo({ path, exerciseName, className = "btn btn-outline btn-sm", style }) {
+export default function ExerciseDemoVideo({ path, exerciseName, label = "▶ צפייה בסרטון הדגמה", className = "btn btn-outline btn-sm", style }) {
   const [open, setOpen] = useState(false);
   const [url, setUrl] = useState("");
   const [loading, setLoading] = useState(false);
@@ -38,7 +38,7 @@ export default function ExerciseDemoVideo({ path, exerciseName, className = "btn
   return (
     <>
       <button type="button" className={className} style={style} onClick={show}>
-        ▶ סרטון הדגמה
+        {label}
       </button>
       {open && (
         <div

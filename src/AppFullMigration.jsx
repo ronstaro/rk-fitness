@@ -1288,7 +1288,7 @@ function TraineeHome({ onNavigate }) {
           {!program ? (
             <div className="trainee-home-empty">אין תוכנית פעילה כרגע</div>
           ) : days.length === 0 ? (
-            <div className="trainee-home-empty">התוכנית פעילה, אך עדיין לא נוספו לה ימי אימון</div>
+            <div className="trainee-home-empty">התוכנית פעילה, אך עדיין לא נוספו לה סוגי אימון</div>
           ) : (
             <div className="trainee-program-days">
               {days.map((day) => (
@@ -2163,7 +2163,7 @@ function Workout() {
       </section>
 
       <div className="trainee-workout-metrics">
-        <article><span>ימי אימון</span><strong>{days.length}</strong></article>
+        <article><span>סוגי אימון</span><strong>{days.length}</strong></article>
         <article><span>תרגילים</span><strong>{exercises.length}</strong></article>
         <article><span>סה״כ סטים</span><strong>{totalSets}</strong></article>
         <article><span>יעד שבועי</span><strong>{program.sessions_per_week ?? "—"}</strong></article>
@@ -2181,7 +2181,7 @@ function Workout() {
 
       {days.length === 0 ? (
         <div className="trainee-home-state trainee-workout-empty">
-          <strong>התוכנית עדיין ללא ימי אימון</strong>
+          <strong>התוכנית עדיין ללא סוגי אימון</strong>
           <p>רוני תוסיף אותם כאן לאחר השלמת התוכנית.</p>
         </div>
       ) : (

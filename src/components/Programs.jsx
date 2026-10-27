@@ -603,7 +603,7 @@ export default function Programs({ initialTraineeId = "" }) {
     const name = dayForm.name.trim();
     const dayOrder = Number(dayForm.dayOrder);
     if (!name || !Number.isInteger(dayOrder) || dayOrder < 1) {
-      setActionError("יש להזין שם יום וסדר חיובי.");
+      setActionError("יש להזין שם אימון.");
       return;
     }
 
@@ -720,7 +720,7 @@ export default function Programs({ initialTraineeId = "" }) {
       !Number.isInteger(sets) ||
       sets < 1
     ) {
-      setActionError("שם, סדר, מספר סטים וחזרות הם שדות חובה.");
+      setActionError("שם, מספר סטים וחזרות הם שדות חובה.");
       return;
     }
     if (targetRir != null && (Number.isNaN(targetRir) || targetRir < 0 || targetRir > 10)) {
@@ -1261,7 +1261,7 @@ export default function Programs({ initialTraineeId = "" }) {
                         </span>
                       </div>
                       <p>
-                        {traineeName(program)} · {program.days_count || 0} ימי אימון
+                        {traineeName(program)} · {program.days_count || 0} סוגי אימון
                         {program.sessions_per_week
                           ? ` · ${program.sessions_per_week}× בשבוע`
                           : ""}
@@ -1342,7 +1342,7 @@ export default function Programs({ initialTraineeId = "" }) {
             תוכניות אימון
           </h2>
           <p style={{ margin: "4px 0 0", fontSize: 13, color: "#9E9A90" }}>
-            בניית תוכניות, ימי אימון ותרגילים לפי מתאמן
+            בניית תוכניות, סוגי אימון ותרגילים לפי מתאמן
           </p>
         </div>
         <button
@@ -1731,7 +1731,7 @@ export default function Programs({ initialTraineeId = "" }) {
                     }}
                   >
                     <div style={{ fontWeight: 600, fontSize: 15 }}>
-                      ימי אימון
+                      סוג אימון
                     </div>
                     <button
                       onClick={beginCreateDay}
@@ -1755,13 +1755,12 @@ export default function Programs({ initialTraineeId = "" }) {
                       <div
                         style={{
                           display: "grid",
-                          gridTemplateColumns:
-                            "minmax(180px, 2fr) minmax(90px, 0.6fr)",
+                          gridTemplateColumns: "minmax(180px, 1fr)",
                           gap: 12,
                           marginBottom: 12,
                         }}
                       >
-                        <Field label="שם היום *">
+                        <Field label="שם אימון *">
                           <input
                             value={dayForm.name}
                             onChange={(event) =>
@@ -1772,20 +1771,6 @@ export default function Programs({ initialTraineeId = "" }) {
                             }
                             style={inputStyle}
                             placeholder="לדוגמה: אימון A"
-                          />
-                        </Field>
-                        <Field label="סדר *">
-                          <input
-                            type="number"
-                            min="1"
-                            value={dayForm.dayOrder}
-                            onChange={(event) =>
-                              setDayForm((form) => ({
-                                ...form,
-                                dayOrder: event.target.value,
-                              }))
-                            }
-                            style={inputStyle}
                           />
                         </Field>
                       </div>
@@ -1849,7 +1834,7 @@ export default function Programs({ initialTraineeId = "" }) {
                         color: "#9E9A90",
                       }}
                     >
-                      אין ימי אימון בתוכנית. הוסף את היום הראשון.
+                      אין סוגי אימון בתוכנית. הוסף את האימון הראשון.
                     </div>
                   ) : (
                     days.map((day) => (
@@ -1937,20 +1922,6 @@ export default function Programs({ initialTraineeId = "" }) {
                                     setExerciseForm((form) => ({
                                       ...form,
                                       name: event.target.value,
-                                    }))
-                                  }
-                                  style={inputStyle}
-                                />
-                              </Field>
-                              <Field label="סדר *">
-                                <input
-                                  type="number"
-                                  min="1"
-                                  value={exerciseForm.exerciseOrder}
-                                  onChange={(event) =>
-                                    setExerciseForm((form) => ({
-                                      ...form,
-                                      exerciseOrder: event.target.value,
                                     }))
                                   }
                                   style={inputStyle}

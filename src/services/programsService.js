@@ -173,6 +173,67 @@ export async function deleteProgram(id) {
   if (error) throw error;  await removeUnusedDemoVideos(videoPaths);
 }
 
+// Copies a program's structure: every workout type and exercise, with their
+// order and targets. Nothing a trainee produced (logs, sets, execution videos,
+// feedback) lives in these tables, so none of it is copied. Day ids are made
+// here so exercises can be linked without relying on the order rows come back
+// in. Each level is one insert; if a later step fails, the new program is
+// deleted again (its days and exercises go with it by cascade).
+//
+// An uploaded demo file is shared, not copied: files are never overwritten in
+// place, every removal checks that no other exercise still points to the file,
+// and a trainee can read it only through an exercise of their own active
+// program.
+export async function duplicateProgram(sourceProgramId, input) {
+  const sourceDays = await fetchProgramDetails(sourceProgramId);
+  const created = await createProgram(input);
+
+  try {
+    const dayRows = sourceDays.map((day) => ({
+      id: globalThis.crypto.randomUUID(),
+      owner_id: created.owner_id,
+      program_id: created.id,
+      name: day.name,
+      day_order: day.day_order,
+      notes: day.notes ?? null,
+    }));
+    const exerciseRows = sourceDays.flatMap((day, index) =>
+      day.exercises.map((exercise) => ({
+        owner_id: created.owner_id,
+        program_day_id: dayRows[index].id,
+        name: exercise.name,
+        exercise_order: exercise.exercise_order,
+        sets: exercise.sets,
+        reps: exercise.reps,
+        target_weight_kg: exercise.target_weight_kg ?? null,
+        target_rir: exercise.target_rir ?? null,
+        rest_seconds: exercise.rest_seconds ?? null,
+        notes: exercise.notes ?? null,
+        demo_video_url: exercise.demo_video_url ?? null,
+        demo_video_path: exercise.demo_video_path ?? null,
+        demo_video_uploaded_at: exercise.demo_video_path
+          ? exercise.demo_video_uploaded_at
+          : null,
+      }))
+    );
+
+    if (dayRows.length > 0) {
+      const { error } = await supabase.from("program_days").insert(dayRows);
+      if (error) throw error;
+    }
+    if (exerciseRows.length > 0) {
+      const { error } = await supabase.from("program_exercises").insert(exerciseRows);
+      if (error) throw error;
+    }
+  } catch (error) {
+    // Plain delete: the shared demo files still belong to the source program.
+    await supabase.from("workout_programs").delete().eq("id", created.id);
+    throw error;
+  }
+
+  return { ...created, days_count: sourceDays.length };
+}
+
 export async function createProgramDay(input) {
   const ownerId = await getBusinessOwnerId();
   const { data, error } = await supabase

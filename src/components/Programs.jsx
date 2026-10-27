@@ -7,6 +7,7 @@ import {
   createProgramDay,
   createProgramExercise,
   deleteProgram,
+  duplicateProgram,
   deleteProgramDay,
   deleteProgramExercise,
   fetchProgramDetails,
@@ -330,6 +331,7 @@ export default function Programs({ initialTraineeId = "" }) {
 
   const [showProgramForm, setShowProgramForm] = useState(false);
   const [editingProgramId, setEditingProgramId] = useState("");
+  const [duplicateSourceId, setDuplicateSourceId] = useState("");
   const [programForm, setProgramForm] = useState(EMPTY_PROGRAM);
 
   const [showDayForm, setShowDayForm] = useState(false);
@@ -421,6 +423,7 @@ export default function Programs({ initialTraineeId = "" }) {
 
   function beginCreateProgram() {
     setEditingProgramId("");
+    setDuplicateSourceId("");
     setProgramForm({
       ...EMPTY_PROGRAM,
       traineeId: selectedTraineeId || trainees[0]?.id || "",
@@ -431,6 +434,7 @@ export default function Programs({ initialTraineeId = "" }) {
 
   function beginEditProgram(program) {
     setEditingProgramId(program.id);
+    setDuplicateSourceId("");
     setProgramForm({
       traineeId: program.trainee_id,
       name: program.name,
@@ -450,6 +454,7 @@ export default function Programs({ initialTraineeId = "" }) {
   function beginDuplicateProgram(program) {
     setSelectedProgramId("");
     setEditingProgramId("");
+    setDuplicateSourceId(program.id);
     setProgramForm({
       traineeId: program.trainee_id,
       name: `${program.name} — עותק`,
@@ -519,13 +524,16 @@ export default function Programs({ initialTraineeId = "" }) {
         );
         setSelectedTraineeId(updated.trainee_id);
       } else {
-        const created = await createProgram(payload);
+        const created = duplicateSourceId
+          ? await duplicateProgram(duplicateSourceId, payload)
+          : await createProgram(payload);
         setPrograms((current) => [created, ...current]);
         setSelectedTraineeId(created.trainee_id);
         setSelectedProgramId(created.id);
       }
       setShowProgramForm(false);
       setEditingProgramId("");
+      setDuplicateSourceId("");
       setProgramForm(EMPTY_PROGRAM);
     } catch (error) {
       console.error("Program save error:", error);
@@ -994,7 +1002,11 @@ export default function Programs({ initialTraineeId = "" }) {
                 <span className="badge badge-inactive">
                   {editingProgramId ? "עריכה" : "טיוטה"}
                 </span>
-                <h3>{editingProgramId ? "עריכת תוכנית" : "תוכנית חדשה"}</h3>
+                <h3>{editingProgramId
+                  ? "עריכת תוכנית"
+                  : duplicateSourceId
+                    ? "שכפול תוכנית"
+                    : "תוכנית חדשה"}</h3>
               </div>
               <button
                 type="button"
@@ -1414,7 +1426,11 @@ export default function Programs({ initialTraineeId = "" }) {
               }}
             >
               <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 16 }}>
-                {editingProgramId ? "עריכת תוכנית" : "תוכנית חדשה"}
+                {editingProgramId
+                  ? "עריכת תוכנית"
+                  : duplicateSourceId
+                    ? "שכפול תוכנית"
+                    : "תוכנית חדשה"}
               </div>
               <div
                 style={{
@@ -1738,7 +1754,7 @@ export default function Programs({ initialTraineeId = "" }) {
                       disabled={busy}
                       style={primaryButton(busy)}
                     >
-                      + יום אימון
+                      + סוג אימון
                     </button>
                   </div>
 
@@ -1886,14 +1902,14 @@ export default function Programs({ initialTraineeId = "" }) {
                               disabled={busy}
                               style={secondaryButton(busy)}
                             >
-                              ערוך יום
+                              ערוך סוג אימון
                             </button>
                             <button
                               onClick={() => handleDeleteDay(day)}
                               disabled={busy}
                               style={secondaryButton(busy, true)}
                             >
-                              מחק יום
+                              מחק סוג אימון
                             </button>
                           </div>
                         </div>

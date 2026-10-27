@@ -14,6 +14,7 @@ import Schedule from "./components/Schedule.jsx";
 import WeeklyGoals from "./components/WeeklyGoals.jsx";
 import TraineeInviteCard from "./components/TraineeInviteCard.jsx";
 import ExerciseDemoVideo from "./components/ExerciseDemoVideo.jsx";
+import { TraineeSessionRequests } from "./components/SessionRequests.jsx";
 import {
   claimNavigationMemory,
   clearNavigationMemory,
@@ -2569,6 +2570,7 @@ const VIEW_TITLES = {
   "trainee-profile": "הפרופיל שלי",
   workout:        "תוכנית האימון שלי",
   progress:       "ההתקדמות שלי",
+  "session-request": "בקשת אימון",
 };
 
 const ADMIN_GROUPS = [
@@ -2612,6 +2614,7 @@ const TRAINEE_GROUPS = [
       { id: "trainee-profile", icon: "👤", label: "הפרופיל שלי" },
       { id: "workout",      icon: "🏋️",  label: "תוכנית האימון שלי" },
       { id: "progress",     icon: "📈", label: "ההתקדמות שלי" },
+      { id: "session-request", icon: "📅", label: "בקשת אימון" },
     ],
   },
 ];
@@ -2778,6 +2781,7 @@ export default function AppFullMigration({ onLogout, signingOut = false, signOut
           {view === "trainee-profile" && <TraineeProfile />}
           {view === "workout"      && <Workout />}
           {view === "progress"     && <Progress />}
+          {view === "session-request" && <TraineeSessionRequests />}
         </div>
       </div>
 

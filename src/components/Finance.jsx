@@ -705,6 +705,7 @@ export default function Finance() {
                       <td>
                         <strong>{payment.trainee_name}</strong>
                         {payment.source === "manual" && <small className="finance-source-tag">נוסף ידנית</small>}
+                        {payment.source === "session_request" && <small className="finance-source-tag">מבקשת אימון</small>}
                       </td>
                       <td>{payment.package_name || "לא הוגדרה"}</td>
                       <td>

@@ -2285,3 +2285,82 @@ body.ltr .today-card.warn-border { border-right: none; border-left: 3px solid #F
 .program-demo-video-pending { overflow-wrap: anywhere; }
 .program-demo-video-error { flex-basis: 100%; color: var(--red, #C0392B); font-size: 12px; }
 .trainee-demo-video-button { margin-top: 8px; align-self: flex-start; }
+
+/* ── SESSION REQUESTS (025) ─────────────────────────────────────────── */
+.session-requests-page { display: grid; gap: 16px; max-width: 720px; }
+.session-request-card { padding: 18px; }
+.session-request-card .section-title { margin-bottom: 12px; }
+.session-request-form { display: grid; gap: 12px; }
+.session-request-info { color: var(--gray-600); font-size: 14px; line-height: 1.6; }
+.session-request-when { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.session-request-upload {
+  display: block;
+  padding: 18px 14px;
+  border: 1.5px dashed var(--gray-200);
+  border-radius: var(--radius);
+  background: var(--gray-50);
+  color: var(--gray-600);
+  font-size: 14px;
+  text-align: center;
+  cursor: pointer;
+}
+.session-request-upload:hover { border-color: var(--burg-l); color: var(--burg); }
+.session-request-upload input { display: block; width: 100%; margin-bottom: 8px; font-size: 13px; }
+.session-request-file { display: flex; align-items: center; gap: 12px; }
+.session-request-file img { width: 72px; height: 72px; object-fit: cover; border-radius: 8px; border: 1px solid var(--gray-100); }
+.session-request-file strong { display: block; font-size: 13px; word-break: break-all; }
+.session-request-summary {
+  display: grid;
+  gap: 3px;
+  padding: 12px 14px;
+  border-radius: var(--radius);
+  background: var(--burg-pale);
+  color: var(--burg-d);
+  font-size: 14px;
+}
+.session-request-summary span { font-size: 13px; }
+.session-request-note { padding: 10px 12px; border-radius: 8px; background: var(--warn-bg); color: var(--warn); font-size: 13px; }
+.session-request-sent { padding: 10px 12px; border-radius: 8px; background: var(--success-bg); color: var(--success); font-size: 13px; }
+.session-request-list { display: grid; gap: 8px; }
+.session-request-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 12px;
+  border: 1px solid var(--gray-100);
+  border-radius: var(--radius);
+}
+.session-request-row > div:first-child { display: grid; gap: 2px; min-width: 0; }
+.session-request-row strong { font-size: 14px; }
+.session-request-row small { color: var(--gray-600); font-size: 12px; overflow-wrap: anywhere; }
+.session-request-row-side { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.session-requests-panel { margin-bottom: 18px; }
+.session-request-admin-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
+.session-request-admin { display: flex; gap: 12px; padding: 12px; }
+.session-request-admin-body { display: grid; gap: 4px; align-content: start; min-width: 0; }
+.session-request-admin-body span { font-size: 13px; color: var(--gray-600); }
+.session-request-admin-body small { font-size: 12px; color: var(--gray-600); overflow-wrap: anywhere; }
+.session-request-admin-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.session-request-proof {
+  flex-shrink: 0;
+  display: block;
+  width: 88px;
+  height: 110px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--gray-50);
+  border: 1px solid var(--gray-100);
+}
+.session-request-proof img { width: 100%; height: 100%; object-fit: cover; }
+.session-request-proof.empty { display: grid; place-items: center; padding: 6px; color: var(--gray-400); font-size: 11px; text-align: center; }
+.session-request-recent { margin-top: 12px; padding: 8px; display: grid; gap: 6px; }
+.session-request-dialog-sub { margin: -8px 0 14px; color: var(--gray-600); font-size: 14px; }
+.session-request-check { display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer; }
+.session-request-check input { width: 18px; height: 18px; accent-color: var(--burg); }
+
+@media (max-width: 560px) {
+  .session-request-card { padding: 14px; }
+  .session-request-admin-list { grid-template-columns: 1fr; }
+  .session-request-row { align-items: flex-start; }
+}

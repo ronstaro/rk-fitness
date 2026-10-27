@@ -153,12 +153,14 @@ export async function createMonthlyPayment(input) {
 
   // A row removed earlier still holds this trainee's month, so adding the
   // payment again brings that row back instead of failing on the duplicate.
+  // Single-session payments (025) never hold the month, so they are skipped.
   if (details.trainee_id) {
     const { data: removed, error: removedError } = await supabase
       .from("trainee_monthly_payments")
       .select("id")
       .eq("trainee_id", details.trainee_id)
       .eq("billing_month", details.billing_month)
+      .in("source", ["monthly", "manual"])
       .eq("notes", REMOVED_PAYMENT_NOTE)
       .maybeSingle();
 

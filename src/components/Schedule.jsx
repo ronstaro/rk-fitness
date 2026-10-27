@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { fetchTrainees } from "../services/traineesService.js";
 import { readNavigation, writeNavigation } from "../lib/navigationMemory.js";
+import { SessionRequestsPanel } from "./SessionRequests.jsx";
 import {
   createSession,
   deleteSession,
@@ -180,6 +181,18 @@ export default function Schedule() {
       setLoadError("לא ניתן לטעון את לוח הזמנים כרגע.");
     } finally {
       setLoading(false);
+    }
+  }
+
+  // After a request is approved its new session joins the calendar without
+  // the loading screen.
+  async function refreshSessions() {
+    try {
+      const sessionRows = await fetchSessions();
+      setSessions(sessionRows.map((row) => mapSession(row, trainees)));
+    } catch (error) {
+      console.error("Schedule refresh error:", error);
+      setRowError("האימון נקבע, אך לא ניתן לרענן את היומן. רענון הדף יציג אותו.");
     }
   }
 
@@ -462,6 +475,12 @@ export default function Schedule() {
       </section>
 
       {rowError && <div className="schedule-error-strip">{rowError}</div>}
+
+      <SessionRequestsPanel
+        trainees={trainees}
+        hasConflict={(date, startTime, duration) => hasOverlap(date, startTime, duration, sessions)}
+        onScheduled={refreshSessions}
+      />
 
       <section className="schedule-calendar card">
         <div className="schedule-calendar-scroll">

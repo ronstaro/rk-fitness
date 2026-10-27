@@ -19,7 +19,7 @@ import {
   uploadExerciseDemoVideo,
   validateExerciseDemoVideo,
 } from "../services/programsService.js";
-import { canonicalYouTubeUrl } from "../lib/youtube.js";
+import { normalizeVideoLink } from "../lib/videoLink.js";
 import ExerciseDemoVideo from "./ExerciseDemoVideo.jsx";
 
 const EMPTY_PROGRAM = {
@@ -97,44 +97,44 @@ function demoVideoErrorMessage(error) {
   return "לא ניתן להעלות את הסרטון. נסו שוב.";
 }
 
-const INVALID_YOUTUBE_MESSAGE =
-  "הקישור לסרטון ההדגמה לא תקין. יש להדביק קישור YouTube, למשל youtube.com/watch?v=... או youtu.be/... (אפשר להעתיק מכפתור \"שיתוף\" ביוטיוב).";
+const INVALID_LINK_MESSAGE =
+  "הקישור לסרטון לא תקין. יש להדביק את הקישור המלא, שמתחיל ב-https:// (אפשר להעתיק אותו מכפתור \"שיתוף\" באפליקציה).";
 
-// The demo an exercise has now: a YouTube link or an uploaded file, never
+// The demo an exercise has now: an external link or an uploaded file, never
 // both (every save and upload clears the other one).
 function demoSource(exercise) {
-  if (exercise?.demo_video_url) return "youtube";
+  if (exercise?.demo_video_url) return "link";
   if (exercise?.demo_video_path) return "file";
   return "none";
 }
 
 const DEMO_SOURCE_LABELS = {
-  youtube: "קישור YouTube",
+  link: "קישור לסרטון",
   file: "סרטון שהועלה",
 };
 
 const DEMO_MODES = [
   { id: "none", label: "ללא סרטון" },
   { id: "file", label: "העלאת סרטון" },
-  { id: "youtube", label: "קישור YouTube" },
+  { id: "link", label: "קישור לסרטון הדגמה" },
 ];
 
 // What saving the form will do to the current demo, said before it happens.
 function demoChangeNotice(current, form) {
   if (current === "none") return "";
   if (form.demoMode === "none") return "סרטון ההדגמה הנוכחי יוסר בשמירה.";
-  if (form.demoMode === "file" && current === "youtube") {
+  if (form.demoMode === "file" && current === "link") {
     return form.demoFile ? "בשמירה, הקישור הנוכחי יוחלף בסרטון שנבחר." : "";
   }
   if (form.demoMode === "file" && form.demoFile) return "בשמירה, הסרטון הנוכחי יוחלף בקובץ החדש.";
-  if (form.demoMode === "youtube" && current === "file") {
+  if (form.demoMode === "link" && current === "file") {
     return "בשמירה, הסרטון שהועלה יוסר ויוחלף בקישור.";
   }
   return "";
 }
 
 // The demo-video part of the exercise create/edit form: no video, an
-// uploaded file (023 storage flow) or a YouTube link (026).
+// uploaded file (023 storage flow) or an external video link (026/028).
 function DemoVideoFormSection({ exercise, form, setForm, busy }) {
   const current = demoSource(exercise);
   const notice = demoChangeNotice(current, form);
@@ -222,14 +222,14 @@ function DemoVideoFormSection({ exercise, form, setForm, busy }) {
         </div>
       )}
 
-      {form.demoMode === "youtube" && (
+      {form.demoMode === "link" && (
         <div className="program-demo-form-body program-demo-video-link">
           <input
             type="url"
             inputMode="url"
             dir="ltr"
-            placeholder="הדבק קישור לסרטון YouTube"
-            aria-label="הדבק קישור לסרטון YouTube"
+            placeholder="הדביקי קישור לסרטון"
+            aria-label="קישור לסרטון הדגמה"
             value={form.demoVideoUrl}
             onChange={(event) =>
               setForm((value) => ({ ...value, demoVideoUrl: event.target.value }))
@@ -237,7 +237,7 @@ function DemoVideoFormSection({ exercise, form, setForm, busy }) {
             disabled={busy}
             style={inputStyle}
           />
-          {canonicalYouTubeUrl(form.demoVideoUrl) && (
+          {normalizeVideoLink(form.demoVideoUrl) && (
             <ExerciseDemoVideo
               url={form.demoVideoUrl}
               exerciseName={form.name || "תרגיל"}
@@ -749,13 +749,13 @@ export default function Programs({ initialTraineeId = "" }) {
     const currentDemo = demoSource(editingExercise);
     const { demoMode, demoFile } = exerciseForm;
     const demoVideoUrl =
-      demoMode === "youtube" ? canonicalYouTubeUrl(exerciseForm.demoVideoUrl) : null;
-    if (demoMode === "youtube" && !exerciseForm.demoVideoUrl.trim()) {
-      setActionError("יש להדביק קישור לסרטון YouTube, או לבחור \"ללא סרטון\".");
+      demoMode === "link" ? normalizeVideoLink(exerciseForm.demoVideoUrl) : null;
+    if (demoMode === "link" && !exerciseForm.demoVideoUrl.trim()) {
+      setActionError("יש להדביק קישור לסרטון, או לבחור \"ללא סרטון\".");
       return;
     }
-    if (demoMode === "youtube" && !demoVideoUrl) {
-      setActionError(INVALID_YOUTUBE_MESSAGE);
+    if (demoMode === "link" && !demoVideoUrl) {
+      setActionError(INVALID_LINK_MESSAGE);
       return;
     }
     if (demoMode === "file" && !demoFile && currentDemo !== "file") {
@@ -768,9 +768,9 @@ export default function Programs({ initialTraineeId = "" }) {
       const question =
         demoMode === "none"
           ? `להסיר את סרטון ההדגמה של "${name}"?`
-          : demoMode === "youtube"
-            ? "הסרטון שהועלה יוסר ויוחלף בקישור YouTube. להמשיך?"
-            : "קישור ה-YouTube יוחלף בסרטון שהועלה. להמשיך?";
+          : demoMode === "link"
+            ? "הסרטון שהועלה יוסר ויוחלף בקישור. להמשיך?"
+            : "הקישור לסרטון יוחלף בסרטון שהועלה. להמשיך?";
       if (!window.confirm(question)) return;
     }
 

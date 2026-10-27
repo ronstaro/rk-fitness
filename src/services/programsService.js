@@ -292,7 +292,7 @@ export function validateExerciseDemoVideo(file) {
   }
 }
 
-// Uploads a file as the exercise's demo. The same update clears a YouTube
+// Uploads a file as the exercise's demo. The same update clears an external
 // link, so the file becomes the only demo source.
 export async function uploadExerciseDemoVideo(exercise, file) {
   validateExerciseDemoVideo(file);

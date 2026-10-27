@@ -17,7 +17,6 @@ import {
   updateProgramDay,
   updateProgramExercise,
   DEMO_VIDEO_ACCEPT,
-  removeExerciseDemo,
   uploadExerciseDemoVideo,
   validateExerciseDemoVideo,
 } from "../services/programsService.js";
@@ -256,45 +255,38 @@ function DemoVideoFormSection({ exercise, form, setForm, busy }) {
   );
 }
 
-// The demo video line under a saved exercise.
-function DemoVideoSection({ exercise, busy, working, error, onManage, onRemove }) {
+// The demo-video cell of a saved exercise row. Changing or removing the
+// video happens in the exercise edit form, so the row only offers viewing.
+function DemoVideoSection({ exercise, busy, onManage }) {
   const source = demoSource(exercise);
   return (
-    <div className="program-demo-video">
-      <span className="program-demo-video-title">🎬 סרטון הדגמה</span>
-      {working ? (
-        <span>מעדכן…</span>
-      ) : source !== "none" ? (
-        <>
+    <div className="program-exercise-video">
+      {source !== "none" ? (
+        <span title={DEMO_SOURCE_LABELS[source]}>
           <ExerciseDemoVideo
             url={exercise.demo_video_url}
             path={exercise.demo_video_path}
             exerciseName={exercise.name}
-            label="▶ צפייה בסרטון הדגמה"
-            className=""
-            style={secondaryButton(false)}
+            label="▶ צפייה בסרטון"
+            className="program-video-btn"
           />
-          <span>{DEMO_SOURCE_LABELS[source]}</span>
-          <button type="button" onClick={onManage} disabled={busy} style={secondaryButton(busy)}>
-            ניהול סרטון
-          </button>
-          <button type="button" onClick={onRemove} disabled={busy} style={secondaryButton(busy, true)}>
-            הסרת סרטון
-          </button>
-        </>
+        </span>
       ) : (
-        <>
-          <span>אין סרטון הדגמה</span>
-          <button type="button" onClick={onManage} disabled={busy} style={secondaryButton(busy)}>
-            הוספת סרטון
-          </button>
-        </>
+        <button type="button" className="program-video-add" onClick={onManage} disabled={busy}>
+          + סרטון הדגמה
+        </button>
       )}
-      {error && (
-        <div className="program-demo-video-error" role="alert">
-          {error}
-        </div>
-      )}
+    </div>
+  );
+}
+
+// One labelled value (sets, reps, ...) in an exercise row.
+function ExerciseSpec({ label, value }) {
+  const empty = value == null || value === "";
+  return (
+    <div className={`program-exercise-spec${empty ? " empty" : ""}`}>
+      <span>{label}</span>
+      <strong>{empty ? "—" : value}</strong>
     </div>
   );
 }
@@ -934,52 +926,6 @@ export default function Programs({ initialTraineeId = "" }) {
     }
   }
 
-  function replaceExercise(dayId, saved) {
-    setDays((current) =>
-      current.map((day) =>
-        day.id === dayId
-          ? {
-              ...day,
-              exercises: day.exercises.map((item) =>
-                item.id === saved.id ? saved : item
-              ),
-            }
-          : day
-      )
-    );
-  }
-
-  function setDemoError(key, message) {
-    setDemoErrors((current) => ({ ...current, [key]: message }));
-  }
-
-  async function handleDemoRemove(dayId, exercise) {
-    if (!window.confirm(`להסיר את סרטון ההדגמה של "${exercise.name}"?`)) return;
-    setActionKey(`demo-${exercise.id}`);
-    setDemoError(exercise.id, "");
-    try {
-      replaceExercise(dayId, await removeExerciseDemo(exercise));
-    } catch (error) {
-      console.error("Demo video remove error:", error);
-      setDemoError(exercise.id, "לא ניתן להסיר את הסרטון. נסו שוב.");
-    } finally {
-      setActionKey("");
-    }
-  }
-
-  function renderDemoVideoSection(dayId, exercise) {
-    return (
-      <DemoVideoSection
-        exercise={exercise}
-        busy={busy}
-        working={actionKey === `demo-${exercise.id}`}
-        error={demoErrors[exercise.id]}
-        onManage={() => beginEditExercise(dayId, exercise)}
-        onRemove={() => handleDemoRemove(dayId, exercise)}
-      />
-    );
-  }
-
   function formatDate(value) {
     if (!value) return "ללא תאריך";
     return new Date(`${value}T12:00:00`).toLocaleDateString("he-IL");
@@ -1388,871 +1334,505 @@ export default function Programs({ initialTraineeId = "" }) {
     );
   }
 
+  const formOpen = showDayForm || Boolean(exerciseDayId);
+  const exerciseCountLabel = (count) => (count === 1 ? "תרגיל אחד" : `${count} תרגילים`);
+
+  function renderDayForm() {
+    return (
+      <div className="program-inline-form program-day-form">
+        <div className="program-inline-form-title">
+          {editingDayId ? "עריכת סוג אימון" : "סוג אימון חדש"}
+        </div>
+        <div className="program-day-form-grid">
+          <Field label="שם אימון *">
+            <input
+              value={dayForm.name}
+              onChange={(event) =>
+                setDayForm((form) => ({
+                  ...form,
+                  name: event.target.value,
+                }))
+              }
+              style={inputStyle}
+              placeholder="לדוגמה: אימון A"
+            />
+          </Field>
+          <Field label="הערות">
+            <input
+              value={dayForm.notes}
+              onChange={(event) =>
+                setDayForm((form) => ({
+                  ...form,
+                  notes: event.target.value,
+                }))
+              }
+              style={inputStyle}
+            />
+          </Field>
+        </div>
+        {actionError && <div className="alert-strip danger">{actionError}</div>}
+        <div className="program-inline-form-actions">
+          <button
+            type="button"
+            className="btn btn-primary btn-sm"
+            onClick={handleSaveDay}
+            disabled={busy}
+          >
+            {actionKey === "day-save" ? "שומר..." : "שמור סוג אימון"}
+          </button>
+          <button
+            type="button"
+            className="btn btn-outline btn-sm"
+            onClick={() => {
+              setShowDayForm(false);
+              setEditingDayId("");
+              setDayForm(EMPTY_DAY);
+            }}
+            disabled={busy}
+          >
+            ביטול
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  function renderExerciseForm(day) {
+    return (
+      <div className="program-inline-form program-exercise-form">
+        <div className="program-inline-form-title">
+          {editingExerciseId ? "עריכת תרגיל" : "תרגיל חדש"}
+        </div>
+        <div className="program-exercise-form-grid">
+          <Field label="שם התרגיל *">
+            <input
+              value={exerciseForm.name}
+              onChange={(event) =>
+                setExerciseForm((form) => ({
+                  ...form,
+                  name: event.target.value,
+                }))
+              }
+              style={inputStyle}
+            />
+          </Field>
+          <Field label="סטים *">
+            <input
+              type="number"
+              min="1"
+              value={exerciseForm.sets}
+              onChange={(event) =>
+                setExerciseForm((form) => ({
+                  ...form,
+                  sets: event.target.value,
+                }))
+              }
+              style={inputStyle}
+            />
+          </Field>
+          <Field label="חזרות *">
+            <input
+              value={exerciseForm.reps}
+              onChange={(event) =>
+                setExerciseForm((form) => ({
+                  ...form,
+                  reps: event.target.value,
+                }))
+              }
+              style={inputStyle}
+              placeholder="8-12"
+            />
+          </Field>
+          <Field label="משקל יעד (ק״ג)">
+            <input
+              type="number"
+              min="0"
+              max="2000"
+              step="0.25"
+              inputMode="decimal"
+              value={exerciseForm.targetWeightKg}
+              onChange={(event) =>
+                setExerciseForm((form) => ({
+                  ...form,
+                  targetWeightKg: event.target.value,
+                }))
+              }
+              style={inputStyle}
+            />
+          </Field>
+          <Field label="RIR יעד">
+            <input
+              type="number"
+              min="0"
+              max="10"
+              step="0.5"
+              value={exerciseForm.targetRir}
+              onChange={(event) =>
+                setExerciseForm((form) => ({
+                  ...form,
+                  targetRir: event.target.value,
+                }))
+              }
+              style={inputStyle}
+            />
+          </Field>
+          <Field label="מנוחה בשניות">
+            <input
+              type="number"
+              min="0"
+              value={exerciseForm.restSeconds}
+              onChange={(event) =>
+                setExerciseForm((form) => ({
+                  ...form,
+                  restSeconds: event.target.value,
+                }))
+              }
+              style={inputStyle}
+            />
+          </Field>
+        </div>
+        <Field label="הערות">
+          <input
+            value={exerciseForm.notes}
+            onChange={(event) =>
+              setExerciseForm((form) => ({
+                ...form,
+                notes: event.target.value,
+              }))
+            }
+            style={inputStyle}
+          />
+        </Field>
+        <DemoVideoFormSection
+          key={editingExerciseId || "new"}
+          exercise={
+            editingExerciseId
+              ? day.exercises.find((exercise) => exercise.id === editingExerciseId)
+              : null
+          }
+          form={exerciseForm}
+          setForm={setExerciseForm}
+          busy={busy}
+        />
+        {actionError && <div className="alert-strip danger">{actionError}</div>}
+        <div className="program-inline-form-actions">
+          <button
+            type="button"
+            className="btn btn-primary btn-sm"
+            onClick={handleSaveExercise}
+            disabled={busy}
+          >
+            {actionKey === "exercise-save" ? "שומר..." : "שמור תרגיל"}
+          </button>
+          <button
+            type="button"
+            className="btn btn-outline btn-sm"
+            onClick={() => {
+              setExerciseDayId("");
+              setEditingExerciseId("");
+              setExerciseForm(EMPTY_EXERCISE);
+            }}
+            disabled={busy}
+          >
+            ביטול
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  function renderExerciseRow(day, exercise, exerciseIndex) {
+    const isFirst = exerciseIndex === 0;
+    const isLast = exerciseIndex === day.exercises.length - 1;
+    return (
+      <div className="program-exercise-row" key={exercise.id}>
+        <div className="program-exercise-move">
+          <button
+            type="button"
+            className="program-move-btn"
+            onClick={() => handleMoveExercise(day.id, exercise, -1)}
+            disabled={busy || isFirst}
+            aria-label={`העלה את ${exercise.name}`}
+            title="העלה"
+          >
+            {actionKey === `exercise-move-${exercise.id}` ? "…" : "↑"}
+          </button>
+          <button
+            type="button"
+            className="program-move-btn"
+            onClick={() => handleMoveExercise(day.id, exercise, 1)}
+            disabled={busy || isLast}
+            aria-label={`הורד את ${exercise.name}`}
+            title="הורד"
+          >
+            ↓
+          </button>
+        </div>
+        <div className="program-exercise-name">
+          <span className="program-exercise-index">{exerciseIndex + 1}</span>
+          <div>
+            <strong>{exercise.name}</strong>
+            {exercise.notes && <small>{exercise.notes}</small>}
+          </div>
+        </div>
+        <div className="program-exercise-specs">
+          <ExerciseSpec label="סטים" value={exercise.sets} />
+          <ExerciseSpec label="חזרות" value={exercise.reps} />
+          <ExerciseSpec
+            label="משקל"
+            value={exercise.target_weight_kg != null ? `${exercise.target_weight_kg} ק״ג` : null}
+          />
+          <ExerciseSpec label="RIR" value={exercise.target_rir} />
+          <ExerciseSpec
+            label="מנוחה"
+            value={exercise.rest_seconds != null ? `${exercise.rest_seconds} שנ׳` : null}
+          />
+        </div>
+        <DemoVideoSection
+          exercise={exercise}
+          busy={busy}
+          onManage={() => beginEditExercise(day.id, exercise)}
+        />
+        <div className="program-exercise-actions">
+          <button
+            type="button"
+            className="btn btn-outline btn-sm"
+            onClick={() => beginEditExercise(day.id, exercise)}
+            disabled={busy}
+            aria-label={`ערוך את ${exercise.name}`}
+          >
+            ערוך
+          </button>
+          <button
+            type="button"
+            className="btn btn-sm program-action-danger"
+            onClick={() => handleDeleteExercise(day.id, exercise)}
+            disabled={busy}
+            aria-label={`מחק את ${exercise.name}`}
+          >
+            מחק
+          </button>
+        </div>
+        {demoErrors[exercise.id] && (
+          <div className="program-demo-video-error" role="alert">
+            {demoErrors[exercise.id]}
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="program-editor-page slide-in">
-      <button
-        type="button"
-        className="btn btn-ghost btn-sm program-editor-back"
-        onClick={() => {
-          setSelectedProgramId("");
-          setSelectedTraineeId("");
-        }}
-      >
-        → חזרה לתוכניות
-      </button>
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: 12,
-          marginBottom: 20,
-          flexWrap: "wrap",
-        }}
-      >
-        <div>
-          <h2 style={{ margin: 0, fontSize: 20, color: "#1E1C19" }}>
-            תוכניות אימון
-          </h2>
-          <p style={{ margin: "4px 0 0", fontSize: 13, color: "#9E9A90" }}>
-            בניית תוכניות, סוגי אימון ותרגילים לפי מתאמן
-          </p>
+      <div className="program-editor-toolbar">
+        <button
+          type="button"
+          className="btn btn-ghost btn-sm program-editor-back"
+          onClick={() => {
+            setSelectedProgramId("");
+            setSelectedTraineeId("");
+          }}
+        >
+          → חזרה לתוכניות
+        </button>
+        <div className="program-editor-switch">
+          <select
+            className="form-select"
+            aria-label="סינון לפי מתאמן"
+            value={selectedTraineeId}
+            onChange={(event) => {
+              const traineeId = event.target.value;
+              setSelectedTraineeId(traineeId);
+              setSelectedProgramId(
+                programs.find(
+                  (program) =>
+                    !traineeId || program.trainee_id === traineeId
+                )?.id || ""
+              );
+            }}
+          >
+            <option value="">כל המתאמנים</option>
+            {trainees.map((trainee) => (
+              <option key={trainee.id} value={trainee.id}>
+                {trainee.full_name}
+              </option>
+            ))}
+          </select>
+          <select
+            className="form-select"
+            aria-label="מעבר לתוכנית"
+            value={selectedProgramId}
+            onChange={(event) => setSelectedProgramId(event.target.value)}
+          >
+            {visiblePrograms.map((program) => (
+              <option key={program.id} value={program.id}>
+                {selectedTraineeId
+                  ? program.name
+                  : `${program.name} · ${traineeName(program)}`}
+              </option>
+            ))}
+          </select>
         </div>
         <button
+          type="button"
+          className="btn btn-outline btn-sm"
           onClick={beginCreateProgram}
           disabled={busy || trainees.length === 0}
-          style={primaryButton(busy || trainees.length === 0)}
         >
           + תוכנית חדשה
         </button>
       </div>
 
-      {trainees.length === 0 ? (
-        <div
-          style={{
-            background: "#fff",
-            borderRadius: 12,
-            border: "0.5px solid #EDEBE6",
-            padding: 24,
-            textAlign: "center",
-            color: "#9E9A90",
-          }}
+      <section className="card program-summary">
+        <div className="program-summary-main">
+          <div className="program-summary-title">
+            <h2>{selectedProgram.name}</h2>
+            <span
+              className={`badge ${
+                selectedProgram.status === "active" ? "badge-active" : "badge-inactive"
+              }`}
+            >
+              {STATUS_LABELS[selectedProgram.status]}
+            </span>
+            {selectedProgram.is_template && <span className="badge badge-burg">תבנית</span>}
+          </div>
+          <p className="program-summary-meta">
+            {traineeName(selectedProgram)}
+            {selectedProgram.goal ? ` · מטרה: ${selectedProgram.goal}` : ""}
+            {(selectedProgram.start_date || selectedProgram.end_date) &&
+              ` · ${formatDate(selectedProgram.start_date)} – ${formatDate(selectedProgram.end_date)}`}
+          </p>
+          {selectedProgram.notes && (
+            <p className="program-summary-notes">{selectedProgram.notes}</p>
+          )}
+        </div>
+        <div className="program-summary-actions">
+          {selectedProgram.status !== "active" && (
+            <button
+              type="button"
+              className="btn btn-primary btn-sm"
+              onClick={() => handleActivate(selectedProgram)}
+              disabled={busy}
+            >
+              {actionKey === `activate-${selectedProgram.id}`
+                ? "מפעיל..."
+                : "הפעל תוכנית"}
+            </button>
+          )}
+          <button
+            type="button"
+            className="btn btn-outline btn-sm"
+            onClick={() => beginEditProgram(selectedProgram)}
+            disabled={busy}
+          >
+            ערוך פרטי תוכנית
+          </button>
+          <button
+            type="button"
+            className="btn btn-sm program-action-danger"
+            onClick={() => handleDeleteProgram(selectedProgram)}
+            disabled={busy}
+          >
+            {actionKey === `delete-${selectedProgram.id}` ? "מוחק..." : "מחק תוכנית"}
+          </button>
+        </div>
+      </section>
+
+      {actionError && !formOpen && (
+        <div className="alert-strip danger">{actionError}</div>
+      )}
+
+      <div className="program-days-header">
+        <h3>
+          סוגי אימון
+          {!detailsLoading && !detailsError && <span>{days.length}</span>}
+        </h3>
+        <button
+          type="button"
+          className="btn btn-primary btn-sm"
+          onClick={beginCreateDay}
+          disabled={busy}
         >
-          יש להוסיף מתאמן לפני יצירת תוכנית אימון.
+          + סוג אימון
+        </button>
+      </div>
+
+      {showDayForm && !editingDayId && renderDayForm()}
+
+      {detailsLoading ? (
+        <div className="card programs-empty-state">טוען את פרטי התוכנית...</div>
+      ) : detailsError ? (
+        <div className="alert-strip danger">{detailsError}</div>
+      ) : days.length === 0 ? (
+        <div className="card programs-empty-state">
+          אין סוגי אימון בתוכנית. הוסף את האימון הראשון.
         </div>
       ) : (
-        <>
-          <div
-            style={{
-              background: "#fff",
-              borderRadius: 12,
-              border: "0.5px solid #EDEBE6",
-              padding: 16,
-              marginBottom: 16,
-            }}
-          >
-            <Field label="סינון לפי מתאמן">
-              <select
-                value={selectedTraineeId}
-                onChange={(event) => {
-                  const traineeId = event.target.value;
-                  setSelectedTraineeId(traineeId);
-                  setSelectedProgramId(
-                    programs.find(
-                      (program) =>
-                        !traineeId || program.trainee_id === traineeId
-                    )?.id || ""
-                  );
-                }}
-                style={inputStyle}
-              >
-                <option value="">כל המתאמנים</option>
-                {trainees.map((trainee) => (
-                  <option key={trainee.id} value={trainee.id}>
-                    {trainee.full_name}
-                  </option>
-                ))}
-              </select>
-            </Field>
-          </div>
-
-          {showProgramForm && (
-            <div
-              style={{
-                background: "#fff",
-                borderRadius: 12,
-                border: "0.5px solid #EDEBE6",
-                padding: 20,
-                marginBottom: 16,
-              }}
-            >
-              <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 16 }}>
-                {editingProgramId
-                  ? "עריכת תוכנית"
-                  : duplicateSourceId
-                    ? "שכפול תוכנית"
-                    : "תוכנית חדשה"}
-              </div>
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))",
-                  gap: 12,
-                  marginBottom: 12,
-                }}
-              >
-                <Field label="מתאמן *">
-                  <select
-                    value={programForm.traineeId}
-                    onChange={(event) =>
-                      setProgramForm((form) => ({
-                        ...form,
-                        traineeId: event.target.value,
-                      }))
-                    }
-                    style={inputStyle}
-                  >
-                    <option value="">בחר מתאמן</option>
-                    {trainees.map((trainee) => (
-                      <option key={trainee.id} value={trainee.id}>
-                        {trainee.full_name}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
-                <Field label="שם התוכנית *">
-                  <input
-                    value={programForm.name}
-                    onChange={(event) =>
-                      setProgramForm((form) => ({
-                        ...form,
-                        name: event.target.value,
-                      }))
-                    }
-                    style={inputStyle}
-                    placeholder="לדוגמה: תוכנית כוח A/B"
-                  />
-                </Field>
-                <Field label="תאריך התחלה">
-                  <input
-                    type="date"
-                    value={programForm.startDate}
-                    onChange={(event) =>
-                      setProgramForm((form) => ({
-                        ...form,
-                        startDate: event.target.value,
-                      }))
-                    }
-                    style={inputStyle}
-                  />
-                </Field>
-                <Field label="תאריך סיום">
-                  <input
-                    type="date"
-                    value={programForm.endDate}
-                    onChange={(event) =>
-                      setProgramForm((form) => ({
-                        ...form,
-                        endDate: event.target.value,
-                      }))
-                    }
-                    style={inputStyle}
-                  />
-                </Field>
-              </div>
-              <Field label="מטרת התוכנית">
-                <input
-                  value={programForm.goal}
-                  onChange={(event) =>
-                    setProgramForm((form) => ({
-                      ...form,
-                      goal: event.target.value,
-                    }))
-                  }
-                  style={{ ...inputStyle, marginBottom: 12 }}
-                />
-              </Field>
-              <Field label="הערות">
-                <textarea
-                  value={programForm.notes}
-                  onChange={(event) =>
-                    setProgramForm((form) => ({
-                      ...form,
-                      notes: event.target.value,
-                    }))
-                  }
-                  style={{ ...inputStyle, minHeight: 72, resize: "vertical" }}
-                />
-              </Field>
-              <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-                <button
-                  onClick={handleSaveProgram}
-                  disabled={busy}
-                  style={primaryButton(busy)}
-                >
-                  {actionKey === "program-save" ? "שומר..." : "שמור תוכנית"}
-                </button>
-                <button
-                  onClick={() => {
-                    setShowProgramForm(false);
-                    setEditingProgramId("");
-                    setProgramForm(EMPTY_PROGRAM);
-                    setActionError("");
-                  }}
-                  disabled={busy}
-                  style={secondaryButton(busy)}
-                >
-                  ביטול
-                </button>
-              </div>
-            </div>
-          )}
-
-          {actionError && (
-            <div style={{ color: "#C0392B", fontSize: 13, marginBottom: 12 }}>
-              {actionError}
-            </div>
-          )}
-
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
-              gap: 16,
-              alignItems: "start",
-            }}
-          >
-            <div
-              style={{
-                background: "#fff",
-                borderRadius: 12,
-                border: "0.5px solid #EDEBE6",
-                padding: 16,
-              }}
-            >
-              <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 12 }}>
-                תוכניות
-              </div>
-              {visiblePrograms.length === 0 ? (
-                <div
-                  style={{
-                    fontSize: 13,
-                    color: "#9E9A90",
-                    textAlign: "center",
-                    padding: "20px 0",
-                  }}
-                >
-                  אין תוכניות להצגה.
+        days.map((day) => (
+          <section className="program-day" key={day.id}>
+            {showDayForm && editingDayId === day.id ? (
+              renderDayForm()
+            ) : (
+              <header className="program-day-header">
+                <span className="program-day-number">{day.day_order}</span>
+                <div className="program-day-title">
+                  <h4>{day.name}</h4>
+                  <small>
+                    {exerciseCountLabel(day.exercises.length)}
+                    {day.notes ? ` · ${day.notes}` : ""}
+                  </small>
                 </div>
+                <div className="program-day-actions">
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => beginEditDay(day)}
+                    disabled={busy}
+                    aria-label={`ערוך סוג אימון ${day.name}`}
+                  >
+                    ערוך
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-sm program-action-danger"
+                    onClick={() => handleDeleteDay(day)}
+                    disabled={busy}
+                    aria-label={`מחק סוג אימון ${day.name}`}
+                  >
+                    מחק
+                  </button>
+                </div>
+              </header>
+            )}
+
+            <div className="program-exercises">
+              {day.exercises.length === 0 && exerciseDayId !== day.id && (
+                <div className="program-exercises-empty">
+                  אין עדיין תרגילים בסוג האימון הזה.
+                </div>
+              )}
+              {day.exercises.map((exercise, exerciseIndex) =>
+                exerciseDayId === day.id && editingExerciseId === exercise.id ? (
+                  <div key={exercise.id}>{renderExerciseForm(day)}</div>
+                ) : (
+                  renderExerciseRow(day, exercise, exerciseIndex)
+                )
+              )}
+              {exerciseDayId === day.id && !editingExerciseId ? (
+                renderExerciseForm(day)
               ) : (
-                visiblePrograms.map((program) => {
-                  const trainee = trainees.find(
-                    (item) => item.id === program.trainee_id
-                  );
-                  const selected = program.id === selectedProgramId;
-                  return (
-                    <button
-                      key={program.id}
-                      type="button"
-                      onClick={() => setSelectedProgramId(program.id)}
-                      style={{
-                        width: "100%",
-                        textAlign: "right",
-                        padding: 12,
-                        marginBottom: 8,
-                        borderRadius: 9,
-                        border: selected
-                          ? "1px solid #7C2D3E"
-                          : "0.5px solid #EDEBE6",
-                        background: selected ? "#F9F0F2" : "#fff",
-                        cursor: "pointer",
-                      }}
-                    >
-                      <div style={{ fontWeight: 600, fontSize: 13 }}>
-                        {program.name}
-                      </div>
-                      <div style={{ color: "#9E9A90", fontSize: 11 }}>
-                        {trainee?.full_name || "מתאמן"} ·{" "}
-                        {STATUS_LABELS[program.status]}
-                      </div>
-                    </button>
-                  );
-                })
+                <button
+                  type="button"
+                  className="program-add-exercise"
+                  onClick={() => beginCreateExercise(day)}
+                  disabled={busy}
+                >
+                  + הוספת תרגיל
+                </button>
               )}
             </div>
-
-            <div>
-              {!selectedProgram ? (
-                <div
-                  style={{
-                    background: "#fff",
-                    borderRadius: 12,
-                    border: "0.5px solid #EDEBE6",
-                    padding: 32,
-                    textAlign: "center",
-                    color: "#9E9A90",
-                  }}
-                >
-                  בחר תוכנית או צור תוכנית חדשה.
-                </div>
-              ) : (
-                <>
-                  <div
-                    style={{
-                      background: "#fff",
-                      borderRadius: 12,
-                      border: "0.5px solid #EDEBE6",
-                      padding: 20,
-                      marginBottom: 16,
-                    }}
-                  >
-                    <div
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        gap: 12,
-                        flexWrap: "wrap",
-                      }}
-                    >
-                      <div>
-                        <div style={{ fontSize: 18, fontWeight: 700 }}>
-                          {selectedProgram.name}
-                        </div>
-                        <div
-                          style={{
-                            fontSize: 12,
-                            color: "#7C2D3E",
-                            marginTop: 3,
-                          }}
-                        >
-                          {STATUS_LABELS[selectedProgram.status]}
-                        </div>
-                      </div>
-                      <div
-                        style={{
-                          display: "flex",
-                          gap: 8,
-                          alignItems: "flex-start",
-                          flexWrap: "wrap",
-                        }}
-                      >
-                        {selectedProgram.status !== "active" && (
-                          <button
-                            onClick={() => handleActivate(selectedProgram)}
-                            disabled={busy}
-                            style={primaryButton(busy)}
-                          >
-                            {actionKey === `activate-${selectedProgram.id}`
-                              ? "מפעיל..."
-                              : "הפעל תוכנית"}
-                          </button>
-                        )}
-                        <button
-                          onClick={() => beginEditProgram(selectedProgram)}
-                          disabled={busy}
-                          style={secondaryButton(busy)}
-                        >
-                          ערוך
-                        </button>
-                        <button
-                          onClick={() => handleDeleteProgram(selectedProgram)}
-                          disabled={busy}
-                          style={secondaryButton(busy, true)}
-                        >
-                          מחק
-                        </button>
-                      </div>
-                    </div>
-                    {selectedProgram.goal && (
-                      <div
-                        style={{
-                          fontSize: 13,
-                          color: "#615E57",
-                          marginTop: 10,
-                        }}
-                      >
-                        מטרה: {selectedProgram.goal}
-                      </div>
-                    )}
-                    {(selectedProgram.start_date || selectedProgram.end_date) && (
-                      <div
-                        style={{
-                          fontSize: 12,
-                          color: "#9E9A90",
-                          marginTop: 4,
-                        }}
-                      >
-                        {selectedProgram.start_date || "ללא תאריך"} –{" "}
-                        {selectedProgram.end_date || "ללא תאריך סיום"}
-                      </div>
-                    )}
-                    {selectedProgram.notes && (
-                      <div
-                        style={{
-                          fontSize: 12,
-                          color: "#9E9A90",
-                          marginTop: 4,
-                        }}
-                      >
-                        {selectedProgram.notes}
-                      </div>
-                    )}
-                  </div>
-
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      marginBottom: 12,
-                    }}
-                  >
-                    <div style={{ fontWeight: 600, fontSize: 15 }}>
-                      סוג אימון
-                    </div>
-                    <button
-                      onClick={beginCreateDay}
-                      disabled={busy}
-                      style={primaryButton(busy)}
-                    >
-                      + סוג אימון
-                    </button>
-                  </div>
-
-                  {showDayForm && (
-                    <div
-                      style={{
-                        background: "#fff",
-                        borderRadius: 12,
-                        border: "0.5px solid #EDEBE6",
-                        padding: 16,
-                        marginBottom: 12,
-                      }}
-                    >
-                      <div
-                        style={{
-                          display: "grid",
-                          gridTemplateColumns: "minmax(180px, 1fr)",
-                          gap: 12,
-                          marginBottom: 12,
-                        }}
-                      >
-                        <Field label="שם אימון *">
-                          <input
-                            value={dayForm.name}
-                            onChange={(event) =>
-                              setDayForm((form) => ({
-                                ...form,
-                                name: event.target.value,
-                              }))
-                            }
-                            style={inputStyle}
-                            placeholder="לדוגמה: אימון A"
-                          />
-                        </Field>
-                      </div>
-                      <Field label="הערות">
-                        <input
-                          value={dayForm.notes}
-                          onChange={(event) =>
-                            setDayForm((form) => ({
-                              ...form,
-                              notes: event.target.value,
-                            }))
-                          }
-                          style={inputStyle}
-                        />
-                      </Field>
-                      <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-                        <button
-                          onClick={handleSaveDay}
-                          disabled={busy}
-                          style={primaryButton(busy)}
-                        >
-                          {actionKey === "day-save" ? "שומר..." : "שמור יום"}
-                        </button>
-                        <button
-                          onClick={() => {
-                            setShowDayForm(false);
-                            setEditingDayId("");
-                            setDayForm(EMPTY_DAY);
-                          }}
-                          disabled={busy}
-                          style={secondaryButton(busy)}
-                        >
-                          ביטול
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                  {detailsLoading ? (
-                    <div
-                      style={{
-                        textAlign: "center",
-                        color: "#9E9A90",
-                        padding: 24,
-                      }}
-                    >
-                      טוען את פרטי התוכנית...
-                    </div>
-                  ) : detailsError ? (
-                    <div style={{ color: "#C0392B", fontSize: 13 }}>
-                      {detailsError}
-                    </div>
-                  ) : days.length === 0 ? (
-                    <div
-                      style={{
-                        background: "#fff",
-                        borderRadius: 12,
-                        border: "0.5px solid #EDEBE6",
-                        padding: 24,
-                        textAlign: "center",
-                        color: "#9E9A90",
-                      }}
-                    >
-                      אין סוגי אימון בתוכנית. הוסף את האימון הראשון.
-                    </div>
-                  ) : (
-                    days.map((day) => (
-                      <div
-                        key={day.id}
-                        style={{
-                          background: "#fff",
-                          borderRadius: 12,
-                          border: "0.5px solid #EDEBE6",
-                          padding: 16,
-                          marginBottom: 12,
-                        }}
-                      >
-                        <div
-                          style={{
-                            display: "flex",
-                            justifyContent: "space-between",
-                            gap: 8,
-                            marginBottom: 12,
-                            flexWrap: "wrap",
-                          }}
-                        >
-                          <div>
-                            <div style={{ fontWeight: 600, fontSize: 14 }}>
-                              {day.day_order}. {day.name}
-                            </div>
-                            {day.notes && (
-                              <div
-                                style={{
-                                  color: "#9E9A90",
-                                  fontSize: 12,
-                                  marginTop: 2,
-                                }}
-                              >
-                                {day.notes}
-                              </div>
-                            )}
-                          </div>
-                          <div style={{ display: "flex", gap: 6 }}>
-                            <button
-                              onClick={() => beginCreateExercise(day)}
-                              disabled={busy}
-                              style={secondaryButton(busy)}
-                            >
-                              + תרגיל
-                            </button>
-                            <button
-                              onClick={() => beginEditDay(day)}
-                              disabled={busy}
-                              style={secondaryButton(busy)}
-                            >
-                              ערוך סוג אימון
-                            </button>
-                            <button
-                              onClick={() => handleDeleteDay(day)}
-                              disabled={busy}
-                              style={secondaryButton(busy, true)}
-                            >
-                              מחק סוג אימון
-                            </button>
-                          </div>
-                        </div>
-
-                        {exerciseDayId === day.id && (
-                          <div
-                            style={{
-                              background: "#FAF8F5",
-                              borderRadius: 9,
-                              padding: 12,
-                              marginBottom: 12,
-                            }}
-                          >
-                            <div
-                              style={{
-                                display: "grid",
-                                gridTemplateColumns:
-                                  "repeat(auto-fit, minmax(110px, 1fr))",
-                                gap: 10,
-                              }}
-                            >
-                              <Field label="שם התרגיל *">
-                                <input
-                                  value={exerciseForm.name}
-                                  onChange={(event) =>
-                                    setExerciseForm((form) => ({
-                                      ...form,
-                                      name: event.target.value,
-                                    }))
-                                  }
-                                  style={inputStyle}
-                                />
-                              </Field>
-                              <Field label="סטים *">
-                                <input
-                                  type="number"
-                                  min="1"
-                                  value={exerciseForm.sets}
-                                  onChange={(event) =>
-                                    setExerciseForm((form) => ({
-                                      ...form,
-                                      sets: event.target.value,
-                                    }))
-                                  }
-                                  style={inputStyle}
-                                />
-                              </Field>
-                              <Field label="חזרות *">
-                                <input
-                                  value={exerciseForm.reps}
-                                  onChange={(event) =>
-                                    setExerciseForm((form) => ({
-                                      ...form,
-                                      reps: event.target.value,
-                                    }))
-                                  }
-                                  style={inputStyle}
-                                  placeholder="8-12"
-                                />
-                              </Field>
-                              <Field label="משקל יעד (ק״ג)">
-                                <input
-                                  type="number"
-                                  min="0"
-                                  max="2000"
-                                  step="0.25"
-                                  inputMode="decimal"
-                                  value={exerciseForm.targetWeightKg}
-                                  onChange={(event) =>
-                                    setExerciseForm((form) => ({
-                                      ...form,
-                                      targetWeightKg: event.target.value,
-                                    }))
-                                  }
-                                  style={inputStyle}
-                                />
-                              </Field>
-                              <Field label="RIR יעד">
-                                <input
-                                  type="number"
-                                  min="0"
-                                  max="10"
-                                  step="0.5"
-                                  value={exerciseForm.targetRir}
-                                  onChange={(event) =>
-                                    setExerciseForm((form) => ({
-                                      ...form,
-                                      targetRir: event.target.value,
-                                    }))
-                                  }
-                                  style={inputStyle}
-                                />
-                              </Field>
-                              <Field label="מנוחה בשניות">
-                                <input
-                                  type="number"
-                                  min="0"
-                                  value={exerciseForm.restSeconds}
-                                  onChange={(event) =>
-                                    setExerciseForm((form) => ({
-                                      ...form,
-                                      restSeconds: event.target.value,
-                                    }))
-                                  }
-                                  style={inputStyle}
-                                />
-                              </Field>
-                            </div>
-                            <Field label="הערות">
-                              <input
-                                value={exerciseForm.notes}
-                                onChange={(event) =>
-                                  setExerciseForm((form) => ({
-                                    ...form,
-                                    notes: event.target.value,
-                                  }))
-                                }
-                                style={{ ...inputStyle, marginTop: 8 }}
-                              />
-                            </Field>
-                            <DemoVideoFormSection
-                              key={editingExerciseId || "new"}
-                              exercise={
-                                editingExerciseId
-                                  ? day.exercises.find(
-                                      (exercise) => exercise.id === editingExerciseId
-                                    )
-                                  : null
-                              }
-                              form={exerciseForm}
-                              setForm={setExerciseForm}
-                              busy={busy}
-                            />
-                            <div
-                              style={{ display: "flex", gap: 8, marginTop: 10 }}
-                            >
-                              <button
-                                onClick={handleSaveExercise}
-                                disabled={busy}
-                                style={primaryButton(busy)}
-                              >
-                                {actionKey === "exercise-save"
-                                  ? "שומר..."
-                                  : "שמור תרגיל"}
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setExerciseDayId("");
-                                  setEditingExerciseId("");
-                                  setExerciseForm(EMPTY_EXERCISE);
-                                }}
-                                disabled={busy}
-                                style={secondaryButton(busy)}
-                              >
-                                ביטול
-                              </button>
-                            </div>
-                          </div>
-                        )}
-
-                        {day.exercises.length === 0 ? (
-                          <div
-                            style={{
-                              color: "#9E9A90",
-                              fontSize: 12,
-                              padding: "8px 0",
-                            }}
-                          >
-                            אין תרגילים ביום זה.
-                          </div>
-                        ) : (
-                          day.exercises.map((exercise, exerciseIndex) => (
-                            <div
-                              key={exercise.id}
-                              style={{
-                                display: "flex",
-                                justifyContent: "space-between",
-                                alignItems: "center",
-                                gap: 10,
-                                padding: "10px 0",
-                                borderTop: "0.5px solid #EDEBE6",
-                                flexWrap: "wrap",
-                              }}
-                            >
-                              <div>
-                                <div style={{ fontSize: 13, fontWeight: 600 }}>
-                                  {exercise.exercise_order}. {exercise.name}
-                                </div>
-                                <div
-                                  style={{ fontSize: 12, color: "#9E9A90" }}
-                                >
-                                  {exercise.sets} סטים · {exercise.reps} חזרות
-                                  {exercise.target_weight_kg != null
-                                    ? ` · יעד ${exercise.target_weight_kg} ק״ג`
-                                    : ""}
-                                  {exercise.target_rir != null
-                                    ? ` · RIR ${exercise.target_rir}`
-                                    : ""}
-                                  {exercise.rest_seconds != null
-                                    ? ` · מנוחה ${exercise.rest_seconds} שנ׳`
-                                    : ""}
-                                </div>
-                                {exercise.notes && (
-                                  <div
-                                    style={{ fontSize: 11, color: "#9E9A90" }}
-                                  >
-                                    {exercise.notes}
-                                  </div>
-                                )}
-                                {renderDemoVideoSection(day.id, exercise)}
-                              </div>
-                              <div
-                                style={{
-                                  display: "flex",
-                                  gap: 6,
-                                  flexWrap: "wrap",
-                                }}
-                              >
-                                <button
-                                  onClick={() =>
-                                    handleMoveExercise(day.id, exercise, -1)
-                                  }
-                                  disabled={busy || exerciseIndex === 0}
-                                  aria-label={`העלה את ${exercise.name}`}
-                                  style={{
-                                    ...secondaryButton(busy || exerciseIndex === 0),
-                                    minHeight: 36,
-                                  }}
-                                >
-                                  {actionKey === `exercise-move-${exercise.id}`
-                                    ? "מזיז..."
-                                    : "↑ העלה"}
-                                </button>
-                                <button
-                                  onClick={() =>
-                                    handleMoveExercise(day.id, exercise, 1)
-                                  }
-                                  disabled={
-                                    busy ||
-                                    exerciseIndex === day.exercises.length - 1
-                                  }
-                                  aria-label={`הורד את ${exercise.name}`}
-                                  style={{
-                                    ...secondaryButton(
-                                      busy ||
-                                        exerciseIndex === day.exercises.length - 1
-                                    ),
-                                    minHeight: 36,
-                                  }}
-                                >
-                                  ↓ הורד
-                                </button>
-                                <button
-                                  onClick={() =>
-                                    beginEditExercise(day.id, exercise)
-                                  }
-                                  disabled={busy}
-                                  style={secondaryButton(busy)}
-                                >
-                                  ערוך
-                                </button>
-                                <button
-                                  onClick={() =>
-                                    handleDeleteExercise(day.id, exercise)
-                                  }
-                                  disabled={busy}
-                                  style={secondaryButton(busy, true)}
-                                >
-                                  מחק
-                                </button>
-                              </div>
-                            </div>
-                          ))
-                        )}
-                      </div>
-                    ))
-                  )}
-                </>
-              )}
-            </div>
-          </div>
-        </>
+          </section>
+        ))
       )}
     </div>
   );

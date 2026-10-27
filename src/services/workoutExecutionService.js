@@ -83,24 +83,24 @@ export async function fetchOpenWorkout(traineeId) {
 
   if (exercisesError) throw exercisesError;
 
-  // The trainer's demo video stays on the program exercise; a missing one
-  // only hides the button.
+  // The trainer's demo video (YouTube link, or an older uploaded file) stays
+  // on the program exercise; a missing one only hides the button.
   const sourceIds = [
     ...new Set((exercises ?? []).map((exercise) => exercise.source_program_exercise_id).filter(Boolean)),
   ];
-  const demoVideoPaths = new Map();
+  const demoVideos = new Map();
   if (sourceIds.length > 0) {
     const { data: programExercises, error: demoError } = await supabase
       .from("program_exercises")
-      .select("id, demo_video_path")
+      .select("id, demo_video_path, demo_video_url")
       .in("id", sourceIds)
-      .not("demo_video_path", "is", null);
+      .or("demo_video_path.not.is.null,demo_video_url.not.is.null");
 
     if (demoError) {
       console.error("Demo videos load error:", demoError);
     } else {
       for (const row of programExercises ?? []) {
-        demoVideoPaths.set(row.id, row.demo_video_path);
+        demoVideos.set(row.id, row);
       }
     }
   }
@@ -135,7 +135,8 @@ export async function fetchOpenWorkout(traineeId) {
     ...workout,
     exercises: exercisesWithVideos.map((exercise) => ({
       ...exercise,
-      demo_video_path: demoVideoPaths.get(exercise.source_program_exercise_id) ?? null,
+      demo_video_path: demoVideos.get(exercise.source_program_exercise_id)?.demo_video_path ?? null,
+      demo_video_url: demoVideos.get(exercise.source_program_exercise_id)?.demo_video_url ?? null,
       sets: sets.filter((set) => set.workout_log_exercise_id === exercise.id),
     })),
   };

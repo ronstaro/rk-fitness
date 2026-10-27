@@ -2,13 +2,6 @@ import { supabase } from "../lib/supabase.js";
 import { getBusinessOwnerId } from "./accessService.js";
 
 const DEMO_VIDEO_BUCKET = "exercise-demo-videos";
-const MAX_DEMO_VIDEO_BYTES = 50 * 1024 * 1024;
-const DEMO_VIDEO_EXTENSIONS = {
-  "video/mp4": "mp4",
-  "video/quicktime": "mov",
-  "video/webm": "webm",
-  "video/x-m4v": "m4v",
-};
 
 // Removes demo video files that no exercise points to any more. Storage
 // cleanup is best effort: a leftover file is private and harmless.
@@ -228,6 +221,7 @@ export async function createProgramExercise(input) {
       target_rir: input.target_rir ?? null,
       rest_seconds: input.rest_seconds ?? null,
       notes: input.notes ?? null,
+      demo_video_url: input.demo_video_url ?? null,
     })
     .select()
     .single();
@@ -248,6 +242,7 @@ export async function updateProgramExercise(id, input) {
       target_rir: input.target_rir ?? null,
       rest_seconds: input.rest_seconds ?? null,
       notes: input.notes ?? null,
+      demo_video_url: input.demo_video_url ?? null,
     })
     .eq("id", id)
     .select()
@@ -268,44 +263,6 @@ export async function deleteProgramExercise(id) {
   await removeUnusedDemoVideos((deleted ?? []).map((row) => row.demo_video_path));
 }
 
-// Lets the program builder reject a file before the exercise is saved.
-export function validateExerciseDemoVideo(file) {
-  if (!file || !Object.hasOwn(DEMO_VIDEO_EXTENSIONS, file.type)) {
-    throw new Error("unsupported-video");
-  }
-  if (file.size > MAX_DEMO_VIDEO_BYTES) {
-    throw new Error("video-too-large");
-  }
-}
-
-// Uploads a new demo video for a program exercise. Every upload gets its own
-// file name, so a replaced video is never overwritten while someone watches it.
-export async function uploadExerciseDemoVideo(exercise, file) {
-  validateExerciseDemoVideo(file);
-
-  const ownerId = await getBusinessOwnerId();
-  const path = `${ownerId}/${globalThis.crypto.randomUUID()}.${DEMO_VIDEO_EXTENSIONS[file.type]}`;
-  const { error: uploadError } = await supabase.storage
-    .from(DEMO_VIDEO_BUCKET)
-    .upload(path, file, { cacheControl: "3600", contentType: file.type, upsert: false });
-  if (uploadError) throw uploadError;
-
-  const { data, error } = await supabase
-    .from("program_exercises")
-    .update({ demo_video_path: path, demo_video_uploaded_at: new Date().toISOString() })
-    .eq("id", exercise.id)
-    .select()
-    .single();
-
-  if (error) {
-    await supabase.storage.from(DEMO_VIDEO_BUCKET).remove([path]);
-    throw error;
-  }
-
-  await removeUnusedDemoVideos([exercise.demo_video_path]);
-  return data;
-}
-
 export async function removeExerciseDemoVideo(exercise) {
   const { data, error } = await supabase
     .from("program_exercises")
@@ -316,6 +273,18 @@ export async function removeExerciseDemoVideo(exercise) {
 
   if (error) throw error;
   await removeUnusedDemoVideos([exercise.demo_video_path]);
+  return data;
+}
+
+export async function removeExerciseDemoLink(exerciseId) {
+  const { data, error } = await supabase
+    .from("program_exercises")
+    .update({ demo_video_url: null })
+    .eq("id", exerciseId)
+    .select()
+    .single();
+
+  if (error) throw error;
   return data;
 }
 

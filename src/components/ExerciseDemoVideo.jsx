@@ -1,9 +1,12 @@
 import { useEffect, useState } from "react";
 import { getExerciseDemoVideoUrl } from "../services/programsService.js";
+import { canonicalYouTubeUrl } from "../lib/youtube.js";
 
-// Opens the trainer's demo video for one exercise. The private link is only
-// requested when the button is pressed, and expires after an hour.
-export default function ExerciseDemoVideo({ path, exerciseName, label = "▶ צפייה בסרטון הדגמה", className = "btn btn-outline btn-sm", style }) {
+// Opens the trainer's demo video for one exercise. A YouTube link opens on
+// YouTube in a new tab. An older uploaded file plays here; its private link is
+// only requested when the button is pressed and expires after an hour.
+export default function ExerciseDemoVideo({ url: youTubeUrl, path, exerciseName, label = "▶ צפייה בסרטון הדגמה", className = "btn btn-outline btn-sm", style }) {
+  const youTubeLink = canonicalYouTubeUrl(youTubeUrl);
   const [open, setOpen] = useState(false);
   const [url, setUrl] = useState("");
   const [loading, setLoading] = useState(false);
@@ -31,6 +34,14 @@ export default function ExerciseDemoVideo({ path, exerciseName, label = "▶ צ�
     } finally {
       setLoading(false);
     }
+  }
+
+  if (youTubeLink) {
+    return (
+      <a className={className} style={style} href={youTubeLink} target="_blank" rel="noopener noreferrer">
+        {label}
+      </a>
+    );
   }
 
   if (!path) return null;

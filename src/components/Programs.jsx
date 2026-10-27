@@ -14,10 +14,10 @@ import {
   updateProgram,
   updateProgramDay,
   updateProgramExercise,
+  removeExerciseDemoLink,
   removeExerciseDemoVideo,
-  uploadExerciseDemoVideo,
-  validateExerciseDemoVideo,
 } from "../services/programsService.js";
+import { canonicalYouTubeUrl } from "../lib/youtube.js";
 import ExerciseDemoVideo from "./ExerciseDemoVideo.jsx";
 
 const EMPTY_PROGRAM = {
@@ -43,6 +43,7 @@ const EMPTY_EXERCISE = {
   targetRir: "",
   restSeconds: "",
   notes: "",
+  demoVideoUrl: "",
 };
 
 const STATUS_LABELS = {
@@ -82,91 +83,54 @@ const secondaryButton = (disabled, danger = false) => ({
   opacity: disabled ? 0.6 : 1,
 });
 
-const DEMO_VIDEO_ACCEPT = "video/mp4,video/quicktime,video/webm,video/x-m4v";
-
-function demoVideoErrorMessage(error) {
-  if (error?.message === "unsupported-video") {
-    return "סוג הקובץ לא נתמך. אפשר להעלות MP4, MOV, WEBM או M4V.";
-  }
-  if (error?.message === "video-too-large") {
-    return "הסרטון גדול מדי. הגודל המרבי הוא 50MB.";
-  }
-  return "לא ניתן להעלות את הסרטון. נסו שוב.";
-}
-
-// The trainer's demo video for one program exercise. A new exercise has no
-// row yet, so its file waits here and is uploaded right after the save.
-function DemoVideoSection({
-  exercise,
-  exerciseName,
-  pendingFile,
-  busy,
-  working,
-  error,
-  onPick,
-  onRemove,
-  onClearPending,
-}) {
-  function picker(label) {
-    return (
-      <label className="program-demo-video-upload" style={secondaryButton(busy)}>
-        {label}
-        <input
-          type="file"
-          accept={DEMO_VIDEO_ACCEPT}
-          disabled={busy}
-          onChange={(event) => {
-            const file = event.target.files?.[0];
-            event.target.value = "";
-            if (file) onPick(file);
-          }}
-        />
-      </label>
-    );
-  }
-
+// The trainer's demo video for one program exercise: a YouTube link set in
+// the exercise form. Files uploaded before the switch to links can still be
+// watched and removed here, but nothing new is uploaded.
+function DemoVideoSection({ exercise, busy, working, error, onEditLink, onRemoveLink, onRemoveFile }) {
+  const hasLink = Boolean(exercise.demo_video_url);
   return (
     <div className="program-demo-video">
       <span className="program-demo-video-title">🎬 סרטון הדגמה</span>
       {working ? (
-        <span>מעדכן סרטון…</span>
-      ) : exercise?.demo_video_path ? (
+        <span>מעדכן…</span>
+      ) : hasLink ? (
+        <>
+          <ExerciseDemoVideo
+            url={exercise.demo_video_url}
+            exerciseName={exercise.name}
+            label="▶ צפייה בסרטון ↗"
+            className=""
+            style={secondaryButton(false)}
+          />
+          <button type="button" onClick={onEditLink} disabled={busy} style={secondaryButton(busy)}>
+            שינוי קישור
+          </button>
+          <button type="button" onClick={onRemoveLink} disabled={busy} style={secondaryButton(busy, true)}>
+            הסרת קישור
+          </button>
+        </>
+      ) : exercise.demo_video_path ? (
         <>
           <ExerciseDemoVideo
             path={exercise.demo_video_path}
-            exerciseName={exerciseName}
+            exerciseName={exercise.name}
             label="▶ צפייה בסרטון"
             className=""
             style={secondaryButton(false)}
           />
-          {picker("החלפת סרטון")}
-          <button
-            type="button"
-            onClick={onRemove}
-            disabled={busy}
-            style={secondaryButton(busy, true)}
-          >
-            הסרת סרטון
+          <button type="button" onClick={onEditLink} disabled={busy} style={secondaryButton(busy)}>
+            הוספת קישור
           </button>
-        </>
-      ) : pendingFile ? (
-        <>
-          <span className="program-demo-video-pending">
-            {pendingFile.name} · יעלה בשמירת התרגיל
-          </span>
-          <button
-            type="button"
-            onClick={onClearPending}
-            disabled={busy}
-            style={secondaryButton(busy)}
-          >
-            ביטול בחירה
+          <button type="button" onClick={onRemoveFile} disabled={busy} style={secondaryButton(busy, true)}>
+            הסרת הקובץ
           </button>
         </>
       ) : (
         <>
-          <span>אין סרטון</span>
-          {picker("העלאת סרטון")}
+          <span>לא הוגדר קישור</span>
+          <button type="button" onClick={onEditLink} disabled={busy} style={secondaryButton(busy)}>
+            הוספת קישור
+          </button>
         </>
       )}
       {error && (
@@ -220,7 +184,6 @@ export default function Programs({ initialTraineeId = "" }) {
   const [exerciseDayId, setExerciseDayId] = useState("");
   const [editingExerciseId, setEditingExerciseId] = useState("");
   const [exerciseForm, setExerciseForm] = useState(EMPTY_EXERCISE);
-  const [newDemoFile, setNewDemoFile] = useState(null);
   const [demoErrors, setDemoErrors] = useState({});
 
   const selectedProgram = programs.find((program) => program.id === selectedProgramId);
@@ -555,7 +518,6 @@ export default function Programs({ initialTraineeId = "" }) {
       ...EMPTY_EXERCISE,
       exerciseOrder: String(nextOrder),
     });
-    setNewDemoFile(null);
     setDemoErrors({});
     setActionError("");
   }
@@ -574,8 +536,8 @@ export default function Programs({ initialTraineeId = "" }) {
       restSeconds:
         exercise.rest_seconds == null ? "" : String(exercise.rest_seconds),
       notes: exercise.notes || "",
+      demoVideoUrl: exercise.demo_video_url || "",
     });
-    setNewDemoFile(null);
     setDemoErrors({});
     setActionError("");
   }
@@ -622,6 +584,13 @@ export default function Programs({ initialTraineeId = "" }) {
       setActionError("זמן המנוחה צריך להיות מספר שניות חיובי.");
       return;
     }
+    const demoVideoUrl = exerciseForm.demoVideoUrl.trim()
+      ? canonicalYouTubeUrl(exerciseForm.demoVideoUrl)
+      : null;
+    if (exerciseForm.demoVideoUrl.trim() && !demoVideoUrl) {
+      setActionError("הקישור לסרטון ההדגמה לא תקין. יש להדביק קישור YouTube, למשל youtube.com/watch?v=... או youtu.be/... (אפשר להעתיק מכפתור \"שיתוף\" ביוטיוב).");
+      return;
+    }
 
     setActionKey("exercise-save");
     setActionError("");
@@ -635,23 +604,13 @@ export default function Programs({ initialTraineeId = "" }) {
       target_rir: targetRir,
       rest_seconds: restSeconds,
       notes: exerciseForm.notes.trim() || null,
+      demo_video_url: demoVideoUrl,
     };
 
     try {
-      let saved = editingExerciseId
+      const saved = editingExerciseId
         ? await updateProgramExercise(editingExerciseId, payload)
         : await createProgramExercise(payload);
-
-      if (!editingExerciseId && newDemoFile) {
-        try {
-          saved = await uploadExerciseDemoVideo(saved, newDemoFile);
-        } catch (uploadError) {
-          console.error("Demo video upload error:", uploadError);
-          setDemoErrors({
-            [saved.id]: `התרגיל נשמר, אבל הסרטון לא עלה. ${demoVideoErrorMessage(uploadError)}`,
-          });
-        }
-      }
 
       setDays((current) =>
         current.map((day) => {
@@ -672,7 +631,6 @@ export default function Programs({ initialTraineeId = "" }) {
       setExerciseDayId("");
       setEditingExerciseId("");
       setExerciseForm(EMPTY_EXERCISE);
-      setNewDemoFile(null);
     } catch (error) {
       console.error("Program exercise save error:", error);
       setActionError("לא ניתן לשמור את התרגיל.");
@@ -727,22 +685,8 @@ export default function Programs({ initialTraineeId = "" }) {
     setDemoErrors((current) => ({ ...current, [key]: message }));
   }
 
-  async function handleDemoVideoUpload(dayId, exercise, file) {
-    if (!file) return;
-    setActionKey(`demo-${exercise.id}`);
-    setDemoError(exercise.id, "");
-    try {
-      replaceExercise(dayId, await uploadExerciseDemoVideo(exercise, file));
-    } catch (error) {
-      console.error("Demo video upload error:", error);
-      setDemoError(exercise.id, demoVideoErrorMessage(error));
-    } finally {
-      setActionKey("");
-    }
-  }
-
   async function handleDemoVideoRemove(dayId, exercise) {
-    if (!window.confirm(`להסיר את סרטון ההדגמה של "${exercise.name}"?`)) return;
+    if (!window.confirm(`להסיר את קובץ סרטון ההדגמה של "${exercise.name}"?`)) return;
     setActionKey(`demo-${exercise.id}`);
     setDemoError(exercise.id, "");
     try {
@@ -755,14 +699,17 @@ export default function Programs({ initialTraineeId = "" }) {
     }
   }
 
-  function handlePickNewDemoVideo(file) {
+  async function handleDemoLinkRemove(dayId, exercise) {
+    if (!window.confirm(`להסיר את הקישור לסרטון ההדגמה של "${exercise.name}"?`)) return;
+    setActionKey(`demo-${exercise.id}`);
+    setDemoError(exercise.id, "");
     try {
-      validateExerciseDemoVideo(file);
-      setNewDemoFile(file);
-      setDemoError("new", "");
+      replaceExercise(dayId, await removeExerciseDemoLink(exercise.id));
     } catch (error) {
-      setNewDemoFile(null);
-      setDemoError("new", demoVideoErrorMessage(error));
+      console.error("Demo link remove error:", error);
+      setDemoError(exercise.id, "לא ניתן להסיר את הקישור. נסו שוב.");
+    } finally {
+      setActionKey("");
     }
   }
 
@@ -770,12 +717,12 @@ export default function Programs({ initialTraineeId = "" }) {
     return (
       <DemoVideoSection
         exercise={exercise}
-        exerciseName={exercise.name}
         busy={busy}
         working={actionKey === `demo-${exercise.id}`}
         error={demoErrors[exercise.id]}
-        onPick={(file) => handleDemoVideoUpload(dayId, exercise, file)}
-        onRemove={() => handleDemoVideoRemove(dayId, exercise)}
+        onEditLink={() => beginEditExercise(dayId, exercise)}
+        onRemoveLink={() => handleDemoLinkRemove(dayId, exercise)}
+        onRemoveFile={() => handleDemoVideoRemove(dayId, exercise)}
       />
     );
   }
@@ -1912,23 +1859,33 @@ export default function Programs({ initialTraineeId = "" }) {
                                 style={{ ...inputStyle, marginTop: 8 }}
                               />
                             </Field>
-                            {(() => {
-                              const editingExercise = day.exercises.find(
-                                (exercise) => exercise.id === editingExerciseId
-                              );
-                              return editingExercise ? (
-                                renderDemoVideoSection(day.id, editingExercise)
-                              ) : (
-                                <DemoVideoSection
-                                  exerciseName={exerciseForm.name}
-                                  pendingFile={newDemoFile}
-                                  busy={busy}
-                                  error={demoErrors.new}
-                                  onPick={handlePickNewDemoVideo}
-                                  onClearPending={() => setNewDemoFile(null)}
+                            <Field label="🎬 קישור לסרטון הדגמה">
+                              <div className="program-demo-video-link">
+                                <input
+                                  type="url"
+                                  inputMode="url"
+                                  dir="ltr"
+                                  placeholder="https://youtu.be/..."
+                                  value={exerciseForm.demoVideoUrl}
+                                  onChange={(event) =>
+                                    setExerciseForm((form) => ({
+                                      ...form,
+                                      demoVideoUrl: event.target.value,
+                                    }))
+                                  }
+                                  style={inputStyle}
                                 />
-                              );
-                            })()}
+                                {canonicalYouTubeUrl(exerciseForm.demoVideoUrl) && (
+                                  <ExerciseDemoVideo
+                                    url={exerciseForm.demoVideoUrl}
+                                    exerciseName={exerciseForm.name || "תרגיל"}
+                                    label="▶ בדיקת הקישור ↗"
+                                    className=""
+                                    style={secondaryButton(false)}
+                                  />
+                                )}
+                              </div>
+                            </Field>
                             <div
                               style={{ display: "flex", gap: 8, marginTop: 10 }}
                             >
@@ -1946,7 +1903,6 @@ export default function Programs({ initialTraineeId = "" }) {
                                   setExerciseDayId("");
                                   setEditingExerciseId("");
                                   setExerciseForm(EMPTY_EXERCISE);
-                                  setNewDemoFile(null);
                                 }}
                                 disabled={busy}
                                 style={secondaryButton(busy)}
@@ -2006,8 +1962,7 @@ export default function Programs({ initialTraineeId = "" }) {
                                     {exercise.notes}
                                   </div>
                                 )}
-                                {editingExerciseId !== exercise.id &&
-                                  renderDemoVideoSection(day.id, exercise)}
+                                {renderDemoVideoSection(day.id, exercise)}
                               </div>
                               <div style={{ display: "flex", gap: 6 }}>
                                 <button

@@ -2279,6 +2279,9 @@ body.ltr .today-card.warn-border { border-right: none; border-left: 3px solid #F
 .program-demo-video input[type="file"] { display: none; }
 .program-demo-video-upload { cursor: pointer; }
 .program-demo-video-title { font-weight: 600; color: var(--burg); }
+.program-demo-video-link { display: flex; align-items: center; gap: 8px; }
+.program-demo-video-link input { flex: 1; min-width: 0; text-align: left; }
+.program-demo-video a { text-decoration: none; }
 .program-demo-video-pending { overflow-wrap: anywhere; }
 .program-demo-video-error { flex-basis: 100%; color: var(--red, #C0392B); font-size: 12px; }
 .trainee-demo-video-button { margin-top: 8px; align-self: flex-start; }

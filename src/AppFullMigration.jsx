@@ -1932,7 +1932,7 @@ function Workout() {
                 <p className="trainee-live-trainer-note">💬 {exercise.trainer_notes}</p>
               )}
 
-              <ExerciseDemoVideo path={exercise.demo_video_path} exerciseName={exercise.exercise_name} className="btn btn-outline btn-sm trainee-demo-video-button" />
+              <ExerciseDemoVideo url={exercise.demo_video_url} path={exercise.demo_video_path} exerciseName={exercise.exercise_name} className="btn btn-outline btn-sm trainee-demo-video-button" />
 
               <div className="trainee-live-targets">
                 <article>
@@ -2144,7 +2144,7 @@ function Workout() {
                         <div>
                           <strong>{exercise.name}</strong>
                           {exercise.notes && <p>{exercise.notes}</p>}
-                          <ExerciseDemoVideo path={exercise.demo_video_path} exerciseName={exercise.name} className="btn btn-outline btn-sm trainee-demo-video-button" />
+                          <ExerciseDemoVideo url={exercise.demo_video_url} path={exercise.demo_video_path} exerciseName={exercise.name} className="btn btn-outline btn-sm trainee-demo-video-button" />
                         </div>
                       </div>
                       <dl className="trainee-workout-exercise-data">

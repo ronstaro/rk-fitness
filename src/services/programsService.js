@@ -333,6 +333,34 @@ export async function updateProgramExercise(id, input) {
   return data;
 }
 
+async function setExerciseOrder(id, exerciseOrder) {
+  const { error } = await supabase
+    .from("program_exercises")
+    .update({ exercise_order: exerciseOrder })
+    .eq("id", id)
+    .select("id")
+    .single();
+  if (error) throw error;
+}
+
+// Changes only exercise_order, one row at a time (there is no unique
+// constraint on the order, so a brief tie in between is harmless). If a step
+// fails, the rows already changed get their old order back.
+export async function reorderProgramExercises(changes) {
+  const done = [];
+  try {
+    for (const change of changes) {
+      await setExerciseOrder(change.id, change.exercise_order);
+      done.push(change);
+    }
+  } catch (error) {
+    for (const change of done.reverse()) {
+      await setExerciseOrder(change.id, change.previous_order).catch(() => {});
+    }
+    throw error;
+  }
+}
+
 export async function deleteProgramExercise(id) {
   const { data: deleted, error } = await supabase
     .from("program_exercises")

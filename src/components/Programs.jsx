@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { fetchTrainees } from "../services/traineesService.js";
 import { useRememberedState } from "../lib/navigationMemory.js";
 import {
@@ -12,6 +12,7 @@ import {
   deleteProgramExercise,
   fetchProgramDetails,
   fetchPrograms,
+  reorderProgramExercises,
   updateProgram,
   updateProgramDay,
   updateProgramExercise,
@@ -352,6 +353,8 @@ export default function Programs({ initialTraineeId = "" }) {
     [programs, selectedTraineeId]
   );
   const busy = Boolean(actionKey);
+  // Blocks a second move that lands before the buttons re-render as disabled.
+  const movingExercise = useRef(false);
 
   async function loadAll() {
     setLoading(true);
@@ -842,6 +845,64 @@ export default function Programs({ initialTraineeId = "" }) {
       console.error("Program exercise save error:", error);
       setActionError("לא ניתן לשמור את התרגיל.");
     } finally {
+      setActionKey("");
+    }
+  }
+
+  // Moves an exercise one place up (-1) or down (+1). Normally the two
+  // exercises just swap exercise_order values; if the day has equal or
+  // unsorted orders, every exercise whose place changes is renumbered 1..n.
+  async function handleMoveExercise(dayId, exercise, direction) {
+    if (actionKey || movingExercise.current) return;
+    const day = days.find((item) => item.id === dayId);
+    const list = day ? day.exercises : [];
+    const from = list.findIndex((item) => item.id === exercise.id);
+    const to = from + direction;
+    if (from < 0 || to < 0 || to >= list.length) return;
+
+    const reordered = [...list];
+    [reordered[from], reordered[to]] = [reordered[to], reordered[from]];
+    const strictlyIncreasing = list.every(
+      (item, index) => index === 0 || item.exercise_order > list[index - 1].exercise_order
+    );
+    const newOrders = strictlyIncreasing
+      ? new Map([
+          [list[from].id, list[to].exercise_order],
+          [list[to].id, list[from].exercise_order],
+        ])
+      : new Map(reordered.map((item, index) => [item.id, index + 1]));
+    const changes = list
+      .filter((item) => newOrders.has(item.id) && newOrders.get(item.id) !== item.exercise_order)
+      .map((item) => ({
+        id: item.id,
+        exercise_order: newOrders.get(item.id),
+        previous_order: item.exercise_order,
+      }));
+
+    movingExercise.current = true;
+    setActionKey(`exercise-move-${exercise.id}`);
+    setActionError("");
+    try {
+      await reorderProgramExercises(changes);
+      setDays((current) =>
+        current.map((item) =>
+          item.id === dayId
+            ? {
+                ...item,
+                exercises: reordered.map((row) =>
+                  newOrders.has(row.id)
+                    ? { ...row, exercise_order: newOrders.get(row.id) }
+                    : row
+                ),
+              }
+            : item
+        )
+      );
+    } catch (error) {
+      console.error("Program exercise reorder error:", error);
+      setActionError("לא ניתן לשנות את סדר התרגילים. נסה שוב.");
+    } finally {
+      movingExercise.current = false;
       setActionKey("");
     }
   }
@@ -2081,7 +2142,7 @@ export default function Programs({ initialTraineeId = "" }) {
                             אין תרגילים ביום זה.
                           </div>
                         ) : (
-                          day.exercises.map((exercise) => (
+                          day.exercises.map((exercise, exerciseIndex) => (
                             <div
                               key={exercise.id}
                               style={{
@@ -2121,7 +2182,47 @@ export default function Programs({ initialTraineeId = "" }) {
                                 )}
                                 {renderDemoVideoSection(day.id, exercise)}
                               </div>
-                              <div style={{ display: "flex", gap: 6 }}>
+                              <div
+                                style={{
+                                  display: "flex",
+                                  gap: 6,
+                                  flexWrap: "wrap",
+                                }}
+                              >
+                                <button
+                                  onClick={() =>
+                                    handleMoveExercise(day.id, exercise, -1)
+                                  }
+                                  disabled={busy || exerciseIndex === 0}
+                                  aria-label={`העלה את ${exercise.name}`}
+                                  style={{
+                                    ...secondaryButton(busy || exerciseIndex === 0),
+                                    minHeight: 36,
+                                  }}
+                                >
+                                  {actionKey === `exercise-move-${exercise.id}`
+                                    ? "מזיז..."
+                                    : "↑ העלה"}
+                                </button>
+                                <button
+                                  onClick={() =>
+                                    handleMoveExercise(day.id, exercise, 1)
+                                  }
+                                  disabled={
+                                    busy ||
+                                    exerciseIndex === day.exercises.length - 1
+                                  }
+                                  aria-label={`הורד את ${exercise.name}`}
+                                  style={{
+                                    ...secondaryButton(
+                                      busy ||
+                                        exerciseIndex === day.exercises.length - 1
+                                    ),
+                                    minHeight: 36,
+                                  }}
+                                >
+                                  ↓ הורד
+                                </button>
                                 <button
                                   onClick={() =>
                                     beginEditExercise(day.id, exercise)

@@ -21,7 +21,7 @@ async function attachWorkoutDetails(workouts) {
   const workoutIds = workouts.map((workout) => workout.id);
   const { data: exercises, error: exercisesError } = await supabase
     .from("workout_log_exercises")
-    .select("id, workout_log_id, exercise_order, exercise_name, prescribed_sets, prescribed_reps, target_weight_kg, target_rir, rest_seconds, trainer_notes, trainee_notes, is_completed, video_path, video_uploaded_at")
+    .select("id, workout_log_id, exercise_order, exercise_name, prescribed_sets, prescribed_reps, target_weight_kg, target_rir, rest_seconds, trainer_notes, trainee_notes, is_completed, video_path, video_uploaded_at, trainer_feedback")
     .in("workout_log_id", workoutIds)
     .order("exercise_order", { ascending: true });
 
@@ -144,7 +144,7 @@ export async function fetchOpenWorkout(traineeId) {
 export async function fetchCompletedWorkouts({ traineeId, limit = 50 } = {}) {
   let query = supabase
     .from("workout_logs")
-    .select("id, trainee_id, program_name, program_goal, day_name, day_order, status, started_at, completed_at")
+    .select("id, trainee_id, program_name, program_goal, day_name, day_order, status, started_at, completed_at, trainer_feedback, trainer_reviewed_at")
     .eq("status", "completed")
     .order("completed_at", { ascending: false })
     .limit(limit);
@@ -276,4 +276,17 @@ export async function finishWorkout(workoutId) {
   });
 
   if (error) throw error;
+}
+
+// Saves the whole review at once. The server sets the reviewer and time, and
+// an empty text clears that feedback.
+export async function saveWorkoutReview(workoutId, generalFeedback, exerciseFeedback) {
+  const { data, error } = await supabase.rpc("save_workout_review", {
+    p_workout_id: workoutId,
+    p_general_feedback: generalFeedback ?? "",
+    p_exercise_feedback: exerciseFeedback.map(({ id, feedback }) => ({ id, feedback: feedback ?? "" })),
+  });
+
+  if (error) throw error;
+  return data;
 }

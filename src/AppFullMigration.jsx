@@ -5,7 +5,7 @@ import { fetchActivePrograms } from "./services/programsService.js";
 import { fetchPaidPayments } from "./services/financeService.js";
 import { PAYMENT_METHODS, onlinePaymentState, onlinePaymentText, paymentMethodLabel } from "./lib/payments.js";
 import { fetchTraineeHomeData, fetchTraineeProfile, fetchTraineeProgramData } from "./services/traineeHomeService.js";
-import { fetchCompletedWorkouts, fetchOpenWorkout, finishWorkout, startWorkout, updateWorkoutExercise, updateWorkoutSet, uploadExerciseVideo } from "./services/workoutExecutionService.js";
+import { fetchCompletedWorkouts, fetchOpenWorkout, finishWorkout, saveWorkoutReview, startWorkout, updateWorkoutExercise, updateWorkoutSet, uploadExerciseVideo } from "./services/workoutExecutionService.js";
 import Dashboard from "./components/Dashboard.jsx";
 import Finance from "./components/Finance.jsx";
 import Leads from "./components/Leads.jsx";
@@ -1351,7 +1351,59 @@ function formatWorkoutDuration(startedAt, completedAt) {
   return remainingMinutes ? `${hours} ש׳ ${remainingMinutes} דק׳` : `${hours} שעות`;
 }
 
-function CompletedWorkoutDetails({ workout }) {
+function feedbackDraftsFor(workout) {
+  return Object.fromEntries(workout.exercises.map((exercise) => [exercise.id, exercise.trainer_feedback ?? ""]));
+}
+
+// reviewMode is the admin's review form; without it the same details are the
+// trainee's read-only view with the trainer's saved feedback.
+function CompletedWorkoutDetails({ workout, reviewMode = false, onReviewed, onDirtyChange }) {
+  const [exerciseDrafts, setExerciseDrafts] = useState(() => feedbackDraftsFor(workout));
+  const [generalDraft, setGeneralDraft] = useState(workout.trainer_feedback ?? "");
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
+  const [justSaved, setJustSaved] = useState(false);
+
+  const isDirty = reviewMode && (
+    generalDraft.trim() !== (workout.trainer_feedback ?? "")
+    || workout.exercises.some((exercise) => (exerciseDrafts[exercise.id] ?? "").trim() !== (exercise.trainer_feedback ?? ""))
+  );
+
+  useEffect(() => {
+    onDirtyChange?.(isDirty);
+  }, [isDirty, onDirtyChange]);
+
+  async function handleSaveReview() {
+    setSaving(true);
+    setSaveError("");
+    setJustSaved(false);
+    try {
+      const reviewedAt = await saveWorkoutReview(
+        workout.id,
+        generalDraft,
+        workout.exercises.map((exercise) => ({ id: exercise.id, feedback: exerciseDrafts[exercise.id] ?? "" }))
+      );
+      const reviewed = {
+        ...workout,
+        trainer_feedback: generalDraft.trim() || null,
+        trainer_reviewed_at: reviewedAt,
+        exercises: workout.exercises.map((exercise) => ({
+          ...exercise,
+          trainer_feedback: (exerciseDrafts[exercise.id] ?? "").trim() || null,
+        })),
+      };
+      onReviewed?.(reviewed);
+      setExerciseDrafts(feedbackDraftsFor(reviewed));
+      setGeneralDraft(reviewed.trainer_feedback ?? "");
+      setJustSaved(true);
+    } catch (error) {
+      console.warn("Workout review save failed:", error?.name);
+      setSaveError("לא הצלחנו לשמור את המשוב. הטקסט נשאר כאן, נסי שוב.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   const completedSets = workout.exercises
     .flatMap((exercise) => exercise.sets)
     .filter((workoutSet) => workoutSet.is_completed).length;
@@ -1408,15 +1460,108 @@ function CompletedWorkoutDetails({ workout }) {
                 </video>
               </div>
             )}
+
+            {reviewMode ? (
+              <label className="workout-review-field">
+                <span>משוב על התרגיל</span>
+                <textarea
+                  rows={2}
+                  maxLength={2000}
+                  value={exerciseDrafts[exercise.id] ?? ""}
+                  disabled={saving}
+                  placeholder="משוב קצר על הביצוע (לא חובה)"
+                  onChange={(event) => {
+                    const { value } = event.target;
+                    setExerciseDrafts((drafts) => ({ ...drafts, [exercise.id]: value }));
+                    setJustSaved(false);
+                  }}
+                />
+              </label>
+            ) : exercise.trainer_feedback && (
+              <div className="workout-trainer-feedback">
+                <strong>המשוב של רוני</strong>
+                <p>{exercise.trainer_feedback}</p>
+              </div>
+            )}
           </section>
         ))}
       </div>
+
+      {reviewMode ? (
+        <section className="workout-review-general">
+          <label className="workout-review-field">
+            <span>משוב כללי על האימון</span>
+            <textarea
+              rows={4}
+              maxLength={4000}
+              value={generalDraft}
+              disabled={saving}
+              placeholder="כתבי סיכום, דגשים והמלצות לאימון הבא..."
+              onChange={(event) => {
+                setGeneralDraft(event.target.value);
+                setJustSaved(false);
+              }}
+            />
+          </label>
+          <div className="workout-review-actions">
+            <div className="workout-review-status" aria-live="polite">
+              {saveError ? (
+                <span className="workout-review-error">{saveError}</span>
+              ) : justSaved ? (
+                <span className="workout-review-saved">המשוב נשמר ✓</span>
+              ) : isDirty ? (
+                <span>יש שינויים שלא נשמרו</span>
+              ) : workout.trainer_reviewed_at ? (
+                <span>נבדק ב־{formatCompletedWorkoutDate(workout.trainer_reviewed_at)}</span>
+              ) : (
+                <span>האימון עדיין לא נבדק</span>
+              )}
+            </div>
+            <button
+              type="button"
+              className="btn btn-primary btn-sm"
+              disabled={saving || (!isDirty && Boolean(workout.trainer_reviewed_at))}
+              onClick={handleSaveReview}
+            >
+              {saving ? "שומר..." : "שמור משוב"}
+            </button>
+          </div>
+        </section>
+      ) : workout.trainer_feedback ? (
+        <div className="workout-trainer-feedback general">
+          <strong>משוב כללי מרוני</strong>
+          <p>{workout.trainer_feedback}</p>
+        </div>
+      ) : !workout.trainer_reviewed_at && (
+        <p className="workout-review-pending">ממתין לסקירת המאמנת</p>
+      )}
     </div>
   );
 }
 
-function CompletedWorkoutsList({ workouts, traineeNamesById = {}, emptyText }) {
+function ReviewBadge({ workout, reviewMode }) {
+  if (workout.trainer_reviewed_at) {
+    return <span className="badge badge-active">{reviewMode ? "נבדק ✓" : "נבדק על ידי רוני"}</span>;
+  }
+  return reviewMode
+    ? <span className="badge badge-warn">ממתין לסקירה</span>
+    : <span className="badge badge-inactive">ממתין לסקירת המאמנת</span>;
+}
+
+function CompletedWorkoutsList({ workouts, traineeNamesById = {}, emptyText, reviewMode = false, onWorkoutReviewed }) {
   const [openWorkoutId, setOpenWorkoutId] = useState("");
+  const openDirtyRef = useRef(false);
+
+  function toggleWorkout(workoutId) {
+    if (
+      openDirtyRef.current
+      && !window.confirm("יש משוב שלא נשמר. לסגור בכל זאת?")
+    ) {
+      return;
+    }
+    openDirtyRef.current = false;
+    setOpenWorkoutId(openWorkoutId === workoutId ? "" : workoutId);
+  }
 
   if (workouts.length === 0) {
     return <div className="completed-workouts-empty">{emptyText}</div>;
@@ -1434,7 +1579,7 @@ function CompletedWorkoutsList({ workouts, traineeNamesById = {}, emptyText }) {
               type="button"
               className="completed-workout-card-toggle"
               aria-expanded={isOpen}
-              onClick={() => setOpenWorkoutId(isOpen ? "" : workout.id)}
+              onClick={() => toggleWorkout(workout.id)}
             >
               <div>
                 <strong>{traineeName ? `${traineeName} · ` : ""}{workout.day_name}</strong>
@@ -1442,11 +1587,20 @@ function CompletedWorkoutsList({ workouts, traineeNamesById = {}, emptyText }) {
               </div>
               <div className="completed-workout-card-badges">
                 {hasVideo && <span className="badge badge-burg">📹 סרטון</span>}
-                <span className="badge badge-active">הושלם וננעל</span>
+                <ReviewBadge workout={workout} reviewMode={reviewMode} />
                 <span aria-hidden="true">{isOpen ? "⌃" : "⌄"}</span>
               </div>
             </button>
-            {isOpen && <CompletedWorkoutDetails workout={workout} />}
+            {isOpen && (
+              <CompletedWorkoutDetails
+                workout={workout}
+                reviewMode={reviewMode}
+                onReviewed={onWorkoutReviewed}
+                onDirtyChange={(dirty) => {
+                  openDirtyRef.current = dirty;
+                }}
+              />
+            )}
           </article>
         );
       })}
@@ -2268,13 +2422,14 @@ function Reviews() {
   const workoutsWithNotes = workouts.filter((workout) =>
     workout.exercises.some((exercise) => exercise.trainee_notes)
   ).length;
+  const workoutsAwaitingReview = workouts.filter((workout) => !workout.trainer_reviewed_at).length;
 
   return (
     <div className="workout-reviews slide-in">
       <div className="workout-reviews-heading">
         <div>
           <h2>📋 סקירות אימונים</h2>
-          <p>כל אימון שהסתיים, כולל הסטים, ההערות והסרטונים שהמתאמן שמר.</p>
+          <p>כל אימון שהסתיים, כולל הסטים, ההערות והסרטונים שהמתאמן שמר. כאן כותבים משוב לכל תרגיל ולאימון כולו.</p>
         </div>
         <button type="button" className="btn btn-outline btn-sm" disabled={loading} onClick={() => setReloadKey((key) => key + 1)}>
           {loading ? "טוען..." : "רענון"}
@@ -2283,6 +2438,7 @@ function Reviews() {
 
       <div className="workout-reviews-metrics">
         <article><span>אימונים שהושלמו</span><strong>{workouts.length}</strong></article>
+        <article><span>ממתינים לסקירה</span><strong>{workoutsAwaitingReview}</strong></article>
         <article><span>אימונים עם סרטון</span><strong>{workoutsWithVideos}</strong></article>
         <article><span>אימונים עם הערות</span><strong>{workoutsWithNotes}</strong></article>
       </div>
@@ -2301,6 +2457,10 @@ function Reviews() {
           workouts={workouts}
           traineeNamesById={traineeNamesById}
           emptyText="עדיין אין אימונים שהושלמו לסקירה."
+          reviewMode
+          onWorkoutReviewed={(updated) =>
+            setWorkouts((current) => current.map((workout) => (workout.id === updated.id ? updated : workout)))
+          }
         />
       )}
     </div>

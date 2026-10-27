@@ -2091,6 +2091,7 @@ body.ltr .today-card.warn-border { border-right: none; border-left: 3px solid #F
 .workout-history-heading h3, .workout-reviews-heading h2 { margin: 0; color: var(--gray-900); font-size: 18px; }
 .workout-history-heading p, .workout-reviews-heading p { margin-top: 3px; color: var(--gray-400); font-size: 11px; }
 .workout-reviews { max-width: 1050px; margin: 0 auto; }
+.workout-reviews .workout-reviews-metrics { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .workout-reviews-metrics, .completed-workout-summary {
   display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-bottom: 16px;
 }
@@ -2135,6 +2136,24 @@ body.ltr .today-card.warn-border { border-right: none; border-left: 3px solid #F
 .completed-workout-video { display: grid; gap: 7px; margin-top: 10px; }
 .completed-workout-video > span { color: var(--gray-600); font-size: 10px; font-weight: 600; }
 .completed-workout-video video { width: 100%; max-height: 380px; border-radius: 9px; background: #171515; }
+.workout-review-field { display: grid; gap: 5px; margin-top: 11px; }
+.workout-review-field span { color: var(--burg); font-size: 11px; font-weight: 700; }
+.workout-review-field textarea {
+  width: 100%; box-sizing: border-box; padding: 9px 10px; border: 1px solid var(--gray-200); border-radius: 9px;
+  background: #fff; color: var(--gray-900); font: inherit; font-size: 13px; line-height: 1.5; resize: vertical;
+}
+.workout-review-field textarea:focus { outline: none; border-color: var(--burg); box-shadow: 0 0 0 3px var(--burg-pale); }
+.workout-review-general { margin-top: 14px; padding: 14px; border: 1px solid var(--burg-pale); border-radius: 10px; background: #fff; }
+.workout-review-general .workout-review-field { margin-top: 0; }
+.workout-review-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 10px; }
+.workout-review-status { color: var(--gray-400); font-size: 11px; }
+.workout-review-saved { color: var(--success); font-weight: 600; }
+.workout-review-error { color: var(--danger); }
+.workout-trainer-feedback { margin-top: 10px; padding: 10px 12px; border-inline-start: 3px solid var(--burg); border-radius: 8px; background: var(--burg-pale); }
+.workout-trainer-feedback strong { display: block; color: var(--burg); font-size: 11px; }
+.workout-trainer-feedback p { margin: 4px 0 0; color: var(--gray-900); font-size: 13px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
+.workout-trainer-feedback.general { margin-top: 14px; }
+.workout-review-pending { margin: 14px 0 0; color: var(--gray-400); font-size: 11px; text-align: center; }
 
 /* ── Trainee progress ─────────────────────────────────────── */
 .trainee-progress-page { max-width: 1050px; margin: 0 auto; }
@@ -2227,6 +2246,7 @@ body.ltr .today-card.warn-border { border-right: none; border-left: 3px solid #F
   .workout-history-heading, .workout-reviews-heading { align-items: flex-start; flex-direction: column; }
   .workout-reviews-heading .btn { width: 100%; }
   .workout-reviews-metrics, .completed-workout-summary { gap: 7px; }
+  .workout-reviews .workout-reviews-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .workout-reviews-metrics article, .completed-workout-summary article { padding: 11px 9px; }
   .workout-reviews-metrics strong, .completed-workout-summary strong { font-size: 16px; }
   .completed-workout-card-toggle { align-items: flex-start; flex-direction: column; padding: 14px; }
@@ -2235,6 +2255,9 @@ body.ltr .today-card.warn-border { border-right: none; border-left: 3px solid #F
   .completed-workout-exercise { padding: 11px; }
   .completed-workout-exercise > header { align-items: stretch; flex-direction: column; }
   .completed-workout-set { grid-template-columns: 30px repeat(4, minmax(0, 1fr)); gap: 3px; padding: 7px 4px; }
+  .workout-review-actions { align-items: stretch; flex-direction: column; }
+  .workout-review-actions .btn { width: 100%; min-height: 44px; }
+  .workout-review-field textarea { font-size: 16px; }
   .trainee-progress-hero { align-items: stretch; flex-direction: column; padding: 18px; }
   .trainee-progress-hero h2 { font-size: 21px; }
   .trainee-progress-hero .btn { width: 100%; }

@@ -2,6 +2,14 @@ import { supabase } from "../lib/supabase.js";
 import { getBusinessOwnerId } from "./accessService.js";
 
 const DEMO_VIDEO_BUCKET = "exercise-demo-videos";
+const MAX_DEMO_VIDEO_BYTES = 50 * 1024 * 1024;
+const DEMO_VIDEO_EXTENSIONS = {
+  "video/mp4": "mp4",
+  "video/quicktime": "mov",
+  "video/webm": "webm",
+  "video/x-m4v": "m4v",
+};
+export const DEMO_VIDEO_ACCEPT = Object.keys(DEMO_VIDEO_EXTENSIONS).join(",");
 
 // Removes demo video files that no exercise points to any more. Storage
 // cleanup is best effort: a leftover file is private and harmless.
@@ -230,25 +238,37 @@ export async function createProgramExercise(input) {
   return data;
 }
 
+// An exercise has one demo source at a time. demo_video_url is changed only
+// when the input names it, and clear_demo_file drops an uploaded file in the
+// same update, so a link never sits next to a file.
 export async function updateProgramExercise(id, input) {
+  const changes = {
+    name: input.name,
+    exercise_order: input.exercise_order,
+    sets: input.sets,
+    reps: input.reps,
+    target_weight_kg: input.target_weight_kg ?? null,
+    target_rir: input.target_rir ?? null,
+    rest_seconds: input.rest_seconds ?? null,
+    notes: input.notes ?? null,
+  };
+  if (Object.hasOwn(input, "demo_video_url")) {
+    changes.demo_video_url = input.demo_video_url;
+  }
+  if (input.clear_demo_file) {
+    changes.demo_video_path = null;
+    changes.demo_video_uploaded_at = null;
+  }
+
   const { data, error } = await supabase
     .from("program_exercises")
-    .update({
-      name: input.name,
-      exercise_order: input.exercise_order,
-      sets: input.sets,
-      reps: input.reps,
-      target_weight_kg: input.target_weight_kg ?? null,
-      target_rir: input.target_rir ?? null,
-      rest_seconds: input.rest_seconds ?? null,
-      notes: input.notes ?? null,
-      demo_video_url: input.demo_video_url ?? null,
-    })
+    .update(changes)
     .eq("id", id)
     .select()
     .single();
 
   if (error) throw error;
+  if (input.clear_demo_file) await removeUnusedDemoVideos([input.previous_demo_video_path]);
   return data;
 }
 
@@ -263,28 +283,58 @@ export async function deleteProgramExercise(id) {
   await removeUnusedDemoVideos((deleted ?? []).map((row) => row.demo_video_path));
 }
 
-export async function removeExerciseDemoVideo(exercise) {
+export function validateExerciseDemoVideo(file) {
+  if (!file || !Object.hasOwn(DEMO_VIDEO_EXTENSIONS, file.type)) {
+    throw new Error("unsupported-video");
+  }
+  if (file.size > MAX_DEMO_VIDEO_BYTES) {
+    throw new Error("video-too-large");
+  }
+}
+
+// Uploads a file as the exercise's demo. The same update clears a YouTube
+// link, so the file becomes the only demo source.
+export async function uploadExerciseDemoVideo(exercise, file) {
+  validateExerciseDemoVideo(file);
+
+  const ownerId = await getBusinessOwnerId();
+  const path = `${ownerId}/${globalThis.crypto.randomUUID()}.${DEMO_VIDEO_EXTENSIONS[file.type]}`;
+  const { error: uploadError } = await supabase.storage
+    .from(DEMO_VIDEO_BUCKET)
+    .upload(path, file, { cacheControl: "3600", contentType: file.type, upsert: false });
+  if (uploadError) throw uploadError;
+
   const { data, error } = await supabase
     .from("program_exercises")
-    .update({ demo_video_path: null, demo_video_uploaded_at: null })
+    .update({
+      demo_video_path: path,
+      demo_video_uploaded_at: new Date().toISOString(),
+      demo_video_url: null,
+    })
+    .eq("id", exercise.id)
+    .select()
+    .single();
+
+  if (error) {
+    await supabase.storage.from(DEMO_VIDEO_BUCKET).remove([path]);
+    throw error;
+  }
+
+  await removeUnusedDemoVideos([exercise.demo_video_path]);
+  return data;
+}
+
+// Removes the exercise's demo, whichever source it is.
+export async function removeExerciseDemo(exercise) {
+  const { data, error } = await supabase
+    .from("program_exercises")
+    .update({ demo_video_path: null, demo_video_uploaded_at: null, demo_video_url: null })
     .eq("id", exercise.id)
     .select()
     .single();
 
   if (error) throw error;
   await removeUnusedDemoVideos([exercise.demo_video_path]);
-  return data;
-}
-
-export async function removeExerciseDemoLink(exerciseId) {
-  const { data, error } = await supabase
-    .from("program_exercises")
-    .update({ demo_video_url: null })
-    .eq("id", exerciseId)
-    .select()
-    .single();
-
-  if (error) throw error;
   return data;
 }
 

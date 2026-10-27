@@ -14,8 +14,10 @@ import {
   updateProgram,
   updateProgramDay,
   updateProgramExercise,
-  removeExerciseDemoLink,
-  removeExerciseDemoVideo,
+  DEMO_VIDEO_ACCEPT,
+  removeExerciseDemo,
+  uploadExerciseDemoVideo,
+  validateExerciseDemoVideo,
 } from "../services/programsService.js";
 import { canonicalYouTubeUrl } from "../lib/youtube.js";
 import ExerciseDemoVideo from "./ExerciseDemoVideo.jsx";
@@ -43,7 +45,9 @@ const EMPTY_EXERCISE = {
   targetRir: "",
   restSeconds: "",
   notes: "",
+  demoMode: "none",
   demoVideoUrl: "",
+  demoFile: null,
 };
 
 const STATUS_LABELS = {
@@ -83,53 +87,204 @@ const secondaryButton = (disabled, danger = false) => ({
   opacity: disabled ? 0.6 : 1,
 });
 
-// The trainer's demo video for one program exercise: a YouTube link set in
-// the exercise form. Files uploaded before the switch to links can still be
-// watched and removed here, but nothing new is uploaded.
-function DemoVideoSection({ exercise, busy, working, error, onEditLink, onRemoveLink, onRemoveFile }) {
-  const hasLink = Boolean(exercise.demo_video_url);
+function demoVideoErrorMessage(error) {
+  if (error?.message === "unsupported-video") {
+    return "סוג הקובץ לא נתמך. אפשר להעלות MP4, MOV, WEBM או M4V.";
+  }
+  if (error?.message === "video-too-large") {
+    return "הסרטון גדול מדי. הגודל המרבי הוא 50MB.";
+  }
+  return "לא ניתן להעלות את הסרטון. נסו שוב.";
+}
+
+const INVALID_YOUTUBE_MESSAGE =
+  "הקישור לסרטון ההדגמה לא תקין. יש להדביק קישור YouTube, למשל youtube.com/watch?v=... או youtu.be/... (אפשר להעתיק מכפתור \"שיתוף\" ביוטיוב).";
+
+// The demo an exercise has now: a YouTube link or an uploaded file, never
+// both (every save and upload clears the other one).
+function demoSource(exercise) {
+  if (exercise?.demo_video_url) return "youtube";
+  if (exercise?.demo_video_path) return "file";
+  return "none";
+}
+
+const DEMO_SOURCE_LABELS = {
+  youtube: "קישור YouTube",
+  file: "סרטון שהועלה",
+};
+
+const DEMO_MODES = [
+  { id: "none", label: "ללא סרטון" },
+  { id: "file", label: "העלאת סרטון" },
+  { id: "youtube", label: "קישור YouTube" },
+];
+
+// What saving the form will do to the current demo, said before it happens.
+function demoChangeNotice(current, form) {
+  if (current === "none") return "";
+  if (form.demoMode === "none") return "סרטון ההדגמה הנוכחי יוסר בשמירה.";
+  if (form.demoMode === "file" && current === "youtube") {
+    return form.demoFile ? "בשמירה, הקישור הנוכחי יוחלף בסרטון שנבחר." : "";
+  }
+  if (form.demoMode === "file" && form.demoFile) return "בשמירה, הסרטון הנוכחי יוחלף בקובץ החדש.";
+  if (form.demoMode === "youtube" && current === "file") {
+    return "בשמירה, הסרטון שהועלה יוסר ויוחלף בקישור.";
+  }
+  return "";
+}
+
+// The demo-video part of the exercise create/edit form: no video, an
+// uploaded file (023 storage flow) or a YouTube link (026).
+function DemoVideoFormSection({ exercise, form, setForm, busy }) {
+  const current = demoSource(exercise);
+  const notice = demoChangeNotice(current, form);
+  const [fileError, setFileError] = useState("");
+
+  function setMode(demoMode) {
+    setFileError("");
+    setForm((value) => ({ ...value, demoMode }));
+  }
+
+  function pickFile(file) {
+    if (!file) return;
+    try {
+      validateExerciseDemoVideo(file);
+      setFileError("");
+      setForm((value) => ({ ...value, demoFile: file }));
+    } catch (error) {
+      setFileError(demoVideoErrorMessage(error));
+    }
+  }
+
+  return (
+    <div className="program-demo-form">
+      <div className="program-demo-form-title">🎬 סרטון הדגמה</div>
+      {current !== "none" && (
+        <div className="program-demo-form-current">
+          <span>נוכחי: {DEMO_SOURCE_LABELS[current]}</span>
+          <ExerciseDemoVideo
+            url={exercise.demo_video_url}
+            path={exercise.demo_video_path}
+            exerciseName={exercise.name}
+            label="▶ צפייה"
+            className=""
+            style={secondaryButton(false)}
+          />
+        </div>
+      )}
+      <div className="program-demo-form-options" role="radiogroup" aria-label="מקור סרטון ההדגמה">
+        {DEMO_MODES.map((mode) => (
+          <button
+            key={mode.id}
+            type="button"
+            role="radio"
+            aria-checked={form.demoMode === mode.id}
+            className={form.demoMode === mode.id ? "active" : ""}
+            onClick={() => setMode(mode.id)}
+            disabled={busy}
+          >
+            {mode.label}
+          </button>
+        ))}
+      </div>
+
+      {form.demoMode === "file" && (
+        <div className="program-demo-form-body">
+          {form.demoFile ? (
+            <div className="program-demo-form-file">
+              <span>{form.demoFile.name}</span>
+              <button
+                type="button"
+                onClick={() => setForm((value) => ({ ...value, demoFile: null }))}
+                disabled={busy}
+                style={secondaryButton(busy)}
+              >
+                ביטול בחירה
+              </button>
+            </div>
+          ) : (
+            <label className="program-demo-form-picker" style={secondaryButton(busy)}>
+              {current === "file" ? "החלפת סרטון" : "בחירת קובץ וידאו"}
+              <input
+                type="file"
+                accept={DEMO_VIDEO_ACCEPT}
+                disabled={busy}
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  event.target.value = "";
+                  pickFile(file);
+                }}
+              />
+            </label>
+          )}
+          <small>MP4, MOV, WEBM או M4V, עד 50MB. הסרטון יעלה בשמירת התרגיל.</small>
+          {fileError && <div className="program-demo-video-error" role="alert">{fileError}</div>}
+        </div>
+      )}
+
+      {form.demoMode === "youtube" && (
+        <div className="program-demo-form-body program-demo-video-link">
+          <input
+            type="url"
+            inputMode="url"
+            dir="ltr"
+            placeholder="הדבק קישור לסרטון YouTube"
+            aria-label="הדבק קישור לסרטון YouTube"
+            value={form.demoVideoUrl}
+            onChange={(event) =>
+              setForm((value) => ({ ...value, demoVideoUrl: event.target.value }))
+            }
+            disabled={busy}
+            style={inputStyle}
+          />
+          {canonicalYouTubeUrl(form.demoVideoUrl) && (
+            <ExerciseDemoVideo
+              url={form.demoVideoUrl}
+              exerciseName={form.name || "תרגיל"}
+              label="▶ בדיקת הקישור ↗"
+              className=""
+              style={secondaryButton(false)}
+            />
+          )}
+        </div>
+      )}
+
+      {notice && <div className="program-demo-form-notice">{notice}</div>}
+    </div>
+  );
+}
+
+// The demo video line under a saved exercise.
+function DemoVideoSection({ exercise, busy, working, error, onManage, onRemove }) {
+  const source = demoSource(exercise);
   return (
     <div className="program-demo-video">
       <span className="program-demo-video-title">🎬 סרטון הדגמה</span>
       {working ? (
         <span>מעדכן…</span>
-      ) : hasLink ? (
+      ) : source !== "none" ? (
         <>
           <ExerciseDemoVideo
             url={exercise.demo_video_url}
-            exerciseName={exercise.name}
-            label="▶ צפייה בסרטון ↗"
-            className=""
-            style={secondaryButton(false)}
-          />
-          <button type="button" onClick={onEditLink} disabled={busy} style={secondaryButton(busy)}>
-            שינוי קישור
-          </button>
-          <button type="button" onClick={onRemoveLink} disabled={busy} style={secondaryButton(busy, true)}>
-            הסרת קישור
-          </button>
-        </>
-      ) : exercise.demo_video_path ? (
-        <>
-          <ExerciseDemoVideo
             path={exercise.demo_video_path}
             exerciseName={exercise.name}
-            label="▶ צפייה בסרטון"
+            label="▶ צפייה בסרטון הדגמה"
             className=""
             style={secondaryButton(false)}
           />
-          <button type="button" onClick={onEditLink} disabled={busy} style={secondaryButton(busy)}>
-            הוספת קישור
+          <span>{DEMO_SOURCE_LABELS[source]}</span>
+          <button type="button" onClick={onManage} disabled={busy} style={secondaryButton(busy)}>
+            ניהול סרטון
           </button>
-          <button type="button" onClick={onRemoveFile} disabled={busy} style={secondaryButton(busy, true)}>
-            הסרת הקובץ
+          <button type="button" onClick={onRemove} disabled={busy} style={secondaryButton(busy, true)}>
+            הסרת סרטון
           </button>
         </>
       ) : (
         <>
-          <span>לא הוגדר קישור</span>
-          <button type="button" onClick={onEditLink} disabled={busy} style={secondaryButton(busy)}>
-            הוספת קישור
+          <span>אין סרטון הדגמה</span>
+          <button type="button" onClick={onManage} disabled={busy} style={secondaryButton(busy)}>
+            הוספת סרטון
           </button>
         </>
       )}
@@ -536,7 +691,9 @@ export default function Programs({ initialTraineeId = "" }) {
       restSeconds:
         exercise.rest_seconds == null ? "" : String(exercise.rest_seconds),
       notes: exercise.notes || "",
+      demoMode: demoSource(exercise),
       demoVideoUrl: exercise.demo_video_url || "",
+      demoFile: null,
     });
     setDemoErrors({});
     setActionError("");
@@ -584,12 +741,37 @@ export default function Programs({ initialTraineeId = "" }) {
       setActionError("זמן המנוחה צריך להיות מספר שניות חיובי.");
       return;
     }
-    const demoVideoUrl = exerciseForm.demoVideoUrl.trim()
-      ? canonicalYouTubeUrl(exerciseForm.demoVideoUrl)
+    const editingExercise = editingExerciseId
+      ? days
+          .find((day) => day.id === exerciseDayId)
+          ?.exercises.find((exercise) => exercise.id === editingExerciseId)
       : null;
-    if (exerciseForm.demoVideoUrl.trim() && !demoVideoUrl) {
-      setActionError("הקישור לסרטון ההדגמה לא תקין. יש להדביק קישור YouTube, למשל youtube.com/watch?v=... או youtu.be/... (אפשר להעתיק מכפתור \"שיתוף\" ביוטיוב).");
+    const currentDemo = demoSource(editingExercise);
+    const { demoMode, demoFile } = exerciseForm;
+    const demoVideoUrl =
+      demoMode === "youtube" ? canonicalYouTubeUrl(exerciseForm.demoVideoUrl) : null;
+    if (demoMode === "youtube" && !exerciseForm.demoVideoUrl.trim()) {
+      setActionError("יש להדביק קישור לסרטון YouTube, או לבחור \"ללא סרטון\".");
       return;
+    }
+    if (demoMode === "youtube" && !demoVideoUrl) {
+      setActionError(INVALID_YOUTUBE_MESSAGE);
+      return;
+    }
+    if (demoMode === "file" && !demoFile && currentDemo !== "file") {
+      setActionError("יש לבחור קובץ וידאו להעלאה, או לבחור \"ללא סרטון\".");
+      return;
+    }
+    const replacing =
+      currentDemo !== "none" && demoMode !== currentDemo && (demoMode !== "file" || demoFile);
+    if (replacing) {
+      const question =
+        demoMode === "none"
+          ? `להסיר את סרטון ההדגמה של "${name}"?`
+          : demoMode === "youtube"
+            ? "הסרטון שהועלה יוסר ויוחלף בקישור YouTube. להמשיך?"
+            : "קישור ה-YouTube יוחלף בסרטון שהועלה. להמשיך?";
+      if (!window.confirm(question)) return;
     }
 
     setActionKey("exercise-save");
@@ -604,13 +786,30 @@ export default function Programs({ initialTraineeId = "" }) {
       target_rir: targetRir,
       rest_seconds: restSeconds,
       notes: exerciseForm.notes.trim() || null,
-      demo_video_url: demoVideoUrl,
     };
+    // A new file replaces the current demo only once it has uploaded, so a
+    // failed upload keeps whatever the exercise had before.
+    if (demoMode !== "file") {
+      payload.demo_video_url = demoVideoUrl;
+      payload.clear_demo_file = currentDemo === "file";
+      payload.previous_demo_video_path = editingExercise?.demo_video_path ?? null;
+    }
 
     try {
-      const saved = editingExerciseId
+      let saved = editingExerciseId
         ? await updateProgramExercise(editingExerciseId, payload)
         : await createProgramExercise(payload);
+
+      if (demoMode === "file" && demoFile) {
+        try {
+          saved = await uploadExerciseDemoVideo(saved, demoFile);
+        } catch (uploadError) {
+          console.error("Demo video upload error:", uploadError);
+          setDemoErrors({
+            [saved.id]: `התרגיל נשמר, אבל הסרטון לא עלה. ${demoVideoErrorMessage(uploadError)}`,
+          });
+        }
+      }
 
       setDays((current) =>
         current.map((day) => {
@@ -685,29 +884,15 @@ export default function Programs({ initialTraineeId = "" }) {
     setDemoErrors((current) => ({ ...current, [key]: message }));
   }
 
-  async function handleDemoVideoRemove(dayId, exercise) {
-    if (!window.confirm(`להסיר את קובץ סרטון ההדגמה של "${exercise.name}"?`)) return;
+  async function handleDemoRemove(dayId, exercise) {
+    if (!window.confirm(`להסיר את סרטון ההדגמה של "${exercise.name}"?`)) return;
     setActionKey(`demo-${exercise.id}`);
     setDemoError(exercise.id, "");
     try {
-      replaceExercise(dayId, await removeExerciseDemoVideo(exercise));
+      replaceExercise(dayId, await removeExerciseDemo(exercise));
     } catch (error) {
       console.error("Demo video remove error:", error);
       setDemoError(exercise.id, "לא ניתן להסיר את הסרטון. נסו שוב.");
-    } finally {
-      setActionKey("");
-    }
-  }
-
-  async function handleDemoLinkRemove(dayId, exercise) {
-    if (!window.confirm(`להסיר את הקישור לסרטון ההדגמה של "${exercise.name}"?`)) return;
-    setActionKey(`demo-${exercise.id}`);
-    setDemoError(exercise.id, "");
-    try {
-      replaceExercise(dayId, await removeExerciseDemoLink(exercise.id));
-    } catch (error) {
-      console.error("Demo link remove error:", error);
-      setDemoError(exercise.id, "לא ניתן להסיר את הקישור. נסו שוב.");
     } finally {
       setActionKey("");
     }
@@ -720,9 +905,8 @@ export default function Programs({ initialTraineeId = "" }) {
         busy={busy}
         working={actionKey === `demo-${exercise.id}`}
         error={demoErrors[exercise.id]}
-        onEditLink={() => beginEditExercise(dayId, exercise)}
-        onRemoveLink={() => handleDemoLinkRemove(dayId, exercise)}
-        onRemoveFile={() => handleDemoVideoRemove(dayId, exercise)}
+        onManage={() => beginEditExercise(dayId, exercise)}
+        onRemove={() => handleDemoRemove(dayId, exercise)}
       />
     );
   }
@@ -1859,33 +2043,19 @@ export default function Programs({ initialTraineeId = "" }) {
                                 style={{ ...inputStyle, marginTop: 8 }}
                               />
                             </Field>
-                            <Field label="🎬 קישור לסרטון הדגמה">
-                              <div className="program-demo-video-link">
-                                <input
-                                  type="url"
-                                  inputMode="url"
-                                  dir="ltr"
-                                  placeholder="https://youtu.be/..."
-                                  value={exerciseForm.demoVideoUrl}
-                                  onChange={(event) =>
-                                    setExerciseForm((form) => ({
-                                      ...form,
-                                      demoVideoUrl: event.target.value,
-                                    }))
-                                  }
-                                  style={inputStyle}
-                                />
-                                {canonicalYouTubeUrl(exerciseForm.demoVideoUrl) && (
-                                  <ExerciseDemoVideo
-                                    url={exerciseForm.demoVideoUrl}
-                                    exerciseName={exerciseForm.name || "תרגיל"}
-                                    label="▶ בדיקת הקישור ↗"
-                                    className=""
-                                    style={secondaryButton(false)}
-                                  />
-                                )}
-                              </div>
-                            </Field>
+                            <DemoVideoFormSection
+                              key={editingExerciseId || "new"}
+                              exercise={
+                                editingExerciseId
+                                  ? day.exercises.find(
+                                      (exercise) => exercise.id === editingExerciseId
+                                    )
+                                  : null
+                              }
+                              form={exerciseForm}
+                              setForm={setExerciseForm}
+                              busy={busy}
+                            />
                             <div
                               style={{ display: "flex", gap: 8, marginTop: 10 }}
                             >

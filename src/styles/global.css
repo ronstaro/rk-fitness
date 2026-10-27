@@ -2276,13 +2276,25 @@ body.ltr .today-card.warn-border { border-right: none; border-left: 3px solid #F
 .demo-video-player { display: block; width: 100%; max-height: 70vh; border-radius: 10px; background: #000; }
 .demo-video-error { color: var(--red, #C0392B); font-size: 13px; }
 .program-demo-video { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 6px; font-size: 12px; color: var(--gray-400); }
-.program-demo-video input[type="file"] { display: none; }
-.program-demo-video-upload { cursor: pointer; }
 .program-demo-video-title { font-weight: 600; color: var(--burg); }
 .program-demo-video-link { display: flex; align-items: center; gap: 8px; }
 .program-demo-video-link input { flex: 1; min-width: 0; text-align: left; }
+.program-demo-video-link input:placeholder-shown { direction: rtl; text-align: right; }
 .program-demo-video a { text-decoration: none; }
-.program-demo-video-pending { overflow-wrap: anywhere; }
+.program-demo-form { margin-top: 10px; padding: 10px; border: 0.5px solid #EDEBE6; border-radius: 9px; background: #fff; display: grid; gap: 8px; }
+.program-demo-form-title { font-size: 13px; font-weight: 600; color: var(--burg); }
+.program-demo-form-current { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 12px; color: var(--gray-600); }
+.program-demo-form-options { display: flex; flex-wrap: wrap; gap: 6px; }
+.program-demo-form-options button { padding: 7px 12px; border-radius: 20px; border: 0.5px solid #D8D5CE; background: #fff; color: var(--gray-600); font-size: 13px; font-family: inherit; cursor: pointer; }
+.program-demo-form-options button.active { background: var(--burg); border-color: var(--burg); color: #fff; }
+.program-demo-form-options button:disabled { opacity: 0.6; cursor: not-allowed; }
+.program-demo-form-body { display: grid; gap: 6px; justify-items: start; }
+.program-demo-form-body.program-demo-video-link { display: flex; justify-items: initial; }
+.program-demo-form-body small { color: var(--gray-400); font-size: 11px; }
+.program-demo-form-picker { cursor: pointer; display: inline-block; }
+.program-demo-form-picker input { display: none; }
+.program-demo-form-file { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 12px; overflow-wrap: anywhere; }
+.program-demo-form-notice { padding: 8px 10px; border-radius: 8px; background: var(--warn-bg); color: var(--warn); font-size: 12px; }
 .program-demo-video-error { flex-basis: 100%; color: var(--red, #C0392B); font-size: 12px; }
 .trainee-demo-video-button { margin-top: 8px; align-self: flex-start; }
 

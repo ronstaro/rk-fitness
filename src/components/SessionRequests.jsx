@@ -252,7 +252,8 @@ export function TraineeSessionRequests() {
     );
   }
 
-  const eligible = profile.training_type === "אישי";
+  // Matches the server rule (027): in-person and online trainees.
+  const eligible = profile.training_type === "אישי" || profile.training_type === "אונליין";
   const limitReached = pendingCount >= MAX_PENDING;
 
   return (
@@ -261,7 +262,7 @@ export function TraineeSessionRequests() {
         <div className="section-title">📅 בקשה לאימון אישי</div>
         {!eligible ? (
           <p className="session-request-info">
-            בקשת אימון זמינה כרגע רק למתאמנים באימון אישי. לתיאום אפשר לפנות ישירות לרוני.
+            בקשת אימון זמינה כרגע למתאמנים באימון אישי או אונליין. לתיאום אפשר לפנות ישירות לרוני.
           </p>
         ) : (
           <form className="session-request-form" onSubmit={handleSubmit} noValidate>

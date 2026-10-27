@@ -190,6 +190,8 @@ export async function createMonthlyPayment(input) {
 }
 
 // Payments actually marked paid for these trainees, for the next-payment date.
+// A single-session payment (025) is not a subscription payment, so it must not
+// move an online trainee's next monthly date.
 export async function fetchPaidPayments(traineeIds) {
   if (traineeIds.length === 0) return [];
 
@@ -197,6 +199,7 @@ export async function fetchPaidPayments(traineeIds) {
     .from("trainee_monthly_payments")
     .select("trainee_id, payment_status, paid_at, notes")
     .in("trainee_id", traineeIds)
+    .in("source", ["monthly", "manual"])
     .eq("payment_status", "paid")
     .not("paid_at", "is", null)
     .order("paid_at", { ascending: false });

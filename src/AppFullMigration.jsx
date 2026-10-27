@@ -15,6 +15,7 @@ import WeeklyGoals from "./components/WeeklyGoals.jsx";
 import TraineeInviteCard from "./components/TraineeInviteCard.jsx";
 import ExerciseDemoVideo from "./components/ExerciseDemoVideo.jsx";
 import { TraineeSessionRequests } from "./components/SessionRequests.jsx";
+import { fetchMySessionRequests } from "./services/sessionRequestsService.js";
 import {
   claimNavigationMemory,
   clearNavigationMemory,
@@ -1159,11 +1160,12 @@ function TraineeProfile() {
 }
 
 
-function TraineeHome() {
+function TraineeHome({ onNavigate }) {
   const [homeData, setHomeData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
+  const [pendingRequests, setPendingRequests] = useState(0);
 
   useEffect(() => {
     let active = true;
@@ -1175,6 +1177,12 @@ function TraineeHome() {
       try {
         const data = await fetchTraineeHomeData();
         if (active) setHomeData(data);
+        // The pending hint is optional: if it fails, Home still shows.
+        if (data?.trainee) {
+          fetchMySessionRequests(data.trainee.id)
+            .then((rows) => active && setPendingRequests(rows.filter((row) => row.status === "pending").length))
+            .catch(() => {});
+        }
       } catch (error) {
         console.warn("Trainee home fetch failed:", error?.name);
         if (active) setLoadError("לא ניתן לטעון את אזור המתאמן כרגע.");
@@ -1242,6 +1250,17 @@ function TraineeHome() {
         </div>
         <span className="badge badge-burg">{trainee.training_type || "מתאמן"}</span>
       </section>
+
+      {onNavigate && (
+        <button type="button" className="trainee-home-request" onClick={() => onNavigate("session-request")}>
+          <span className="trainee-home-request-title">📅 בקשת אימון</span>
+          <small>
+            {pendingRequests > 0
+              ? pendingRequests === 1 ? "יש בקשה שממתינה לאישור" : `יש ${pendingRequests} בקשות שממתינות לאישור`
+              : "בוחרים מועד ושולחים לרוני לאישור"}
+          </small>
+        </button>
+      )}
 
       <div className="trainee-home-metrics">
         <article className="trainee-home-metric">
@@ -1637,6 +1656,23 @@ function Workout() {
   const [finishing, setFinishing] = useState(false);
   const [actionError, setActionError] = useState("");
   const [notice, setNotice] = useState("");
+  // Value a workout field had when it got focus; leaving it unchanged saves nothing.
+  const focusValueRef = useRef(null);
+  // Fields whose last save failed: leaving them again retries even if unchanged.
+  const unsavedFieldsRef = useRef(new Set());
+  const completionLockRef = useRef(new Set());
+
+  // Leaving the app while typing (tab switch, phone lock) would otherwise keep
+  // the value unsaved until the field loses focus, which may never happen.
+  useEffect(() => {
+    function saveFocusedField() {
+      if (document.visibilityState !== "hidden") return;
+      const field = document.activeElement;
+      if (field?.closest?.(".trainee-workout-live")) field.blur();
+    }
+    document.addEventListener("visibilitychange", saveFocusedField);
+    return () => document.removeEventListener("visibilitychange", saveFocusedField);
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -1734,8 +1770,27 @@ function Workout() {
     }
   }
 
+  function rememberFocusValue(fieldKey, value) {
+    focusValueRef.current = { fieldKey, value: String(value ?? "") };
+  }
+
+  function unchangedSinceFocus(fieldKey, value) {
+    const focused = focusValueRef.current;
+    return focused?.fieldKey === fieldKey
+      && focused.value === String(value ?? "")
+      && !unsavedFieldsRef.current.has(fieldKey);
+  }
+
+  // Counts, not flags: weight and reps of one set may be saving at once.
+  function trackSaving(setter, id, delta) {
+    setter((current) => ({ ...current, [id]: Math.max(0, (current[id] || 0) + delta) }));
+  }
+
   async function handleSetSave(exerciseId, workoutSet, field) {
-    setSavingSetIds((current) => ({ ...current, [workoutSet.id]: true }));
+    const fieldKey = `${workoutSet.id}:${field}`;
+    if (unchangedSinceFocus(fieldKey, workoutSet[field])) return;
+    focusValueRef.current = null;
+    trackSaving(setSavingSetIds, workoutSet.id, 1);
     setActionError("");
 
     try {
@@ -1743,29 +1798,36 @@ function Workout() {
         [field]: workoutSet[field],
         is_completed: true,
       });
-      updateSetState(exerciseId, workoutSet.id, savedSet);
+      // Only the completion comes back into state, so a value typed in the
+      // next field while this save was running is not overwritten.
+      updateSetState(exerciseId, workoutSet.id, { is_completed: savedSet.is_completed });
+      unsavedFieldsRef.current.delete(fieldKey);
     } catch (error) {
+      unsavedFieldsRef.current.add(fieldKey);
       console.warn("Workout set save failed:", error?.name);
       setActionError("אחד הסטים לא נשמר. בדוק את הערך ונסה שוב.");
     } finally {
-      setSavingSetIds((current) => ({ ...current, [workoutSet.id]: false }));
+      trackSaving(setSavingSetIds, workoutSet.id, -1);
     }
   }
 
   async function handleSetCompletion(exerciseId, workoutSet) {
-    setSavingSetIds((current) => ({ ...current, [workoutSet.id]: true }));
+    if (completionLockRef.current.has(workoutSet.id)) return;
+    completionLockRef.current.add(workoutSet.id);
+    trackSaving(setSavingSetIds, workoutSet.id, 1);
     setActionError("");
 
     try {
       const savedSet = await updateWorkoutSet(workoutSet.id, {
         is_completed: !workoutSet.is_completed,
       });
-      updateSetState(exerciseId, workoutSet.id, savedSet);
+      updateSetState(exerciseId, workoutSet.id, { is_completed: savedSet.is_completed });
     } catch (error) {
       console.warn("Workout set completion failed:", error?.name);
       setActionError("סימון הסט לא נשמר. נסה שוב.");
     } finally {
-      setSavingSetIds((current) => ({ ...current, [workoutSet.id]: false }));
+      completionLockRef.current.delete(workoutSet.id);
+      trackSaving(setSavingSetIds, workoutSet.id, -1);
     }
   }
 
@@ -1798,18 +1860,30 @@ function Workout() {
   }
 
   async function handleExerciseSave(exercise, changes) {
-    setSavingExerciseIds((current) => ({ ...current, [exercise.id]: true }));
+    const noteKey = `${exercise.id}:trainee_notes`;
+    trackSaving(setSavingExerciseIds, exercise.id, 1);
     setActionError("");
 
     try {
       const savedExercise = await updateWorkoutExercise(exercise.id, changes);
-      updateExerciseState(exercise.id, savedExercise);
+      // The note stays as typed locally; only the completion is taken back.
+      if (Object.hasOwn(changes, "is_completed")) {
+        updateExerciseState(exercise.id, { is_completed: savedExercise.is_completed });
+      }
+      if (Object.hasOwn(changes, "trainee_notes")) unsavedFieldsRef.current.delete(noteKey);
     } catch (error) {
+      if (Object.hasOwn(changes, "trainee_notes")) unsavedFieldsRef.current.add(noteKey);
       console.warn("Workout exercise save failed:", error?.name);
       setActionError("השינוי בתרגיל לא נשמר. נסה שוב.");
     } finally {
-      setSavingExerciseIds((current) => ({ ...current, [exercise.id]: false }));
+      trackSaving(setSavingExerciseIds, exercise.id, -1);
     }
+  }
+
+  function handleNoteSave(exercise) {
+    if (unchangedSinceFocus(`${exercise.id}:trainee_notes`, exercise.trainee_notes)) return;
+    focusValueRef.current = null;
+    handleExerciseSave(exercise, { trainee_notes: exercise.trainee_notes ?? "" });
   }
 
   async function handleFinishWorkout() {
@@ -1963,17 +2037,17 @@ function Workout() {
                       <strong>{workoutSet.set_order}</strong>
                       <label>
                         <span>משקל</span>
-                        <input aria-label={`משקל בסט ${workoutSet.set_order}`} type="number" min="0" max="2000" step="0.25" inputMode="decimal" value={workoutSet.weight_kg ?? ""} disabled={savingSetIds[workoutSet.id]} onFocus={(event) => event.currentTarget.select()} onChange={(event) => updateSetState(exercise.id, workoutSet.id, { weight_kg: event.target.value, is_completed: false })} onBlur={() => handleSetSave(exercise.id, workoutSet, "weight_kg")} />
+                        <input aria-label={`משקל בסט ${workoutSet.set_order}`} type="number" min="0" max="2000" step="0.25" inputMode="decimal" value={workoutSet.weight_kg ?? ""} onFocus={(event) => { rememberFocusValue(`${workoutSet.id}:weight_kg`, workoutSet.weight_kg); event.currentTarget.select(); }} onChange={(event) => updateSetState(exercise.id, workoutSet.id, { weight_kg: event.target.value })} onBlur={() => handleSetSave(exercise.id, workoutSet, "weight_kg")} />
                         <small>קודם: {workoutSet.previous_weight_kg == null ? "—" : `${workoutSet.previous_weight_kg}`}</small>
                       </label>
                       <label>
                         <span>חזרות</span>
-                        <input aria-label={`חזרות בסט ${workoutSet.set_order}`} type="number" min="0" max="1000" step="1" inputMode="numeric" value={workoutSet.completed_reps ?? ""} disabled={savingSetIds[workoutSet.id]} onFocus={(event) => event.currentTarget.select()} onChange={(event) => updateSetState(exercise.id, workoutSet.id, { completed_reps: event.target.value, is_completed: false })} onBlur={() => handleSetSave(exercise.id, workoutSet, "completed_reps")} />
+                        <input aria-label={`חזרות בסט ${workoutSet.set_order}`} type="number" min="0" max="1000" step="1" inputMode="numeric" value={workoutSet.completed_reps ?? ""} onFocus={(event) => { rememberFocusValue(`${workoutSet.id}:completed_reps`, workoutSet.completed_reps); event.currentTarget.select(); }} onChange={(event) => updateSetState(exercise.id, workoutSet.id, { completed_reps: event.target.value })} onBlur={() => handleSetSave(exercise.id, workoutSet, "completed_reps")} />
                         <small>קודם: {workoutSet.previous_reps ?? "—"}</small>
                       </label>
                       <label>
                         <span>RIR</span>
-                        <input aria-label={`RIR בסט ${workoutSet.set_order}`} type="number" min="0" max="10" step="0.5" inputMode="decimal" value={workoutSet.rir ?? ""} disabled={savingSetIds[workoutSet.id]} onFocus={(event) => event.currentTarget.select()} onChange={(event) => updateSetState(exercise.id, workoutSet.id, { rir: event.target.value, is_completed: false })} onBlur={() => handleSetSave(exercise.id, workoutSet, "rir")} />
+                        <input aria-label={`RIR בסט ${workoutSet.set_order}`} type="number" min="0" max="10" step="0.5" inputMode="decimal" value={workoutSet.rir ?? ""} onFocus={(event) => { rememberFocusValue(`${workoutSet.id}:rir`, workoutSet.rir); event.currentTarget.select(); }} onChange={(event) => updateSetState(exercise.id, workoutSet.id, { rir: event.target.value })} onBlur={() => handleSetSave(exercise.id, workoutSet, "rir")} />
                         <small>קודם: {workoutSet.previous_rir ?? "—"} · RPE {rirValue == null ? "—" : Math.max(0, 10 - rirValue)}</small>
                       </label>
                       <button
@@ -2031,9 +2105,9 @@ function Workout() {
                   rows="2"
                   placeholder="לדוגמה: הרגיש קל יותר מהשבוע שעבר"
                   value={exercise.trainee_notes ?? ""}
-                  disabled={savingExerciseIds[exercise.id]}
+                  onFocus={() => rememberFocusValue(`${exercise.id}:trainee_notes`, exercise.trainee_notes)}
                   onChange={(event) => updateExerciseState(exercise.id, { trainee_notes: event.target.value })}
-                  onBlur={() => handleExerciseSave(exercise, { trainee_notes: exercise.trainee_notes ?? "" })}
+                  onBlur={() => handleNoteSave(exercise)}
                 />
                 <small>{savingExerciseIds[exercise.id] ? "שומר..." : "נשמר ביציאה מהשדה"}</small>
               </label>
@@ -2777,7 +2851,7 @@ export default function AppFullMigration({ onLogout, signingOut = false, signOut
           {view === "schedule"     && <Schedule />}
           {view === "revenue"      && <Finance />}
           {view === "settings"     && <Settings />}
-          {view === "trainee-home" && <TraineeHome />}
+          {view === "trainee-home" && <TraineeHome onNavigate={selectView} />}
           {view === "trainee-profile" && <TraineeProfile />}
           {view === "workout"      && <Workout />}
           {view === "progress"     && <Progress />}

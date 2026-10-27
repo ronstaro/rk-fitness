@@ -25,7 +25,7 @@ const REQUEST_COLUMNS =
 const ERROR_MESSAGES = {
   "unsupported-proof": "אפשר לצרף רק תמונה (JPG, PNG או WEBP).",
   "proof-too-large": "התמונה גדולה מדי. הגבול הוא 10MB.",
-  "Session requests are for in-person trainees": "בקשת אימון זמינה כרגע רק למתאמנים באימון אישי.",
+  "Session requests are for in-person trainees": "בקשת אימון זמינה כרגע למתאמנים באימון אישי או אונליין.",
   "Trainee is not active": "החשבון אינו פעיל כרגע. כדאי לפנות לרוני.",
   "Requested time must be in the future": "אפשר לבקש רק מועד עתידי.",
   "Requested time has passed": "מועד האימון כבר עבר.",

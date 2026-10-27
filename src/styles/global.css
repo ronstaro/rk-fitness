@@ -1885,6 +1885,17 @@ body.ltr .today-card.warn-border { border-right: none; border-left: 3px solid #F
 .trainee-home-welcome h2 { font-size: 23px; line-height: 1.25; }
 .trainee-home-welcome p { margin-top: 7px; font-size: 13px; opacity: .82; }
 .trainee-home-welcome .badge { flex-shrink: 0; border: 1px solid rgba(255, 255, 255, .24); background: rgba(255, 255, 255, .13); color: #fff; }
+/* Entry point to the existing session-request screen. */
+.trainee-home-request {
+  display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 4px 14px;
+  width: 100%; min-height: 56px; margin-bottom: 18px; padding: 14px 18px;
+  border: 1px solid var(--burg); border-radius: 12px; background: #fff; color: var(--burg);
+  font-family: var(--font); text-align: right; cursor: pointer;
+}
+.trainee-home-request:hover { background: var(--burg-pale); }
+.trainee-home-request:focus-visible { outline: 2px solid var(--burg); outline-offset: 2px; }
+.trainee-home-request-title { font-size: 16px; font-weight: 700; }
+.trainee-home-request small { color: var(--gray-600); font-size: 13px; }
 .trainee-home-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-bottom: 18px; }
 .trainee-home-metric { min-height: 118px; padding: 16px; border: 1px solid var(--gray-100); border-radius: 12px; background: #fff; }
 .trainee-home-metric > span { display: block; color: var(--gray-400); font-size: 11px; }
@@ -2079,6 +2090,8 @@ body.ltr .today-card.warn-border { border-right: none; border-left: 3px solid #F
   border: 1px solid var(--gray-200); border-radius: 12px; background: rgba(255, 255, 255, .96);
   box-shadow: 0 8px 28px rgba(34, 27, 27, .12); backdrop-filter: blur(8px);
 }
+/* While a field is being typed in, the bar must not cover it above the keyboard. */
+.trainee-workout-live:has(input:focus, textarea:focus) .trainee-workout-finish-bar { position: static; }
 .trainee-workout-finish-bar strong, .trainee-workout-finish-bar span { display: block; }
 .trainee-workout-finish-bar strong { font-size: 12px; }
 .trainee-workout-finish-bar span { margin-top: 2px; color: var(--gray-400); font-size: 9px; }

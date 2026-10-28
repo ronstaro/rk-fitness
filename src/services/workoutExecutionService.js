@@ -21,7 +21,7 @@ async function attachWorkoutDetails(workouts) {
   const workoutIds = workouts.map((workout) => workout.id);
   const { data: exercises, error: exercisesError } = await supabase
     .from("workout_log_exercises")
-    .select("id, workout_log_id, exercise_order, exercise_name, prescribed_sets, prescribed_reps, target_weight_kg, target_rir, rest_seconds, trainer_notes, trainee_notes, is_completed, video_path, video_uploaded_at, trainer_feedback")
+    .select("id, workout_log_id, exercise_order, exercise_name, prescribed_sets, prescribed_reps, target_weight_kg, target_rir, rest_seconds, trainer_notes, trainee_notes, is_completed, video_path, video_uploaded_at, trainer_feedback, exercise_group_id")
     .in("workout_log_id", workoutIds)
     .order("exercise_order", { ascending: true });
 
@@ -77,7 +77,7 @@ export async function fetchOpenWorkout(traineeId) {
 
   const { data: exercises, error: exercisesError } = await supabase
     .from("workout_log_exercises")
-    .select("id, workout_log_id, exercise_order, exercise_name, prescribed_sets, prescribed_reps, target_weight_kg, target_rir, rest_seconds, trainer_notes, trainee_notes, is_completed, video_path, video_uploaded_at, source_program_exercise_id")
+    .select("id, workout_log_id, exercise_order, exercise_name, prescribed_sets, prescribed_reps, target_weight_kg, target_rir, rest_seconds, trainer_notes, trainee_notes, is_completed, video_path, video_uploaded_at, source_program_exercise_id, exercise_group_id")
     .eq("workout_log_id", workout.id)
     .order("exercise_order", { ascending: true });
 

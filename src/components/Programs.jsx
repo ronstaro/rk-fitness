@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { fetchTrainees } from "../services/traineesService.js";
 import { useRememberedState } from "../lib/navigationMemory.js";
 import {
   activateProgram,
+  applyExerciseGroupChanges,
   createProgram,
   createProgramDay,
   createProgramExercise,
@@ -21,6 +22,18 @@ import {
   validateExerciseDemoVideo,
 } from "../services/programsService.js";
 import { normalizeVideoLink } from "../lib/videoLink.js";
+import {
+  buildExerciseUnits,
+  canLinkUnits,
+  findExerciseGroup,
+  groupLabel,
+  moveMemberIds,
+  moveUnitIds,
+  planLink,
+  planOrder,
+  planUngroup,
+  planUnlink,
+} from "../lib/exerciseGroups.js";
 import ExerciseDemoVideo from "./ExerciseDemoVideo.jsx";
 
 const EMPTY_PROGRAM = {
@@ -833,6 +846,38 @@ export default function Programs({ initialTraineeId = "" }) {
       setExerciseDayId("");
       setEditingExerciseId("");
       setExerciseForm(EMPTY_EXERCISE);
+
+      // Rounds are the members' sets, so a new value goes to the whole block.
+      const group = editingExerciseId
+        ? findExerciseGroup(
+            days.find((day) => day.id === exerciseDayId)?.exercises ?? [],
+            editingExerciseId
+          )
+        : null;
+      const siblings = group
+        ? group.exercises.filter(
+            (item) => item.id !== editingExerciseId && item.sets !== saved.sets
+          )
+        : [];
+      if (siblings.length > 0) {
+        try {
+          mergeExerciseRows(
+            exerciseDayId,
+            await applyExerciseGroupChanges(
+              siblings.map((item) => ({
+                id: item.id,
+                exercise_group_id: group.groupId,
+                sets: saved.sets,
+                previous_group_id: group.groupId,
+                previous_sets: item.sets,
+              }))
+            )
+          );
+        } catch (roundsError) {
+          console.error("Block rounds update error:", roundsError);
+          setActionError("התרגיל נשמר, אבל מספר הסבבים לא עודכן בכל הבלוק. נסה לשמור שוב.");
+        }
+      }
     } catch (error) {
       console.error("Program exercise save error:", error);
       setActionError("לא ניתן לשמור את התרגיל.");
@@ -841,38 +886,18 @@ export default function Programs({ initialTraineeId = "" }) {
     }
   }
 
-  // Moves an exercise one place up (-1) or down (+1). Normally the two
-  // exercises just swap exercise_order values; if the day has equal or
-  // unsorted orders, every exercise whose place changes is renumbered 1..n.
-  async function handleMoveExercise(dayId, exercise, direction) {
-    if (actionKey || movingExercise.current) return;
+  // Puts a day's exercises in the order of `orderedIds`. Only exercise_order
+  // changes: with distinct orders the existing values are handed out again
+  // (a plain swap updates two rows); with ties every row is renumbered 1..n.
+  async function applyExerciseOrder(dayId, orderedIds, key) {
+    if (actionKey || movingExercise.current || !orderedIds) return;
     const day = days.find((item) => item.id === dayId);
-    const list = day ? day.exercises : [];
-    const from = list.findIndex((item) => item.id === exercise.id);
-    const to = from + direction;
-    if (from < 0 || to < 0 || to >= list.length) return;
-
-    const reordered = [...list];
-    [reordered[from], reordered[to]] = [reordered[to], reordered[from]];
-    const strictlyIncreasing = list.every(
-      (item, index) => index === 0 || item.exercise_order > list[index - 1].exercise_order
-    );
-    const newOrders = strictlyIncreasing
-      ? new Map([
-          [list[from].id, list[to].exercise_order],
-          [list[to].id, list[from].exercise_order],
-        ])
-      : new Map(reordered.map((item, index) => [item.id, index + 1]));
-    const changes = list
-      .filter((item) => newOrders.has(item.id) && newOrders.get(item.id) !== item.exercise_order)
-      .map((item) => ({
-        id: item.id,
-        exercise_order: newOrders.get(item.id),
-        previous_order: item.exercise_order,
-      }));
+    if (!day) return;
+    const { newOrders, changes } = planOrder(day.exercises, orderedIds);
+    const byId = new Map(day.exercises.map((item) => [item.id, item]));
 
     movingExercise.current = true;
-    setActionKey(`exercise-move-${exercise.id}`);
+    setActionKey(key);
     setActionError("");
     try {
       await reorderProgramExercises(changes);
@@ -881,11 +906,10 @@ export default function Programs({ initialTraineeId = "" }) {
           item.id === dayId
             ? {
                 ...item,
-                exercises: reordered.map((row) =>
-                  newOrders.has(row.id)
-                    ? { ...row, exercise_order: newOrders.get(row.id) }
-                    : row
-                ),
+                exercises: orderedIds.map((id) => ({
+                  ...byId.get(id),
+                  exercise_order: newOrders.get(id),
+                })),
               }
             : item
         )
@@ -899,8 +923,100 @@ export default function Programs({ initialTraineeId = "" }) {
     }
   }
 
+  // ↑/↓ on a standalone exercise or a whole block moves it over the
+  // neighbouring unit, so nothing ever lands inside a superset.
+  function handleMoveUnit(dayId, unit, unitIndex, direction) {
+    const day = days.find((item) => item.id === dayId);
+    if (!day) return;
+    const key =
+      unit.type === "group"
+        ? `group-move-${unit.groupId}`
+        : `exercise-move-${unit.exercises[0].id}`;
+    applyExerciseOrder(dayId, moveUnitIds(day.exercises, unitIndex, direction), key);
+  }
+
+  // ↑/↓ on a member changes the order inside its block only.
+  function handleMoveMember(dayId, exercise, direction) {
+    const day = days.find((item) => item.id === dayId);
+    if (!day) return;
+    applyExerciseOrder(
+      dayId,
+      moveMemberIds(day.exercises, exercise.id, direction),
+      `exercise-move-${exercise.id}`
+    );
+  }
+
+  function mergeExerciseRows(dayId, rows) {
+    const saved = new Map(rows.map((row) => [row.id, row]));
+    setDays((current) =>
+      current.map((day) =>
+        day.id === dayId
+          ? {
+              ...day,
+              exercises: day.exercises.map((item) =>
+                saved.has(item.id)
+                  ? {
+                      ...item,
+                      exercise_group_id: saved.get(item.id).exercise_group_id,
+                      sets: saved.get(item.id).sets,
+                    }
+                  : item
+              ),
+            }
+          : day
+      )
+    );
+  }
+
+  async function applyGroupChanges(dayId, changes, key) {
+    if (actionKey || changes.length === 0) return;
+    setActionKey(key);
+    setActionError("");
+    try {
+      mergeExerciseRows(dayId, await applyExerciseGroupChanges(changes));
+    } catch (error) {
+      console.error("Exercise group change error:", error);
+      setActionError("לא ניתן לעדכן את הבלוק. נסה שוב.");
+    } finally {
+      setActionKey("");
+    }
+  }
+
+  // "🔗 חבר": two standalone exercises become a superset, a superset and its
+  // standalone neighbour become a triple set. All members share the rounds.
+  function handleLink(day, upper, lower) {
+    const plan = planLink(upper, lower, globalThis.crypto.randomUUID());
+    if (!plan) return;
+    if (plan.roundsChange) {
+      const label = groupLabel(plan.members.length);
+      if (
+        !window.confirm(
+          `ב${label} כל התרגילים מבוצעים באותו מספר סבבים. ${plan.rounds} סבבים יוגדרו לכל התרגילים בבלוק. להמשיך?`
+        )
+      ) {
+        return;
+      }
+    }
+    applyGroupChanges(day.id, plan.changes, `group-link-${lower.exercises[0].id}`);
+  }
+
+  function handleUnlink(day, unit, afterIndex) {
+    applyGroupChanges(day.id, planUnlink(unit, afterIndex), `group-unlink-${unit.groupId}`);
+  }
+
+  function handleUngroup(day, unit) {
+    applyGroupChanges(day.id, planUngroup(unit), `group-ungroup-${unit.groupId}`);
+  }
+
   async function handleDeleteExercise(dayId, exercise) {
-    if (!window.confirm(`למחוק את התרגיל "${exercise.name}"?`)) return;
+    const day = days.find((item) => item.id === dayId);
+    const group = day ? findExerciseGroup(day.exercises, exercise.id) : null;
+    const blockNote = !group
+      ? ""
+      : group.exercises.length === 2
+        ? "\nהסופר סט יתפרק והתרגיל השני יישאר כתרגיל רגיל."
+        : "\nהטריפל סט יהפוך לסופר סט של שני התרגילים שנשארו.";
+    if (!window.confirm(`למחוק את התרגיל "${exercise.name}"?${blockNote}`)) return;
 
     setActionKey(`exercise-delete-${exercise.id}`);
     setActionError("");
@@ -918,6 +1034,19 @@ export default function Programs({ initialTraineeId = "" }) {
             : day
         )
       );
+      // A superset left with one exercise is no block any more. If this
+      // fails the exercise is still shown as standalone (no valid block).
+      if (group?.exercises.length === 2) {
+        const partner = group.exercises.find((item) => item.id !== exercise.id);
+        try {
+          mergeExerciseRows(
+            dayId,
+            await applyExerciseGroupChanges(planUngroup({ ...group, exercises: [partner] }))
+          );
+        } catch (releaseError) {
+          console.error("Exercise group release error:", releaseError);
+        }
+      }
     } catch (error) {
       console.error("Program exercise delete error:", error);
       setActionError("לא ניתן למחוק את התרגיל.");
@@ -1398,6 +1527,9 @@ export default function Programs({ initialTraineeId = "" }) {
   }
 
   function renderExerciseForm(day) {
+    const editingGroup = editingExerciseId
+      ? findExerciseGroup(day.exercises, editingExerciseId)
+      : null;
     return (
       <div className="program-inline-form program-exercise-form">
         <div className="program-inline-form-title">
@@ -1416,7 +1548,7 @@ export default function Programs({ initialTraineeId = "" }) {
               style={inputStyle}
             />
           </Field>
-          <Field label="סטים *">
+          <Field label={editingGroup ? "סבבים (משותף לבלוק) *" : "סטים *"}>
             <input
               type="number"
               min="1"
@@ -1541,51 +1673,58 @@ export default function Programs({ initialTraineeId = "" }) {
     );
   }
 
-  function renderExerciseRow(day, exercise, exerciseIndex) {
-    const isFirst = exerciseIndex === 0;
-    const isLast = exerciseIndex === day.exercises.length - 1;
+  // One exercise row. `options` says where it sits: a standalone unit (moves
+  // over whole units) or a member of a block (moves inside the block only).
+  function renderExerciseRow(day, exercise, options) {
+    const { label, onMove, upDisabled, downDisabled, member, lastMember } = options;
     return (
-      <div className="program-exercise-row" key={exercise.id}>
+      <div className={`program-exercise-row${member ? " in-group" : ""}`} key={exercise.id}>
         <div className="program-exercise-move">
           <button
             type="button"
             className="program-move-btn"
-            onClick={() => handleMoveExercise(day.id, exercise, -1)}
-            disabled={busy || isFirst}
+            onClick={() => onMove(-1)}
+            disabled={busy || upDisabled}
             aria-label={`העלה את ${exercise.name}`}
-            title="העלה"
+            title={member ? "העלה בתוך הבלוק" : "העלה"}
           >
             {actionKey === `exercise-move-${exercise.id}` ? "…" : "↑"}
           </button>
           <button
             type="button"
             className="program-move-btn"
-            onClick={() => handleMoveExercise(day.id, exercise, 1)}
-            disabled={busy || isLast}
+            onClick={() => onMove(1)}
+            disabled={busy || downDisabled}
             aria-label={`הורד את ${exercise.name}`}
-            title="הורד"
+            title={member ? "הורד בתוך הבלוק" : "הורד"}
           >
             ↓
           </button>
         </div>
         <div className="program-exercise-name">
-          <span className="program-exercise-index">{exerciseIndex + 1}</span>
+          <span className="program-exercise-index">{label}</span>
           <div>
             <strong>{exercise.name}</strong>
             {exercise.notes && <small>{exercise.notes}</small>}
           </div>
         </div>
         <div className="program-exercise-specs">
-          <ExerciseSpec label="סטים" value={exercise.sets} />
+          <ExerciseSpec label={member ? "סבבים" : "סטים"} value={exercise.sets} />
           <ExerciseSpec label="חזרות" value={exercise.reps} />
           <ExerciseSpec
             label="משקל"
             value={exercise.target_weight_kg != null ? `${exercise.target_weight_kg} ק״ג` : null}
           />
           <ExerciseSpec label="RIR" value={exercise.target_rir} />
+          {/* Inside a block only the last exercise's rest counts (after the
+              round); the others keep their value but it is not shown. */}
           <ExerciseSpec
             label="מנוחה"
-            value={exercise.rest_seconds != null ? `${exercise.rest_seconds} שנ׳` : null}
+            value={
+              exercise.rest_seconds != null && (!member || lastMember)
+                ? `${exercise.rest_seconds} שנ׳`
+                : null
+            }
           />
         </div>
         <DemoVideoSection
@@ -1620,6 +1759,133 @@ export default function Programs({ initialTraineeId = "" }) {
         )}
       </div>
     );
+  }
+
+  function renderEditableRow(day, exercise, options) {
+    return exerciseDayId === day.id && editingExerciseId === exercise.id ? (
+      <div key={exercise.id}>{renderExerciseForm(day)}</div>
+    ) : (
+      renderExerciseRow(day, exercise, options)
+    );
+  }
+
+  // "🔗 חבר" between two neighbouring units, shown only when joining them
+  // makes a valid block (at most 3 exercises).
+  function renderLinkConnector(day, upper, lower) {
+    if (!canLinkUnits(upper, lower)) return null;
+    const upperName = upper.exercises[upper.exercises.length - 1].name;
+    const lowerName = lower.exercises[0].name;
+    const formOpen = exerciseDayId === day.id;
+    return (
+      <div className="program-connector">
+        <button
+          type="button"
+          onClick={() => handleLink(day, upper, lower)}
+          disabled={busy || formOpen}
+          aria-label={`חבר את ${upperName} ל${lowerName}`}
+          title={upper.exercises.length + lower.exercises.length === 3 ? "יצירת טריפל סט" : "יצירת סופר סט"}
+        >
+          {actionKey === `group-link-${lower.exercises[0].id}` ? "מחבר…" : "🔗 חבר"}
+        </button>
+      </div>
+    );
+  }
+
+  function renderGroup(day, unit, unitIndex, unitCount) {
+    const label = groupLabel(unit.exercises.length);
+    const last = unit.exercises[unit.exercises.length - 1];
+    const names = unit.exercises.map((item) => item.name).join(" + ");
+    const formOpen = exerciseDayId === day.id;
+    const groupBusy = (prefix) => actionKey === `${prefix}-${unit.groupId}`;
+    return (
+      <div className="program-exercise-group" key={unit.groupId}>
+        <div className="program-group-header">
+          <div className="program-exercise-move">
+            <button
+              type="button"
+              className="program-move-btn"
+              onClick={() => handleMoveUnit(day.id, unit, unitIndex, -1)}
+              disabled={busy || unitIndex === 0}
+              aria-label={`העלה את הבלוק ${names}`}
+              title="העלה את כל הבלוק"
+            >
+              {groupBusy("group-move") ? "…" : "↑"}
+            </button>
+            <button
+              type="button"
+              className="program-move-btn"
+              onClick={() => handleMoveUnit(day.id, unit, unitIndex, 1)}
+              disabled={busy || unitIndex === unitCount - 1}
+              aria-label={`הורד את הבלוק ${names}`}
+              title="הורד את כל הבלוק"
+            >
+              ↓
+            </button>
+          </div>
+          <span className="program-exercise-index">{unitIndex + 1}</span>
+          <div className="program-group-title">
+            <strong>{label}</strong>
+            <span>
+              {unit.rounds} סבבים
+              {last.rest_seconds != null ? ` · מנוחה אחרי סבב: ${last.rest_seconds} שנ׳` : ""}
+            </span>
+          </div>
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm program-group-ungroup"
+            onClick={() => handleUngroup(day, unit)}
+            disabled={busy || formOpen}
+            aria-label={`פירוק ${label}: ${names}`}
+          >
+            {groupBusy("group-ungroup") ? "מפרק…" : "פירוק"}
+          </button>
+        </div>
+        {unit.exercises.map((exercise, memberIndex) => (
+          <Fragment key={exercise.id}>
+            {memberIndex > 0 && unit.exercises.length === 3 && (
+              <div className="program-connector program-connector-cut">
+                <button
+                  type="button"
+                  onClick={() => handleUnlink(day, unit, memberIndex - 1)}
+                  disabled={busy || formOpen}
+                  aria-label={`נתק את ${unit.exercises[memberIndex - 1].name} מ${exercise.name}`}
+                  title="הפרדה: החלק של שני תרגילים נשאר סופר סט"
+                >
+                  {groupBusy("group-unlink") ? "מנתק…" : "✂ נתק"}
+                </button>
+              </div>
+            )}
+            {renderEditableRow(day, exercise, {
+              label: String.fromCharCode(65 + memberIndex),
+              onMove: (direction) => handleMoveMember(day.id, exercise, direction),
+              upDisabled: memberIndex === 0,
+              downDisabled: memberIndex === unit.exercises.length - 1,
+              member: true,
+              lastMember: memberIndex === unit.exercises.length - 1,
+            })}
+          </Fragment>
+        ))}
+      </div>
+    );
+  }
+
+  function renderDayUnits(day) {
+    const units = buildExerciseUnits(day.exercises);
+    return units.map((unit, unitIndex) => (
+      <Fragment key={unit.type === "group" ? unit.groupId : unit.exercises[0].id}>
+        {unitIndex > 0 && renderLinkConnector(day, units[unitIndex - 1], unit)}
+        {unit.type === "group"
+          ? renderGroup(day, unit, unitIndex, units.length)
+          : renderEditableRow(day, unit.exercises[0], {
+              label: unitIndex + 1,
+              onMove: (direction) => handleMoveUnit(day.id, unit, unitIndex, direction),
+              upDisabled: unitIndex === 0,
+              downDisabled: unitIndex === units.length - 1,
+              member: false,
+              lastMember: false,
+            })}
+      </Fragment>
+    ));
   }
 
   return (
@@ -1811,13 +2077,7 @@ export default function Programs({ initialTraineeId = "" }) {
                   אין עדיין תרגילים בסוג האימון הזה.
                 </div>
               )}
-              {day.exercises.map((exercise, exerciseIndex) =>
-                exerciseDayId === day.id && editingExerciseId === exercise.id ? (
-                  <div key={exercise.id}>{renderExerciseForm(day)}</div>
-                ) : (
-                  renderExerciseRow(day, exercise, exerciseIndex)
-                )
-              )}
+              {renderDayUnits(day)}
               {exerciseDayId === day.id && !editingExerciseId ? (
                 renderExerciseForm(day)
               ) : (

@@ -23,6 +23,22 @@ import {
   useRememberedState,
   writeNavigation,
 } from "./lib/navigationMemory.js";
+import { GROUP_LETTERS, buildRoundUnits, groupLabel, groupRestSeconds, roundProgress } from "./lib/exerciseGroups.js";
+
+// Superset / triple set blocks of the trainee screens. A program exercise runs
+// for its `sets` rounds, a logged one for its saved set rows; anything that
+// is not a valid block comes back as standalone exercises.
+const programRoundUnits = (exercises) => buildRoundUnits(exercises, (exercise) => exercise.sets);
+const loggedRoundUnits = (exercises) => buildRoundUnits(exercises, (exercise) => exercise.sets.length);
+
+function formatRest(seconds) {
+  return seconds == null ? "" : `${seconds} שנ׳`;
+}
+
+function groupSummary(unit) {
+  const rest = groupRestSeconds(unit);
+  return `${unit.rounds} סבבים${rest == null ? "" : ` · מנוחה אחרי סבב: ${formatRest(rest)}`}`;
+}
 
 function isRememberedId(value) {
   return typeof value === "string" && value.length > 0 && value.length <= 64;
@@ -1301,10 +1317,22 @@ function TraineeHome({ onNavigate }) {
                     </div>
                   </div>
                   <div className="trainee-exercise-list">
-                    {day.exercises.map((exercise) => (
-                      <div className="trainee-exercise" key={exercise.id}>
-                        <span>{exercise.name}</span>
-                        <small>{exercise.sets} סטים × {exercise.reps}</small>
+                    {programRoundUnits(day.exercises).map((unit) => unit.type === "group" ? (
+                      <div className="trainee-exercise-group" key={unit.groupId}>
+                        <small className="trainee-exercise-group-title">
+                          <strong>{groupLabel(unit.exercises.length)}</strong> · {groupSummary(unit)}
+                        </small>
+                        {unit.exercises.map((exercise, index) => (
+                          <div className="trainee-exercise" key={exercise.id}>
+                            <span><b className="trainee-group-letter">{GROUP_LETTERS[index]}</b> {exercise.name}</span>
+                            <small>{exercise.reps} חזרות</small>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="trainee-exercise" key={unit.exercises[0].id}>
+                        <span>{unit.exercises[0].name}</span>
+                        <small>{unit.exercises[0].sets} סטים × {unit.exercises[0].reps}</small>
                       </div>
                     ))}
                   </div>
@@ -1424,6 +1452,76 @@ function CompletedWorkoutDetails({ workout, reviewMode = false, onReviewed, onDi
     }
   }
 
+  function renderExercise(exercise, letter = null) {
+    return (
+      <section className="completed-workout-exercise" key={exercise.id}>
+        <header>
+          <div className="trainee-workout-exercise-name">
+            <span>{letter ?? exercise.exercise_order}</span>
+            <div>
+              <strong>{exercise.exercise_name}</strong>
+              <small>יעד: {letter ? "" : `${exercise.prescribed_sets} סטים × `}{exercise.prescribed_reps}{letter ? " חזרות" : ""} · {exercise.target_weight_kg == null ? "ללא משקל יעד" : `${exercise.target_weight_kg} ק״ג`}</small>
+            </div>
+          </div>
+          <span className={`badge ${exercise.is_completed ? "badge-active" : "badge-warn"}`}>
+            {exercise.is_completed ? "הושלם" : "חלקי"}
+          </span>
+        </header>
+
+        <div className="completed-workout-sets">
+          <div className="completed-workout-set labels" aria-hidden="true">
+            <span>{letter ? "סבב" : "סט"}</span><span>משקל</span><span>חזרות</span><span>RIR</span><span>מצב</span>
+          </div>
+          {exercise.sets.map((workoutSet) => (
+            <div className="completed-workout-set" key={workoutSet.id}>
+              <strong>{workoutSet.set_order}</strong>
+              <span>{workoutSet.weight_kg == null ? "—" : `${workoutSet.weight_kg} ק״ג`}</span>
+              <span>{workoutSet.completed_reps ?? "—"}</span>
+              <span>{workoutSet.rir ?? "—"}</span>
+              <span>{workoutSet.is_completed ? "✓" : "—"}</span>
+            </div>
+          ))}
+        </div>
+
+        {exercise.trainee_notes && (
+          <p className="completed-workout-note">💬 {exercise.trainee_notes}</p>
+        )}
+
+        {exercise.video_url && (
+          <div className="completed-workout-video">
+            <span>📹 סרטון מהמתאמן</span>
+            <video controls playsInline preload="metadata" src={exercise.video_url}>
+              הדפדפן לא תומך בצפייה בסרטון.
+            </video>
+          </div>
+        )}
+
+        {reviewMode ? (
+          <label className="workout-review-field">
+            <span>משוב על התרגיל</span>
+            <textarea
+              rows={2}
+              maxLength={2000}
+              value={exerciseDrafts[exercise.id] ?? ""}
+              disabled={saving}
+              placeholder="משוב קצר על הביצוע (לא חובה)"
+              onChange={(event) => {
+                const { value } = event.target;
+                setExerciseDrafts((drafts) => ({ ...drafts, [exercise.id]: value }));
+                setJustSaved(false);
+              }}
+            />
+          </label>
+        ) : exercise.trainer_feedback && (
+          <div className="workout-trainer-feedback">
+            <strong>המשוב של רוני</strong>
+            <p>{exercise.trainer_feedback}</p>
+          </div>
+        )}
+      </section>
+    );
+  }
+
   const completedSets = workout.exercises
     .flatMap((exercise) => exercise.sets)
     .filter((workoutSet) => workoutSet.is_completed).length;
@@ -1438,73 +1536,15 @@ function CompletedWorkoutDetails({ workout, reviewMode = false, onReviewed, onDi
       </div>
 
       <div className="completed-workout-exercises">
-        {workout.exercises.map((exercise) => (
-          <section className="completed-workout-exercise" key={exercise.id}>
-            <header>
-              <div className="trainee-workout-exercise-name">
-                <span>{exercise.exercise_order}</span>
-                <div>
-                  <strong>{exercise.exercise_name}</strong>
-                  <small>יעד: {exercise.prescribed_sets} סטים × {exercise.prescribed_reps} · {exercise.target_weight_kg == null ? "ללא משקל יעד" : `${exercise.target_weight_kg} ק״ג`}</small>
-                </div>
-              </div>
-              <span className={`badge ${exercise.is_completed ? "badge-active" : "badge-warn"}`}>
-                {exercise.is_completed ? "הושלם" : "חלקי"}
-              </span>
+        {loggedRoundUnits(workout.exercises).map((unit) => unit.type === "group" ? (
+          <section className="completed-workout-group" key={unit.groupId} aria-label={`${groupLabel(unit.exercises.length)}: ${unit.exercises.map((exercise) => exercise.exercise_name).join(" + ")}`}>
+            <header className="completed-workout-group-header">
+              <strong>{groupLabel(unit.exercises.length)}</strong>
+              <span>{groupSummary(unit)}</span>
             </header>
-
-            <div className="completed-workout-sets">
-              <div className="completed-workout-set labels" aria-hidden="true">
-                <span>סט</span><span>משקל</span><span>חזרות</span><span>RIR</span><span>מצב</span>
-              </div>
-              {exercise.sets.map((workoutSet) => (
-                <div className="completed-workout-set" key={workoutSet.id}>
-                  <strong>{workoutSet.set_order}</strong>
-                  <span>{workoutSet.weight_kg == null ? "—" : `${workoutSet.weight_kg} ק״ג`}</span>
-                  <span>{workoutSet.completed_reps ?? "—"}</span>
-                  <span>{workoutSet.rir ?? "—"}</span>
-                  <span>{workoutSet.is_completed ? "✓" : "—"}</span>
-                </div>
-              ))}
-            </div>
-
-            {exercise.trainee_notes && (
-              <p className="completed-workout-note">💬 {exercise.trainee_notes}</p>
-            )}
-
-            {exercise.video_url && (
-              <div className="completed-workout-video">
-                <span>📹 סרטון מהמתאמן</span>
-                <video controls playsInline preload="metadata" src={exercise.video_url}>
-                  הדפדפן לא תומך בצפייה בסרטון.
-                </video>
-              </div>
-            )}
-
-            {reviewMode ? (
-              <label className="workout-review-field">
-                <span>משוב על התרגיל</span>
-                <textarea
-                  rows={2}
-                  maxLength={2000}
-                  value={exerciseDrafts[exercise.id] ?? ""}
-                  disabled={saving}
-                  placeholder="משוב קצר על הביצוע (לא חובה)"
-                  onChange={(event) => {
-                    const { value } = event.target;
-                    setExerciseDrafts((drafts) => ({ ...drafts, [exercise.id]: value }));
-                    setJustSaved(false);
-                  }}
-                />
-              </label>
-            ) : exercise.trainer_feedback && (
-              <div className="workout-trainer-feedback">
-                <strong>המשוב של רוני</strong>
-                <p>{exercise.trainer_feedback}</p>
-              </div>
-            )}
+            {unit.exercises.map((exercise, index) => renderExercise(exercise, GROUP_LETTERS[index]))}
           </section>
-        ))}
+        ) : renderExercise(unit.exercises[0]))}
       </div>
 
       {reviewMode ? (
@@ -1925,6 +1965,292 @@ function Workout() {
     }
   }
 
+  // A member of a block shows its letter, and its rounds in place of sets.
+  function renderProgramExercise(exercise, letter = null) {
+    return (
+      <article className="trainee-workout-exercise" key={exercise.id}>
+        <div className="trainee-workout-exercise-name">
+          <span>{letter ?? exercise.exercise_order}</span>
+          <div>
+            <strong>{exercise.name}</strong>
+            {exercise.notes && <p>{exercise.notes}</p>}
+            <ExerciseDemoVideo url={exercise.demo_video_url} path={exercise.demo_video_path} exerciseName={exercise.name} className="btn btn-outline btn-sm trainee-demo-video-button" />
+          </div>
+        </div>
+        <dl className="trainee-workout-exercise-data">
+          <div><dt>{letter ? "סבבים" : "סטים"}</dt><dd>{exercise.sets}</dd></div>
+          <div><dt>חזרות</dt><dd>{exercise.reps}</dd></div>
+          <div><dt>משקל יעד</dt><dd>{exercise.target_weight_kg == null ? "—" : `${exercise.target_weight_kg} ק״ג`}</dd></div>
+          <div><dt>RIR</dt><dd>{exercise.target_rir ?? "—"}</dd></div>
+        </dl>
+      </article>
+    );
+  }
+
+  // One set row. A standalone exercise keeps its labels; in a block the row
+  // is one exercise's set of one round, so the labels name both.
+  function renderSetRow(exercise, workoutSet, round = null, letter = null) {
+    const rirValue = workoutSet.rir === "" || workoutSet.rir == null
+      ? null
+      : Number(workoutSet.rir);
+    const where = round == null
+      ? `בסט ${workoutSet.set_order}`
+      : `ב${exercise.exercise_name}, סבב ${round}`;
+    return (
+      <div className={`trainee-live-set ${workoutSet.is_completed ? "completed" : ""}`} key={workoutSet.id}>
+        <strong>{letter ?? workoutSet.set_order}</strong>
+        <label>
+          <span>משקל</span>
+          <input aria-label={`משקל ${where}`} type="number" min="0" max="2000" step="0.25" inputMode="decimal" value={workoutSet.weight_kg ?? ""} onFocus={(event) => { rememberFocusValue(`${workoutSet.id}:weight_kg`, workoutSet.weight_kg); event.currentTarget.select(); }} onChange={(event) => updateSetState(exercise.id, workoutSet.id, { weight_kg: event.target.value })} onBlur={() => handleSetSave(exercise.id, workoutSet, "weight_kg")} />
+          <small>קודם: {workoutSet.previous_weight_kg == null ? "—" : `${workoutSet.previous_weight_kg}`}</small>
+        </label>
+        <label>
+          <span>חזרות</span>
+          <input aria-label={`חזרות ${where}`} type="number" min="0" max="1000" step="1" inputMode="numeric" value={workoutSet.completed_reps ?? ""} onFocus={(event) => { rememberFocusValue(`${workoutSet.id}:completed_reps`, workoutSet.completed_reps); event.currentTarget.select(); }} onChange={(event) => updateSetState(exercise.id, workoutSet.id, { completed_reps: event.target.value })} onBlur={() => handleSetSave(exercise.id, workoutSet, "completed_reps")} />
+          <small>קודם: {workoutSet.previous_reps ?? "—"}</small>
+        </label>
+        <label>
+          <span>RIR</span>
+          <input aria-label={`RIR ${where}`} type="number" min="0" max="10" step="0.5" inputMode="decimal" value={workoutSet.rir ?? ""} onFocus={(event) => { rememberFocusValue(`${workoutSet.id}:rir`, workoutSet.rir); event.currentTarget.select(); }} onChange={(event) => updateSetState(exercise.id, workoutSet.id, { rir: event.target.value })} onBlur={() => handleSetSave(exercise.id, workoutSet, "rir")} />
+          <small>קודם: {workoutSet.previous_rir ?? "—"} · RPE {rirValue == null ? "—" : Math.max(0, 10 - rirValue)}</small>
+        </label>
+        <button
+          type="button"
+          className={`trainee-live-set-check ${workoutSet.is_completed ? "checked" : ""}`}
+          aria-label={round == null
+            ? (workoutSet.is_completed ? `בטל השלמת סט ${workoutSet.set_order}` : `סמן סט ${workoutSet.set_order} כהושלם`)
+            : (workoutSet.is_completed ? `בטל השלמת ${exercise.exercise_name} בסבב ${round}` : `סמן ${exercise.exercise_name} בסבב ${round} כהושלם`)}
+          disabled={savingSetIds[workoutSet.id]}
+          onClick={() => handleSetCompletion(exercise.id, workoutSet)}
+        >
+          {savingSetIds[workoutSet.id] ? "…" : workoutSet.is_completed ? "✓" : "○"}
+        </button>
+      </div>
+    );
+  }
+
+  function renderCompletionButton(exercise, label = "") {
+    return (
+      <button
+        type="button"
+        className={`trainee-exercise-check ${exercise.is_completed ? "checked" : ""}`}
+        aria-label={label ? `${exercise.is_completed ? "בטל השלמת" : "סמן כהושלם:"} ${label}` : undefined}
+        disabled={savingExerciseIds[exercise.id]}
+        onClick={() => handleExerciseSave(exercise, { is_completed: !exercise.is_completed })}
+      >
+        {exercise.is_completed ? "✓ הושלם" : "סימון כהושלם"}
+      </button>
+    );
+  }
+
+  function renderExecutionVideo(exercise) {
+    return (
+      <div className="trainee-live-video">
+        {exercise.video_url ? (
+          <video controls playsInline preload="metadata" src={exercise.video_url}>
+            הדפדפן לא תומך בצפייה בסרטון.
+          </video>
+        ) : (
+          <div className="trainee-live-video-empty">
+            <span>📹</span>
+            <div><strong>צלם את התרגיל</strong><small>סרטון קצר יעזור לרוני לתת משוב מדויק</small></div>
+          </div>
+        )}
+        <label className={`trainee-live-video-button ${uploadingVideoIds[exercise.id] ? "disabled" : ""}`}>
+          <input
+            type="file"
+            accept="video/mp4,video/quicktime,video/webm,video/x-m4v"
+            capture="environment"
+            disabled={uploadingVideoIds[exercise.id]}
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              handleVideoUpload(exercise, file);
+              event.target.value = "";
+            }}
+          />
+          {uploadingVideoIds[exercise.id]
+            ? "מעלה סרטון..."
+            : exercise.video_path
+              ? "📹 החלף סרטון"
+              : "📹 צלם או העלה סרטון"}
+        </label>
+        <small className="trainee-live-video-hint">MP4, MOV, M4V או WebM · עד 50MB · הסרטון פרטי</small>
+        {videoErrors[exercise.id] && (
+          <p className="trainee-live-video-error">{videoErrors[exercise.id]}</p>
+        )}
+      </div>
+    );
+  }
+
+  function renderExerciseNote(exercise) {
+    return (
+      <label className="trainee-live-exercise-note">
+        <span>הערה לתרגיל</span>
+        <textarea
+          rows="2"
+          placeholder="לדוגמה: הרגיש קל יותר מהשבוע שעבר"
+          value={exercise.trainee_notes ?? ""}
+          onFocus={() => rememberFocusValue(`${exercise.id}:trainee_notes`, exercise.trainee_notes)}
+          onChange={(event) => updateExerciseState(exercise.id, { trainee_notes: event.target.value })}
+          onBlur={() => handleNoteSave(exercise)}
+        />
+        <small>{savingExerciseIds[exercise.id] ? "שומר..." : "נשמר ביציאה מהשדה"}</small>
+      </label>
+    );
+  }
+
+  function renderLiveExercise(exercise) {
+    return (
+      <section className={`card trainee-live-exercise ${exercise.is_completed ? "completed" : ""}`} key={exercise.id}>
+        <header className="trainee-live-exercise-header">
+          <div className="trainee-workout-exercise-name">
+            <span>{exercise.exercise_order}</span>
+            <div>
+              <strong>{exercise.exercise_name}</strong>
+              <p>{exercise.prescribed_sets} סטים</p>
+            </div>
+          </div>
+          {renderCompletionButton(exercise)}
+        </header>
+
+        {exercise.trainer_notes && (
+          <p className="trainee-live-trainer-note">💬 {exercise.trainer_notes}</p>
+        )}
+
+        <ExerciseDemoVideo url={exercise.demo_video_url} path={exercise.demo_video_path} exerciseName={exercise.exercise_name} className="btn btn-outline btn-sm trainee-demo-video-button" />
+
+        <div className="trainee-live-targets">
+          <article>
+            <span>יעד משקל</span>
+            <strong>{exercise.target_weight_kg == null ? "—" : `${exercise.target_weight_kg} ק״ג`}</strong>
+          </article>
+          <article>
+            <span>יעד חזרות</span>
+            <strong>{exercise.prescribed_reps}</strong>
+          </article>
+          <article>
+            <span>יעד RIR</span>
+            <strong>{exercise.target_rir ?? "—"}</strong>
+          </article>
+        </div>
+
+        <div className="trainee-live-sets">
+          <div className="trainee-live-set trainee-live-set-labels" aria-hidden="true">
+            <span>סט</span><span>משקל (ק״ג)</span><span>חזרות</span><span>RIR</span><span>בוצע</span>
+          </div>
+          {exercise.sets.map((workoutSet) => renderSetRow(exercise, workoutSet))}
+        </div>
+
+        {renderExecutionVideo(exercise)}
+        {renderExerciseNote(exercise)}
+      </section>
+    );
+  }
+
+  // A block is run round by round: every round lists A, B (and C) in order,
+  // each with its own saved set. The current round and the next exercise come
+  // from the saved sets only, so a refresh shows the same place. Nothing here
+  // moves the screen; the trainee scrolls on through the rounds.
+  function renderLiveGroup(unit) {
+    const label = groupLabel(unit.exercises.length);
+    const names = unit.exercises.map((exercise) => exercise.exercise_name).join(" + ");
+    const rest = groupRestSeconds(unit);
+    const { currentRound, nextExerciseId } = roundProgress(unit);
+    const nextIndex = unit.exercises.findIndex((exercise) => exercise.id === nextExerciseId);
+    const allCompleted = unit.exercises.every((exercise) => exercise.is_completed);
+    const rounds = Array.from({ length: unit.rounds }, (_, index) => index + 1);
+
+    return (
+      <section className={`card trainee-live-exercise trainee-live-group ${allCompleted ? "completed" : ""}`} key={unit.groupId} aria-label={`${label}: ${names}`}>
+        <header className="trainee-live-group-header">
+          <div>
+            <span className="trainee-live-group-type">{label}</span>
+            <strong>{unit.rounds} סבבים</strong>
+            {rest != null && <small>מנוחה אחרי סבב: {formatRest(rest)}</small>}
+          </div>
+          <div className="trainee-live-group-status" aria-live="polite">
+            {currentRound == null ? (
+              <strong>✓ כל הסבבים בוצעו</strong>
+            ) : (
+              <>
+                <strong>סבב {currentRound} מתוך {unit.rounds}</strong>
+                <small>הבא: {GROUP_LETTERS[nextIndex]} · {unit.exercises[nextIndex].exercise_name}</small>
+              </>
+            )}
+          </div>
+        </header>
+
+        <ol className="trainee-live-group-members">
+          {unit.exercises.map((exercise, index) => (
+            <li key={exercise.id}>
+              <span className="trainee-group-letter">{GROUP_LETTERS[index]}</span>
+              <div>
+                <strong>{exercise.exercise_name}</strong>
+                <small>
+                  {exercise.prescribed_reps} חזרות · {exercise.target_weight_kg == null ? "ללא משקל יעד" : `${exercise.target_weight_kg} ק״ג`} · RIR {exercise.target_rir ?? "—"}
+                </small>
+                {exercise.trainer_notes && <p className="trainee-live-trainer-note">💬 {exercise.trainer_notes}</p>}
+                <ExerciseDemoVideo url={exercise.demo_video_url} path={exercise.demo_video_path} exerciseName={exercise.exercise_name} className="btn btn-outline btn-sm trainee-demo-video-button" />
+              </div>
+            </li>
+          ))}
+        </ol>
+
+        <div className="trainee-live-rounds">
+          {rounds.map((round) => {
+            const done = currentRound == null || round < currentRound;
+            const current = round === currentRound;
+            return (
+              <section
+                className={`trainee-live-round ${current ? "current" : ""} ${done ? "done" : ""}`}
+                key={round}
+                aria-label={`סבב ${round}`}
+                aria-current={current ? "step" : undefined}
+              >
+                <header>
+                  <strong>סבב {round}</strong>
+                  <span>{current ? "סבב נוכחי" : done ? "✓ בוצע" : ""}</span>
+                </header>
+                {unit.exercises.map((exercise, index) => {
+                  const workoutSet = exercise.sets[round - 1];
+                  const isNext = current && exercise.id === nextExerciseId;
+                  return (
+                    <div className={`trainee-live-round-item ${isNext ? "next" : ""}`} key={exercise.id}>
+                      <div className="trainee-live-round-member">
+                        <strong>{GROUP_LETTERS[index]} · {exercise.exercise_name}</strong>
+                        {isNext && <em>עכשיו</em>}
+                      </div>
+                      {renderSetRow(exercise, workoutSet, round, GROUP_LETTERS[index])}
+                    </div>
+                  );
+                })}
+                {round < unit.rounds && rest != null && (
+                  <p className="trainee-live-round-rest">מנוחה {formatRest(rest)} ואז סבב {round + 1}</p>
+                )}
+              </section>
+            );
+          })}
+        </div>
+
+        <div className="trainee-live-group-details">
+          {unit.exercises.map((exercise, index) => (
+            <section className={`trainee-live-member ${exercise.is_completed ? "completed" : ""}`} key={exercise.id}>
+              <header>
+                <div className="trainee-live-round-member">
+                  <span className="trainee-group-letter">{GROUP_LETTERS[index]}</span>
+                  <strong>{exercise.exercise_name}</strong>
+                </div>
+                {renderCompletionButton(exercise, exercise.exercise_name)}
+              </header>
+              {renderExecutionVideo(exercise)}
+              {renderExerciseNote(exercise)}
+            </section>
+          ))}
+        </div>
+      </section>
+    );
+  }
+
   if (loading) {
     return <div className="trainee-home-state">טוען את תוכנית האימון...</div>;
   }
@@ -1983,135 +2309,8 @@ function Workout() {
         </div>
 
         <div className="trainee-workout-live-exercises">
-          {activeWorkout.exercises.map((exercise) => (
-            <section className={`card trainee-live-exercise ${exercise.is_completed ? "completed" : ""}`} key={exercise.id}>
-              <header className="trainee-live-exercise-header">
-                <div className="trainee-workout-exercise-name">
-                  <span>{exercise.exercise_order}</span>
-                  <div>
-                    <strong>{exercise.exercise_name}</strong>
-                    <p>{exercise.prescribed_sets} סטים</p>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  className={`trainee-exercise-check ${exercise.is_completed ? "checked" : ""}`}
-                  disabled={savingExerciseIds[exercise.id]}
-                  onClick={() => handleExerciseSave(exercise, { is_completed: !exercise.is_completed })}
-                >
-                  {exercise.is_completed ? "✓ הושלם" : "סימון כהושלם"}
-                </button>
-              </header>
-
-              {exercise.trainer_notes && (
-                <p className="trainee-live-trainer-note">💬 {exercise.trainer_notes}</p>
-              )}
-
-              <ExerciseDemoVideo url={exercise.demo_video_url} path={exercise.demo_video_path} exerciseName={exercise.exercise_name} className="btn btn-outline btn-sm trainee-demo-video-button" />
-
-              <div className="trainee-live-targets">
-                <article>
-                  <span>יעד משקל</span>
-                  <strong>{exercise.target_weight_kg == null ? "—" : `${exercise.target_weight_kg} ק״ג`}</strong>
-                </article>
-                <article>
-                  <span>יעד חזרות</span>
-                  <strong>{exercise.prescribed_reps}</strong>
-                </article>
-                <article>
-                  <span>יעד RIR</span>
-                  <strong>{exercise.target_rir ?? "—"}</strong>
-                </article>
-              </div>
-
-              <div className="trainee-live-sets">
-                <div className="trainee-live-set trainee-live-set-labels" aria-hidden="true">
-                  <span>סט</span><span>משקל (ק״ג)</span><span>חזרות</span><span>RIR</span><span>בוצע</span>
-                </div>
-                {exercise.sets.map((workoutSet) => {
-                  const rirValue = workoutSet.rir === "" || workoutSet.rir == null
-                    ? null
-                    : Number(workoutSet.rir);
-                  return (
-                    <div className={`trainee-live-set ${workoutSet.is_completed ? "completed" : ""}`} key={workoutSet.id}>
-                      <strong>{workoutSet.set_order}</strong>
-                      <label>
-                        <span>משקל</span>
-                        <input aria-label={`משקל בסט ${workoutSet.set_order}`} type="number" min="0" max="2000" step="0.25" inputMode="decimal" value={workoutSet.weight_kg ?? ""} onFocus={(event) => { rememberFocusValue(`${workoutSet.id}:weight_kg`, workoutSet.weight_kg); event.currentTarget.select(); }} onChange={(event) => updateSetState(exercise.id, workoutSet.id, { weight_kg: event.target.value })} onBlur={() => handleSetSave(exercise.id, workoutSet, "weight_kg")} />
-                        <small>קודם: {workoutSet.previous_weight_kg == null ? "—" : `${workoutSet.previous_weight_kg}`}</small>
-                      </label>
-                      <label>
-                        <span>חזרות</span>
-                        <input aria-label={`חזרות בסט ${workoutSet.set_order}`} type="number" min="0" max="1000" step="1" inputMode="numeric" value={workoutSet.completed_reps ?? ""} onFocus={(event) => { rememberFocusValue(`${workoutSet.id}:completed_reps`, workoutSet.completed_reps); event.currentTarget.select(); }} onChange={(event) => updateSetState(exercise.id, workoutSet.id, { completed_reps: event.target.value })} onBlur={() => handleSetSave(exercise.id, workoutSet, "completed_reps")} />
-                        <small>קודם: {workoutSet.previous_reps ?? "—"}</small>
-                      </label>
-                      <label>
-                        <span>RIR</span>
-                        <input aria-label={`RIR בסט ${workoutSet.set_order}`} type="number" min="0" max="10" step="0.5" inputMode="decimal" value={workoutSet.rir ?? ""} onFocus={(event) => { rememberFocusValue(`${workoutSet.id}:rir`, workoutSet.rir); event.currentTarget.select(); }} onChange={(event) => updateSetState(exercise.id, workoutSet.id, { rir: event.target.value })} onBlur={() => handleSetSave(exercise.id, workoutSet, "rir")} />
-                        <small>קודם: {workoutSet.previous_rir ?? "—"} · RPE {rirValue == null ? "—" : Math.max(0, 10 - rirValue)}</small>
-                      </label>
-                      <button
-                        type="button"
-                        className={`trainee-live-set-check ${workoutSet.is_completed ? "checked" : ""}`}
-                        aria-label={workoutSet.is_completed ? `בטל השלמת סט ${workoutSet.set_order}` : `סמן סט ${workoutSet.set_order} כהושלם`}
-                        disabled={savingSetIds[workoutSet.id]}
-                        onClick={() => handleSetCompletion(exercise.id, workoutSet)}
-                      >
-                        {savingSetIds[workoutSet.id] ? "…" : workoutSet.is_completed ? "✓" : "○"}
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-
-              <div className="trainee-live-video">
-                {exercise.video_url ? (
-                  <video controls playsInline preload="metadata" src={exercise.video_url}>
-                    הדפדפן לא תומך בצפייה בסרטון.
-                  </video>
-                ) : (
-                  <div className="trainee-live-video-empty">
-                    <span>📹</span>
-                    <div><strong>צלם את התרגיל</strong><small>סרטון קצר יעזור לרוני לתת משוב מדויק</small></div>
-                  </div>
-                )}
-                <label className={`trainee-live-video-button ${uploadingVideoIds[exercise.id] ? "disabled" : ""}`}>
-                  <input
-                    type="file"
-                    accept="video/mp4,video/quicktime,video/webm,video/x-m4v"
-                    capture="environment"
-                    disabled={uploadingVideoIds[exercise.id]}
-                    onChange={(event) => {
-                      const file = event.target.files?.[0];
-                      handleVideoUpload(exercise, file);
-                      event.target.value = "";
-                    }}
-                  />
-                  {uploadingVideoIds[exercise.id]
-                    ? "מעלה סרטון..."
-                    : exercise.video_path
-                      ? "📹 החלף סרטון"
-                      : "📹 צלם או העלה סרטון"}
-                </label>
-                <small className="trainee-live-video-hint">MP4, MOV, M4V או WebM · עד 50MB · הסרטון פרטי</small>
-                {videoErrors[exercise.id] && (
-                  <p className="trainee-live-video-error">{videoErrors[exercise.id]}</p>
-                )}
-              </div>
-
-              <label className="trainee-live-exercise-note">
-                <span>הערה לתרגיל</span>
-                <textarea
-                  rows="2"
-                  placeholder="לדוגמה: הרגיש קל יותר מהשבוע שעבר"
-                  value={exercise.trainee_notes ?? ""}
-                  onFocus={() => rememberFocusValue(`${exercise.id}:trainee_notes`, exercise.trainee_notes)}
-                  onChange={(event) => updateExerciseState(exercise.id, { trainee_notes: event.target.value })}
-                  onBlur={() => handleNoteSave(exercise)}
-                />
-                <small>{savingExerciseIds[exercise.id] ? "שומר..." : "נשמר ביציאה מהשדה"}</small>
-              </label>
-            </section>
+          {loggedRoundUnits(activeWorkout.exercises).map((unit) => (
+            unit.type === "group" ? renderLiveGroup(unit) : renderLiveExercise(unit.exercises[0])
           ))}
         </div>
 
@@ -2212,24 +2411,19 @@ function Workout() {
                 <div className="trainee-workout-no-exercises">עדיין לא נוספו תרגילים ליום הזה.</div>
               ) : (
                 <div className="trainee-workout-exercises">
-                  {day.exercises.map((exercise) => (
-                    <article className="trainee-workout-exercise" key={exercise.id}>
-                      <div className="trainee-workout-exercise-name">
-                        <span>{exercise.exercise_order}</span>
-                        <div>
-                          <strong>{exercise.name}</strong>
-                          {exercise.notes && <p>{exercise.notes}</p>}
-                          <ExerciseDemoVideo url={exercise.demo_video_url} path={exercise.demo_video_path} exerciseName={exercise.name} className="btn btn-outline btn-sm trainee-demo-video-button" />
-                        </div>
-                      </div>
-                      <dl className="trainee-workout-exercise-data">
-                        <div><dt>סטים</dt><dd>{exercise.sets}</dd></div>
-                        <div><dt>חזרות</dt><dd>{exercise.reps}</dd></div>
-                        <div><dt>משקל יעד</dt><dd>{exercise.target_weight_kg == null ? "—" : `${exercise.target_weight_kg} ק״ג`}</dd></div>
-                        <div><dt>RIR</dt><dd>{exercise.target_rir ?? "—"}</dd></div>
-                      </dl>
-                    </article>
-                  ))}
+                  {programRoundUnits(day.exercises).map((unit) => unit.type === "group" ? (
+                    <section
+                      className="trainee-workout-group"
+                      key={unit.groupId}
+                      aria-label={`${groupLabel(unit.exercises.length)}: ${unit.exercises.map((exercise) => exercise.name).join(" + ")}`}
+                    >
+                      <header className="trainee-workout-group-header">
+                        <strong>{groupLabel(unit.exercises.length)}</strong>
+                        <span>{groupSummary(unit)}</span>
+                      </header>
+                      {unit.exercises.map((exercise, index) => renderProgramExercise(exercise, GROUP_LETTERS[index]))}
+                    </section>
+                  ) : renderProgramExercise(unit.exercises[0]))}
                 </div>
               )}
             </section>

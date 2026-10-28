@@ -1,4 +1,5 @@
 import { supabase } from "../lib/supabase.js";
+import { remapGroupIds } from "../lib/exerciseGroups.js";
 import { getBusinessOwnerId } from "./accessService.js";
 
 const DEMO_VIDEO_BUCKET = "exercise-demo-videos";
@@ -197,6 +198,11 @@ export async function duplicateProgram(sourceProgramId, input) {
       day_order: day.day_order,
       notes: day.notes ?? null,
     }));
+    const groupIds = remapGroupIds(
+      sourceDays.flatMap((day) => day.exercises),
+      () => globalThis.crypto.randomUUID()
+    );
+    let exerciseIndex = 0;
     const exerciseRows = sourceDays.flatMap((day, index) =>
       day.exercises.map((exercise) => ({
         owner_id: created.owner_id,
@@ -214,6 +220,7 @@ export async function duplicateProgram(sourceProgramId, input) {
         demo_video_uploaded_at: exercise.demo_video_path
           ? exercise.demo_video_uploaded_at
           : null,
+        exercise_group_id: groupIds[exerciseIndex++],
       }))
     );
 
@@ -359,6 +366,38 @@ export async function reorderProgramExercises(changes) {
     }
     throw error;
   }
+}
+
+async function setExerciseGroup(id, exerciseGroupId, sets) {
+  const { data, error } = await supabase
+    .from("program_exercises")
+    .update({ exercise_group_id: exerciseGroupId, sets })
+    .eq("id", id)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+// Creates, changes or breaks a superset / triple set block: each change sets
+// one exercise's exercise_group_id and sets (the block's rounds). Rows are
+// updated one at a time; if a step fails, the rows already changed get their
+// old values back.
+export async function applyExerciseGroupChanges(changes) {
+  const done = [];
+  const saved = [];
+  try {
+    for (const change of changes) {
+      saved.push(await setExerciseGroup(change.id, change.exercise_group_id, change.sets));
+      done.push(change);
+    }
+  } catch (error) {
+    for (const change of done.reverse()) {
+      await setExerciseGroup(change.id, change.previous_group_id, change.previous_sets).catch(() => {});
+    }
+    throw error;
+  }
+  return saved;
 }
 
 export async function deleteProgramExercise(id) {

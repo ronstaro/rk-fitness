@@ -1423,6 +1423,56 @@ body.ltr .today-card.warn-border { border-right: none; border-left: 3px solid #F
 }
 .program-exercise-form .program-demo-form { margin-top: 0; }
 
+/* Superset / triple set blocks and the "🔗 חבר" connector between rows. */
+.program-exercise-group {
+  margin: 8px 0;
+  padding: 0 12px 4px;
+  border: 1px solid #E6CDD3;
+  border-inline-start: 3px solid var(--burg);
+  border-radius: 12px;
+  background: #FDF8F9;
+}
+.program-group-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0 8px;
+  border-bottom: 1px dashed #E6CDD3;
+}
+.program-group-title { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.program-group-title strong { color: var(--burg); font-size: 14px; font-weight: 700; }
+.program-group-title span { color: var(--gray-600); font-size: 12px; }
+.program-group-ungroup { flex-shrink: 0; color: var(--gray-600); }
+.program-exercise-group .program-exercise-row:last-child { border-bottom: none; }
+.program-exercise-row.in-group .program-exercise-index { color: var(--burg); font-weight: 700; }
+.program-connector {
+  display: flex;
+  justify-content: center;
+  margin: -12px 0 -12px;
+  position: relative;
+  z-index: 1;
+  pointer-events: none;
+}
+.program-connector button {
+  pointer-events: auto;
+  min-height: 24px;
+  padding: 1px 10px;
+  border: 1px dashed var(--gray-200);
+  border-radius: 20px;
+  background: #fff;
+  color: var(--gray-400);
+  font-family: var(--font);
+  font-size: 11px;
+  cursor: pointer;
+  opacity: .75;
+  transition: opacity .15s, color .15s, border-color .15s;
+}
+.program-exercises:hover .program-connector button,
+.program-connector button:focus-visible { opacity: 1; }
+.program-connector button:hover:not(:disabled) { border-color: var(--burg); color: var(--burg); }
+.program-connector button:disabled { opacity: .35; cursor: not-allowed; }
+.program-connector-cut button { background: #FDF8F9; border-color: #E6CDD3; }
+
 /* Narrower editor (laptop with sidebar, tablet): two lines per exercise. */
 @container (max-width: 860px) {
   .program-exercise-row {
@@ -1460,6 +1510,10 @@ body.ltr .today-card.warn-border { border-right: none; border-left: 3px solid #F
   .program-day > .program-inline-form { margin: 10px 12px; }
   .program-day-form-grid { grid-template-columns: 1fr; }
   .program-inline-form-actions .btn { flex: 1; justify-content: center; min-height: 40px; }
+  .program-exercise-group { padding: 0 8px 4px; }
+  .program-group-header { gap: 8px; flex-wrap: wrap; }
+  .program-connector { margin: -10px 0; }
+  .program-connector button { min-height: 32px; padding: 2px 14px; font-size: 12px; opacity: 1; }
 }
 
 /* ── RESPONSIVE ─────────────────────────────────────────────────────── */
@@ -2429,6 +2483,93 @@ body.ltr .today-card.warn-border { border-right: none; border-left: 3px solid #F
 .trainee-progress-milestones small { margin-top: 2px; color: var(--gray-400); font-size: 9px; }
 .trainee-progress-milestones .achieved small { color: var(--success); }
 .trainee-progress-recent { margin-top: 20px; }
+
+/* ── Superset / triple set blocks (trainee) ──────────────── */
+.trainee-group-letter {
+  display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 4px;
+  border-radius: 6px; background: var(--burg); color: #fff; font-size: 10px; font-weight: 700;
+}
+.trainee-exercise-group {
+  display: grid; gap: 4px; padding: 6px; border: 1px solid var(--burg-pale);
+  border-inline-start: 3px solid var(--burg); border-radius: 8px; background: #fff9fa;
+}
+.trainee-exercise-group-title { padding: 2px 4px; color: var(--gray-600); font-size: 10px; }
+.trainee-exercise-group-title strong { color: var(--burg); }
+.trainee-exercise-group .trainee-exercise span { display: inline-flex; align-items: center; gap: 6px; }
+.trainee-workout-group, .completed-workout-group {
+  display: grid; gap: 8px; padding: 10px; border: 1px solid var(--burg-pale);
+  border-inline-start: 4px solid var(--burg); border-radius: 12px; background: #fff9fa;
+}
+.trainee-workout-group-header, .completed-workout-group-header {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; padding: 0 4px;
+}
+.trainee-workout-group-header strong, .completed-workout-group-header strong { color: var(--burg); font-size: 13px; }
+.trainee-workout-group-header span, .completed-workout-group-header span { color: var(--gray-600); font-size: 11px; }
+.trainee-workout-group .trainee-workout-exercise { background: #fff; }
+.trainee-workout-group .trainee-workout-exercise-name > span,
+.completed-workout-group .trainee-workout-exercise-name > span { background: var(--burg); color: #fff; }
+
+.trainee-live-group { border-inline-start: 4px solid var(--burg); }
+.trainee-live-group-header {
+  display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 10px;
+}
+.trainee-live-group-header > div:first-child { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+.trainee-live-group-type {
+  padding: 3px 9px; border-radius: 20px; background: var(--burg); color: #fff; font-size: 11px; font-weight: 700;
+}
+.trainee-live-group-header > div:first-child strong { font-size: 15px; }
+.trainee-live-group-header > div:first-child small { color: var(--gray-600); font-size: 11px; }
+.trainee-live-group-status {
+  min-width: 0; padding: 7px 11px; border-radius: 9px; background: var(--burg-pale); text-align: start;
+}
+.trainee-live-group-status strong, .trainee-live-group-status small { display: block; }
+.trainee-live-group-status strong { color: var(--burg); font-size: 13px; }
+.trainee-live-group-status small { margin-top: 1px; color: var(--gray-600); font-size: 11px; overflow-wrap: anywhere; }
+.trainee-live-group-members { display: grid; gap: 7px; margin: 12px 0 0; padding: 0; list-style: none; }
+.trainee-live-group-members li {
+  display: flex; align-items: flex-start; gap: 9px; padding: 9px 10px;
+  border: 1px solid var(--gray-100); border-radius: 9px; background: #fff;
+}
+.trainee-live-group-members li > div { min-width: 0; }
+.trainee-live-group-members strong, .trainee-live-group-members small { display: block; }
+.trainee-live-group-members strong { font-size: 13px; }
+.trainee-live-group-members small { margin-top: 2px; color: var(--gray-600); font-size: 10px; }
+.trainee-live-group-members .trainee-live-trainer-note { margin-top: 6px; }
+.trainee-live-group-members .trainee-demo-video-button { margin-top: 6px; }
+.trainee-live-rounds { display: grid; gap: 10px; margin-top: 14px; }
+.trainee-live-round { display: grid; gap: 7px; padding: 10px; border: 1px solid var(--gray-100); border-radius: 11px; background: #fff; }
+.trainee-live-round.current { border-color: var(--burg); box-shadow: 0 0 0 1px var(--burg); }
+.trainee-live-round.done { background: #F7FCF9; }
+.trainee-live-round > header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.trainee-live-round > header strong { font-size: 13px; }
+.trainee-live-round > header span { color: var(--gray-400); font-size: 10px; font-weight: 600; }
+.trainee-live-round.current > header span { color: var(--burg); }
+.trainee-live-round.done > header span { color: var(--success); }
+.trainee-live-round-item { display: grid; gap: 4px; }
+.trainee-live-round-member { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.trainee-live-round-member strong { min-width: 0; font-size: 12px; overflow-wrap: anywhere; }
+.trainee-live-round-member em {
+  flex: 0 0 auto; padding: 1px 7px; border-radius: 20px; background: var(--burg); color: #fff;
+  font-size: 9px; font-style: normal; font-weight: 700;
+}
+.trainee-live-round-item .trainee-live-set > strong { background: var(--burg-pale); color: var(--burg); font-weight: 700; }
+.trainee-live-round-item.next .trainee-live-set > strong { background: var(--burg); color: #fff; }
+.trainee-live-round-item .trainee-live-set label span { display: block; margin-bottom: 3px; color: var(--gray-400); font-size: 9px; text-align: center; }
+.trainee-live-round-rest { color: var(--gray-400); font-size: 10px; text-align: center; }
+.trainee-live-group-details { display: grid; gap: 10px; margin-top: 14px; }
+.trainee-live-member { padding: 11px; border: 1px solid var(--gray-100); border-radius: 10px; background: var(--gray-50); }
+.trainee-live-member.completed { border-color: #BFE8D0; }
+.trainee-live-member > header { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.trainee-live-member .trainee-live-video { margin-top: 10px; background: #fff; }
+.trainee-live-member .trainee-live-exercise-note textarea { width: 100%; background: #fff; }
+
+@media (max-width: 560px) {
+  .trainee-live-group-header { flex-direction: column; align-items: stretch; }
+  .trainee-live-group-status { width: 100%; }
+  .trainee-live-round { padding: 8px; }
+  .trainee-live-member > header { align-items: stretch; flex-direction: column; }
+  .trainee-workout-group, .completed-workout-group { padding: 7px; }
+}
 
 @media (max-width: 860px) {
   .trainee-home-layout { grid-template-columns: 1fr; }

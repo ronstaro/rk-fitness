@@ -35,6 +35,12 @@ import {
   planUnlink,
 } from "../lib/exerciseGroups.js";
 import ExerciseDemoVideo from "./ExerciseDemoVideo.jsx";
+import {
+  DEFAULT_REST_SECONDS,
+  MAX_REST_SECONDS,
+  REST_PRESETS,
+  effectiveRestSeconds,
+} from "../lib/restTimer.js";
 
 const EMPTY_PROGRAM = {
   traineeId: "",
@@ -57,7 +63,7 @@ const EMPTY_EXERCISE = {
   reps: "",
   targetWeightKg: "",
   targetRir: "",
-  restSeconds: "",
+  restSeconds: String(DEFAULT_REST_SECONDS),
   notes: "",
   demoMode: "none",
   demoVideoUrl: "",
@@ -294,14 +300,62 @@ function DemoVideoSection({ exercise, busy, onManage }) {
 }
 
 // One labelled value (sets, reps, ...) in an exercise row.
-function ExerciseSpec({ label, value }) {
+function ExerciseSpec({ label, value, muted = false, title }) {
   const empty = value == null || value === "";
   return (
-    <div className={`program-exercise-spec${empty ? " empty" : ""}`}>
+    <div className={`program-exercise-spec${empty ? " empty" : ""}${muted ? " muted" : ""}`} title={title}>
       <span>{label}</span>
       <strong>{empty ? "—" : value}</strong>
     </div>
   );
+}
+
+// Rest the trainee's timer counts after each set (or after a round, on the
+// last exercise of a block). Presets for the usual values, any other value typed.
+function RestSecondsField({ value, onChange, title }) {
+  return (
+    <div className="program-demo-form program-rest-form">
+      <div className="program-demo-form-title">{title}</div>
+      <div className="program-rest-form-row">
+        <label className="program-rest-input">
+          <input
+            type="number"
+            min="0"
+            max={MAX_REST_SECONDS}
+            step="5"
+            inputMode="numeric"
+            aria-label="מנוחה בשניות"
+            value={value}
+            onChange={(event) => onChange(event.target.value)}
+          />
+          שנ׳
+        </label>
+        <div className="program-demo-form-options" role="group" aria-label="זמני מנוחה נפוצים">
+          {REST_PRESETS.map((seconds) => (
+            <button
+              type="button"
+              key={seconds}
+              className={String(seconds) === String(value).trim() ? "active" : ""}
+              aria-pressed={String(seconds) === String(value).trim()}
+              onClick={() => onChange(String(seconds))}
+            >
+              {seconds}
+            </button>
+          ))}
+        </div>
+      </div>
+      <small className="program-rest-form-hint">
+        הטיימר מתחיל אוטומטית אצל המתאמן אחרי כל סט · 0 = בלי טיימר
+      </small>
+    </div>
+  );
+}
+
+// An exercise saved before rest had a default shows the 90 s it rests;
+// 0 means the trainee gets no timer.
+function restSpecValue(restSeconds) {
+  const seconds = effectiveRestSeconds(restSeconds);
+  return seconds > 0 ? `${seconds} שנ׳` : "ללא";
 }
 
 function Field({ label, children }) {
@@ -704,8 +758,8 @@ export default function Programs({ initialTraineeId = "" }) {
       targetWeightKg:
         exercise.target_weight_kg == null ? "" : String(exercise.target_weight_kg),
       targetRir: exercise.target_rir == null ? "" : String(exercise.target_rir),
-      restSeconds:
-        exercise.rest_seconds == null ? "" : String(exercise.rest_seconds),
+      // An exercise saved without a rest rests the default, so the form shows it.
+      restSeconds: String(effectiveRestSeconds(exercise.rest_seconds)),
       notes: exercise.notes || "",
       demoMode: demoSource(exercise),
       demoVideoUrl: exercise.demo_video_url || "",
@@ -752,9 +806,9 @@ export default function Programs({ initialTraineeId = "" }) {
     }
     if (
       restSeconds != null &&
-      (!Number.isInteger(restSeconds) || restSeconds < 0)
+      (!Number.isInteger(restSeconds) || restSeconds < 0 || restSeconds > MAX_REST_SECONDS)
     ) {
-      setActionError("זמן המנוחה צריך להיות מספר שניות חיובי.");
+      setActionError(`זמן המנוחה צריך להיות מספר שלם של שניות, בין 0 ל־${MAX_REST_SECONDS}.`);
       return;
     }
     const editingExercise = editingExerciseId
@@ -1530,6 +1584,16 @@ export default function Programs({ initialTraineeId = "" }) {
     const editingGroup = editingExerciseId
       ? findExerciseGroup(day.exercises, editingExerciseId)
       : null;
+    // Inside a block only the last exercise's rest is used (after the round);
+    // the others keep their value but do not show the rest field.
+    const lastOfGroup = editingGroup?.exercises[editingGroup.exercises.length - 1];
+    const restMember = editingGroup
+      ? {
+          last: lastOfGroup.id === editingExerciseId,
+          lastName: lastOfGroup.name,
+          lastRest: effectiveRestSeconds(lastOfGroup.rest_seconds),
+        }
+      : null;
     return (
       <div className="program-inline-form program-exercise-form">
         <div className="program-inline-form-title">
@@ -1608,21 +1672,19 @@ export default function Programs({ initialTraineeId = "" }) {
               style={inputStyle}
             />
           </Field>
-          <Field label="מנוחה בשניות">
-            <input
-              type="number"
-              min="0"
-              value={exerciseForm.restSeconds}
-              onChange={(event) =>
-                setExerciseForm((form) => ({
-                  ...form,
-                  restSeconds: event.target.value,
-                }))
-              }
-              style={inputStyle}
-            />
-          </Field>
         </div>
+        {restMember && !restMember.last ? (
+          <p className="program-rest-form-note">
+            ⏱ בבלוק, המנוחה אחרי כל סבב נקבעת בתרגיל האחרון ({restMember.lastName}) · כרגע{" "}
+            {restMember.lastRest > 0 ? `${restMember.lastRest} שנ׳` : "בלי טיימר"}
+          </p>
+        ) : (
+          <RestSecondsField
+            title={restMember ? "⏱ מנוחה אחרי סבב" : "⏱ מנוחה בין סטים"}
+            value={exerciseForm.restSeconds}
+            onChange={(restSeconds) => setExerciseForm((form) => ({ ...form, restSeconds }))}
+          />
+        )}
         <Field label="הערות">
           <input
             value={exerciseForm.notes}
@@ -1720,11 +1782,9 @@ export default function Programs({ initialTraineeId = "" }) {
               round); the others keep their value but it is not shown. */}
           <ExerciseSpec
             label="מנוחה"
-            value={
-              exercise.rest_seconds != null && (!member || lastMember)
-                ? `${exercise.rest_seconds} שנ׳`
-                : null
-            }
+            value={!member || lastMember ? restSpecValue(exercise.rest_seconds) : null}
+            muted={exercise.rest_seconds == null && (!member || lastMember)}
+            title={exercise.rest_seconds == null ? `ברירת מחדל: ${DEFAULT_REST_SECONDS} שנ׳` : undefined}
           />
         </div>
         <DemoVideoSection
@@ -1827,7 +1887,9 @@ export default function Programs({ initialTraineeId = "" }) {
             <strong>{label}</strong>
             <span>
               {unit.rounds} סבבים
-              {last.rest_seconds != null ? ` · מנוחה אחרי סבב: ${last.rest_seconds} שנ׳` : ""}
+              {effectiveRestSeconds(last.rest_seconds) > 0
+                ? ` · מנוחה אחרי סבב: ${effectiveRestSeconds(last.rest_seconds)} שנ׳`
+                : " · בלי מנוחה"}
             </span>
           </div>
           <button

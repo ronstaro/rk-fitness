@@ -1418,10 +1418,19 @@ body.ltr .today-card.warn-border { border-right: none; border-left: 3px solid #F
 .program-day-form-grid { display: grid; grid-template-columns: minmax(180px, 1fr) minmax(180px, 2fr); gap: 10px; }
 .program-exercise-form-grid {
   display: grid;
-  grid-template-columns: minmax(180px, 2.5fr) repeat(5, minmax(84px, 1fr));
+  grid-template-columns: minmax(180px, 2.5fr) repeat(4, minmax(84px, 1fr));
   gap: 10px;
 }
 .program-exercise-form .program-demo-form { margin-top: 0; }
+.program-rest-form-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.program-rest-input { display: flex; align-items: center; gap: 6px; color: var(--gray-600); font-size: 13px; }
+.program-rest-input input {
+  width: 76px; padding: 7px 8px; border: 1px solid var(--burg); border-radius: 8px;
+  background: #fff; font: 600 15px var(--font); text-align: center;
+}
+.program-rest-form-hint { color: var(--gray-400); font-size: 12px; }
+.program-rest-form-note { margin: 0; padding: 9px 11px; border-radius: 9px; background: #fff; border: 0.5px solid #EDEBE6; color: var(--gray-600); font-size: 12.5px; }
+.program-exercise-spec.muted strong { color: var(--gray-400); font-weight: 500; }
 
 /* Superset / triple set blocks and the "🔗 חבר" connector between rows. */
 .program-exercise-group {
@@ -2395,6 +2404,49 @@ body.ltr .today-card.warn-border { border-right: none; border-left: 3px solid #F
 .trainee-workout-finish-bar strong, .trainee-workout-finish-bar span { display: block; }
 .trainee-workout-finish-bar strong { font-size: 12px; }
 .trainee-workout-finish-bar span { margin-top: 2px; color: var(--gray-400); font-size: 9px; }
+
+/* ── Rest timer between sets / rounds ─────────────────────── */
+/* Pinned at the top so it stays visible while scrolling and while the
+   keyboard is open; it covers no field and blocks nothing. */
+.rest-timer {
+  position: sticky; top: 8px; z-index: 6; margin-bottom: 12px; padding: 12px 14px;
+  border-radius: 14px; color: #fff;
+  background: linear-gradient(135deg, var(--burg-d), var(--burg) 55%, var(--burg-l));
+  box-shadow: 0 10px 30px rgba(90, 30, 43, .3);
+}
+.rest-timer-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.rest-timer-top strong { display: block; font-size: 13px; font-weight: 600; }
+.rest-timer-top span { display: block; margin-top: 3px; font-size: 12px; opacity: .85; }
+.rest-timer-top .rest-timer-clock {
+  margin: 0; font-size: 40px; line-height: 1; font-weight: 700; opacity: 1;
+  font-variant-numeric: tabular-nums; direction: ltr;
+}
+.rest-timer-members { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.rest-timer-members span { padding: 3px 9px; border-radius: 20px; background: rgba(255, 255, 255, .16); font-size: 12px; }
+.rest-timer-track { height: 5px; margin: 10px 0; border-radius: 9px; background: rgba(255, 255, 255, .22); overflow: hidden; direction: ltr; }
+.rest-timer-track div { height: 100%; border-radius: 9px; background: var(--mustard); transition: width .25s linear; }
+.rest-timer-next { margin: 0 0 10px; font-size: 12.5px; }
+.rest-timer-actions { display: grid; grid-template-columns: 1fr 1.4fr; gap: 8px; }
+.rest-timer-actions button {
+  min-height: 42px; border-radius: 10px; border: 1px solid rgba(255, 255, 255, .45);
+  background: rgba(255, 255, 255, .12); color: #fff; font: 600 14px var(--font); cursor: pointer;
+}
+.rest-timer-actions .rest-timer-skip { background: #fff; border-color: #fff; color: var(--burg); }
+.rest-timer-hint { display: block; margin-top: 6px; text-align: center; font-size: 11px; opacity: .8; }
+.rest-timer.done {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+  background: var(--success-bg); color: var(--success); border: 1.5px solid var(--success);
+  box-shadow: 0 10px 30px rgba(45, 106, 79, .2);
+}
+.rest-timer.done strong { display: block; font-size: 16px; }
+.rest-timer.done span { display: block; margin-top: 4px; font-size: 13px; }
+.rest-timer-close {
+  flex: none; display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%;
+  border: 1px solid var(--success); background: #fff; color: var(--success); font: 600 14px var(--font); cursor: pointer;
+}
+.trainee-live-set.rest-next { outline: 2px solid var(--burg); outline-offset: 2px; border-radius: 10px; }
+/* Two pinned bars would leave too little room on a phone. */
+.trainee-workout-live:has(.rest-timer) .trainee-workout-finish-bar { position: static; }
 
 /* ── Completed workout history and reviews ───────────────── */
 .workout-history { margin-top: 24px; }

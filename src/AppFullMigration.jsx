@@ -1,4 +1,4 @@
-﻿import { useEffect, useRef, useState } from "react";
+﻿import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchTrainees, createTrainee, updateTrainee, updateTraineeStatus, deleteTrainee, deleteTraineeErrorMessage } from "./services/traineesService.js";
 import { fetchSessions } from "./services/sessionsService.js";
 import { fetchActivePrograms } from "./services/programsService.js";
@@ -24,6 +24,19 @@ import {
   writeNavigation,
 } from "./lib/navigationMemory.js";
 import { GROUP_LETTERS, buildRoundUnits, groupLabel, groupRestSeconds, roundProgress } from "./lib/exerciseGroups.js";
+import {
+  ADD_REST_SECONDS,
+  effectiveRestSeconds,
+  extendRest,
+  formatRestClock,
+  restAfterCompletion,
+  restoreRest,
+  restPhase,
+  restRemainingMs,
+  saveStoredRest,
+  startRest,
+  withSetCompletion,
+} from "./lib/restTimer.js";
 
 // Superset / triple set blocks of the trainee screens. A program exercise runs
 // for its `sets` rounds, a logged one for its saved set rows; anything that
@@ -36,8 +49,81 @@ function formatRest(seconds) {
 }
 
 function groupSummary(unit) {
-  const rest = groupRestSeconds(unit);
-  return `${unit.rounds} סבבים${rest == null ? "" : ` · מנוחה אחרי סבב: ${formatRest(rest)}`}`;
+  const rest = effectiveRestSeconds(groupRestSeconds(unit));
+  return `${unit.rounds} סבבים${rest > 0 ? ` · מנוחה אחרי סבב: ${formatRest(rest)}` : ""}`;
+}
+
+// The rest timer pinned to the top of the live workout. Guidance only: it
+// covers nothing, nothing waits for it, and its buttons are shortcuts. The
+// time always comes from the end timestamp, so a phone that was locked or a
+// tab in the background shows the right value as soon as it is seen again.
+function RestTimerBar({ timer, onAdd, onSkip, onExpire }) {
+  const [now, setNow] = useState(() => Date.now());
+  const vibratedRef = useRef(null);
+
+  useEffect(() => {
+    const tick = () => setNow(Date.now());
+    tick();
+    const interval = window.setInterval(tick, 250);
+    document.addEventListener("visibilitychange", tick);
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", tick);
+    };
+  }, [timer]);
+
+  const phase = restPhase(timer, now);
+
+  useEffect(() => {
+    if (phase === "none") onExpire();
+    // One short buzz when the rest ends while the screen is open (Android only).
+    if (phase === "done" && vibratedRef.current !== timer.endsAt && document.visibilityState === "visible") {
+      vibratedRef.current = timer.endsAt;
+      if (now - timer.endsAt < 1500) {
+        try { navigator.vibrate?.([180, 90, 180]); } catch { /* not supported */ }
+      }
+    }
+  }, [phase, timer, now, onExpire]);
+
+  if (phase === "none") return null;
+
+  if (phase === "done") {
+    return (
+      <section className="rest-timer done" role="status" aria-label="זמן המנוחה הסתיים">
+        <div>
+          <strong>✅ זמן המנוחה הסתיים</strong>
+          <span>אפשר להתחיל את הסט הבא · <b>{timer.nextLabel}</b></span>
+        </div>
+        <button type="button" className="rest-timer-close" aria-label="סגירת הודעת המנוחה" onClick={onSkip}>✕</button>
+      </section>
+    );
+  }
+
+  const remaining = restRemainingMs(timer, now);
+  const progress = timer.durationMs > 0 ? Math.min(100, (remaining / timer.durationMs) * 100) : 0;
+  return (
+    <section className="rest-timer" aria-label={timer.title}>
+      <div className="rest-timer-top">
+        <div>
+          <strong>⏱ {timer.title}</strong>
+          <span>{timer.doneLabel}</span>
+        </div>
+        <span className="rest-timer-clock" role="timer" aria-label="זמן מנוחה שנותר">{formatRestClock(remaining)}</span>
+      </div>
+      {timer.members.length > 0 && (
+        <div className="rest-timer-members">
+          {timer.members.map((member) => <span key={member}>{member} ✓</span>)}
+        </div>
+      )}
+      <div className="rest-timer-track" aria-hidden="true"><div style={{ width: `${progress}%` }} /></div>
+      <p className="rest-timer-next">{timer.kind === "rounds" ? "הבא" : "הסט הבא"}: <b>{timer.nextLabel}</b></p>
+      <div className="rest-timer-actions">
+        <button type="button" onClick={onAdd}>+{ADD_REST_SECONDS} שנ׳</button>
+        <button type="button" className="rest-timer-skip" onClick={onSkip}>דלג על המנוחה</button>
+      </div>
+      <small className="rest-timer-hint">לא חובה ללחוץ · אפשר להמשיך להקליד ולסמן סטים</small>
+    </section>
+  );
 }
 
 function isRememberedId(value) {
@@ -1793,6 +1879,51 @@ function Workout() {
   // Fields whose last save failed: leaving them again retries even if unchanged.
   const unsavedFieldsRef = useRef(new Set());
   const completionLockRef = useRef(new Set());
+  // Rest timer between sets / rounds (src/lib/restTimer.js). Never read by
+  // any save or completion: the workout works the same with or without it.
+  const [restTimer, setRestTimer] = useState(null);
+  const programDataRef = useRef(programData);
+  programDataRef.current = programData;
+  const activeWorkoutId = programData?.activeWorkout?.id ?? null;
+
+  // After a refresh or a return to the screen, the timer of this open workout
+  // comes back with its original end time.
+  useEffect(() => {
+    setRestTimer(activeWorkoutId ? restoreRest(programDataRef.current.activeWorkout) : null);
+    if (!activeWorkoutId && programDataRef.current) saveStoredRest(null);
+  }, [activeWorkoutId]);
+
+  const changeRestTimer = useCallback((next) => {
+    setRestTimer(next);
+    saveStoredRest(next);
+  }, []);
+  const clearRestTimer = useCallback(() => changeRestTimer(null), [changeRestTimer]);
+
+  // A set that just became completed (by its ✓ or by typing a value) starts
+  // the rest that follows it, replacing any running one; when no rest follows
+  // (last set, mid-round, last round) a running timer simply ends. A set that
+  // is unchecked ends the timer it started.
+  function handleRestAfterSetChange(exerciseId, setId, wasCompleted, isCompleted) {
+    const workout = programDataRef.current?.activeWorkout;
+    if (!workout) return;
+    // The last rendered state wins over the value captured when the save
+    // started, so two fields of one set saved together start a single rest.
+    const rendered = workout.exercises
+      .find((exercise) => exercise.id === exerciseId)
+      ?.sets.find((set) => set.id === setId);
+    if ((rendered ? rendered.is_completed : wasCompleted) === isCompleted) return;
+    if (!isCompleted) {
+      setRestTimer((current) => {
+        if (current?.setId !== setId) return current;
+        saveStoredRest(null);
+        return null;
+      });
+      return;
+    }
+    const exercises = withSetCompletion(workout.exercises, exerciseId, setId, true);
+    const plan = restAfterCompletion(exercises, exerciseId, setId);
+    changeRestTimer(plan ? startRest(plan, workout.id) : null);
+  }
 
   // Leaving the app while typing (tab switch, phone lock) would otherwise keep
   // the value unsaved until the field loses focus, which may never happen.
@@ -1933,6 +2064,7 @@ function Workout() {
       // Only the completion comes back into state, so a value typed in the
       // next field while this save was running is not overwritten.
       updateSetState(exerciseId, workoutSet.id, { is_completed: savedSet.is_completed });
+      handleRestAfterSetChange(exerciseId, workoutSet.id, workoutSet.is_completed, savedSet.is_completed);
       unsavedFieldsRef.current.delete(fieldKey);
     } catch (error) {
       unsavedFieldsRef.current.add(fieldKey);
@@ -1954,6 +2086,7 @@ function Workout() {
         is_completed: !workoutSet.is_completed,
       });
       updateSetState(exerciseId, workoutSet.id, { is_completed: savedSet.is_completed });
+      handleRestAfterSetChange(exerciseId, workoutSet.id, workoutSet.is_completed, savedSet.is_completed);
     } catch (error) {
       console.warn("Workout set completion failed:", error?.name);
       setActionError("סימון הסט לא נשמר. נסה שוב.");
@@ -2047,6 +2180,7 @@ function Workout() {
 
     try {
       await finishWorkout(workout.id);
+      clearRestTimer();
       setNotice("האימון הסתיים ונשמר בהצלחה.");
       setReloadKey((key) => key + 1);
     } catch (error) {
@@ -2089,7 +2223,7 @@ function Workout() {
       ? `בסט ${workoutSet.set_order}`
       : `ב${exercise.exercise_name}, סבב ${round}`;
     return (
-      <div className={`trainee-live-set ${workoutSet.is_completed ? "completed" : ""}`} key={workoutSet.id}>
+      <div className={`trainee-live-set ${workoutSet.is_completed ? "completed" : ""} ${round == null && restTimer?.nextSetId === workoutSet.id ? "rest-next" : ""}`} key={workoutSet.id}>
         <strong>{letter ?? workoutSet.set_order}</strong>
         <label>
           <span>משקל</span>
@@ -2199,7 +2333,10 @@ function Workout() {
             <span>{exercise.exercise_order}</span>
             <div>
               <strong>{exercise.exercise_name}</strong>
-              <p>{exercise.prescribed_sets} סטים</p>
+              <p>
+                {exercise.prescribed_sets} סטים
+                {effectiveRestSeconds(exercise.rest_seconds) > 0 && ` · מנוחה בין סטים: ${formatRest(effectiveRestSeconds(exercise.rest_seconds))}`}
+              </p>
             </div>
           </div>
           {renderCompletionButton(exercise)}
@@ -2246,7 +2383,8 @@ function Workout() {
   function renderLiveGroup(unit) {
     const label = groupLabel(unit.exercises.length);
     const names = unit.exercises.map((exercise) => exercise.exercise_name).join(" + ");
-    const rest = groupRestSeconds(unit);
+    const restValue = effectiveRestSeconds(groupRestSeconds(unit));
+    const rest = restValue > 0 ? restValue : null;
     const { currentRound, nextExerciseId } = roundProgress(unit);
     const nextIndex = unit.exercises.findIndex((exercise) => exercise.id === nextExerciseId);
     const allCompleted = unit.exercises.every((exercise) => exercise.is_completed);
@@ -2382,6 +2520,14 @@ function Workout() {
 
     return (
       <div className="trainee-workout trainee-workout-live slide-in">
+        {restTimer && (
+          <RestTimerBar
+            timer={restTimer}
+            onAdd={() => changeRestTimer(extendRest(restTimer))}
+            onSkip={clearRestTimer}
+            onExpire={clearRestTimer}
+          />
+        )}
         <section className="trainee-workout-live-hero">
           <div>
             <span>אימון בביצוע · נשמר אוטומטית</span>

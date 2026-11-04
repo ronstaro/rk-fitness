@@ -133,6 +133,17 @@ export async function fetchSessionRequests() {
   return { pending: pending.data ?? [], recent: recent.data ?? [] };
 }
 
+// Only the number, for the admin menu badge.
+export async function fetchPendingSessionRequestCount() {
+  const { count, error } = await supabase
+    .from("session_requests")
+    .select("id", { count: "exact", head: true })
+    .eq("status", "pending");
+
+  if (error) throw error;
+  return count ?? 0;
+}
+
 export async function approveSessionRequest(requestId, input) {
   const { data, error } = await supabase.rpc("approve_session_request", {
     p_request_id: requestId,

@@ -10,12 +10,12 @@ import Dashboard from "./components/Dashboard.jsx";
 import Finance from "./components/Finance.jsx";
 import Leads from "./components/Leads.jsx";
 import Programs from "./components/Programs.jsx";
-import Schedule from "./components/Schedule.jsx";
+import Schedule, { SessionRequestsView } from "./components/Schedule.jsx";
 import WeeklyGoals from "./components/WeeklyGoals.jsx";
 import TraineeInviteCard from "./components/TraineeInviteCard.jsx";
 import ExerciseDemoVideo from "./components/ExerciseDemoVideo.jsx";
 import { TraineeSessionRequests } from "./components/SessionRequests.jsx";
-import { fetchMySessionRequests } from "./services/sessionRequestsService.js";
+import { fetchMySessionRequests, fetchPendingSessionRequestCount } from "./services/sessionRequestsService.js";
 import {
   claimNavigationMemory,
   clearNavigationMemory,
@@ -2924,6 +2924,7 @@ const VIEW_TITLES = {
   programs:       "תוכניות אימון",
   reviews:        "סקירות אימונים",
   schedule:       "לוח זמנים",
+  "session-requests": "בקשות אימון",
   revenue:        "כספים",
   settings:       "הגדרות",
   "trainee-home": "בית",
@@ -2954,6 +2955,7 @@ const ADMIN_GROUPS = [
     label: 'פיננסי ולו"ז',
     items: [
       { id: "schedule", icon: "📅", label: "לוח זמנים" },
+      { id: "session-requests", icon: "📅", label: "בקשות אימון" },
       { id: "revenue",  icon: "💰", label: "כספים" },
     ],
   },
@@ -2979,7 +2981,7 @@ const TRAINEE_GROUPS = [
   },
 ];
 
-function NavItem({ item, active, onClick }) {
+function NavItem({ item, active, onClick, badge = 0 }) {
   if (item.disabled) {
     return (
       <div className="slink" style={{ opacity: 0.38, cursor: "default", pointerEvents: "none" }}>
@@ -2993,6 +2995,7 @@ function NavItem({ item, active, onClick }) {
     <div className={`slink${active ? " active" : ""}`} onClick={onClick}>
       <span style={{ fontSize: 15 }}>{item.icon}</span>
       <span>{item.label}</span>
+      {badge > 0 && <span className="slink-badge" aria-label={`${badge} ממתינות`}>{badge}</span>}
     </div>
   );
 }
@@ -3023,11 +3026,26 @@ export default function AppFullMigration({ onLogout, signingOut = false, signOut
   const [role, setRole] = useState(initialScreen.role);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [selectedProgramTraineeId, setSelectedProgramTraineeId] = useState("");
+  const [pendingRequests, setPendingRequests] = useState(0);
+  const [pendingCheck, setPendingCheck] = useState(0);
 
   useEffect(() => {
     writeNavigation("app:role", role);
     writeNavigation("app:view", view);
   }, [role, view]);
+
+  // Menu badge for trainee session requests: one count query when the admin
+  // opens a screen or decides a request. No polling; a failed count hides it.
+  useEffect(() => {
+    if (role !== "admin") return undefined;
+    let active = true;
+    fetchPendingSessionRequestCount()
+      .then((count) => active && setPendingRequests(count))
+      .catch(() => active && setPendingRequests(0));
+    return () => {
+      active = false;
+    };
+  }, [role, view, pendingCheck]);
 
   function toggleRole() {
     if (accountRole !== "admin") return;
@@ -3076,6 +3094,7 @@ export default function AppFullMigration({ onLogout, signingOut = false, signOut
                   key={item.label}
                   item={item}
                   active={view === item.id}
+                  badge={role === "admin" && item.id === "session-requests" ? pendingRequests : 0}
                   onClick={item.disabled ? undefined : () => selectView(item.id)}
                 />
               ))}
@@ -3135,6 +3154,7 @@ export default function AppFullMigration({ onLogout, signingOut = false, signOut
           {view === "programs"     && <Programs initialTraineeId={selectedProgramTraineeId} />}
           {view === "reviews"      && <Reviews />}
           {view === "schedule"     && <Schedule />}
+          {view === "session-requests" && <SessionRequestsView onPendingChange={() => setPendingCheck((value) => value + 1)} />}
           {view === "revenue"      && <Finance />}
           {view === "settings"     && <Settings />}
           {view === "trainee-home" && <TraineeHome onNavigate={selectView} />}

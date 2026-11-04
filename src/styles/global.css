@@ -2776,3 +2776,4 @@ body.ltr .today-card.warn-border { border-right: none; border-left: 3px solid #F
   .session-request-admin-list { grid-template-columns: 1fr; }
   .session-request-row { align-items: flex-start; }
 }
+.session-requests-admin-page { max-width: 980px; }

@@ -184,18 +184,6 @@ export default function Schedule() {
     }
   }
 
-  // After a request is approved its new session joins the calendar without
-  // the loading screen.
-  async function refreshSessions() {
-    try {
-      const sessionRows = await fetchSessions();
-      setSessions(sessionRows.map((row) => mapSession(row, trainees)));
-    } catch (error) {
-      console.error("Schedule refresh error:", error);
-      setRowError("האימון נקבע, אך לא ניתן לרענן את היומן. רענון הדף יציג אותו.");
-    }
-  }
-
   useEffect(() => {
     writeNavigation("schedule:week", localDateKey(weekStart));
   }, [weekStart]);
@@ -475,12 +463,6 @@ export default function Schedule() {
       </section>
 
       {rowError && <div className="schedule-error-strip">{rowError}</div>}
-
-      <SessionRequestsPanel
-        trainees={trainees}
-        hasConflict={(date, startTime, duration) => hasOverlap(date, startTime, duration, sessions)}
-        onScheduled={refreshSessions}
-      />
 
       <section className="schedule-calendar card">
         <div className="schedule-calendar-scroll">
@@ -782,6 +764,76 @@ export default function Schedule() {
             </div>
           </form>
         </div>
+      )}
+    </div>
+  );
+}
+
+// Admin "בקשות אימון": the same request panel that used to sit above the
+// calendar, on its own screen. It keeps the calendar's sessions so the
+// overlap check before approval matches the schedule form; the server checks
+// overlap again when approving.
+export function SessionRequestsView({ onPendingChange }) {
+  const [trainees, setTrainees] = useState([]);
+  const [sessions, setSessions] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const [refreshError, setRefreshError] = useState("");
+  const [reloadKey, setReloadKey] = useState(0);
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    setLoadError("");
+    Promise.all([fetchTrainees(), fetchSessions()])
+      .then(([traineeRows, sessionRows]) => {
+        if (!active) return;
+        setTrainees(traineeRows);
+        setSessions(sessionRows.map((row) => mapSession(row, traineeRows)));
+      })
+      .catch((error) => {
+        console.error("Session requests view fetch error:", error);
+        if (active) setLoadError("לא ניתן לטעון את בקשות האימון כרגע.");
+      })
+      .finally(() => active && setLoading(false));
+    return () => {
+      active = false;
+    };
+  }, [reloadKey]);
+
+  async function refreshSessions() {
+    try {
+      const sessionRows = await fetchSessions();
+      setSessions(sessionRows.map((row) => mapSession(row, trainees)));
+      setRefreshError("");
+    } catch (error) {
+      console.error("Session requests view refresh error:", error);
+      setRefreshError("האימון נקבע ביומן. רענון הדף יעדכן את בדיקת החפיפות.");
+    }
+  }
+
+  return (
+    <div className="schedule-page session-requests-admin-page slide-in">
+      {loading ? (
+        <div className="empty-state">טוען בקשות אימון...</div>
+      ) : loadError ? (
+        <div className="schedule-error-strip">
+          {loadError}{" "}
+          <button type="button" className="btn btn-ghost btn-sm" onClick={() => setReloadKey((key) => key + 1)}>
+            נסה שוב
+          </button>
+        </div>
+      ) : (
+        <>
+          {refreshError && <div className="schedule-error-strip">{refreshError}</div>}
+          <SessionRequestsPanel
+            trainees={trainees}
+            hasConflict={(date, startTime, duration) => hasOverlap(date, startTime, duration, sessions)}
+            onScheduled={refreshSessions}
+            onDecided={onPendingChange}
+            defaultShowRecent
+          />
+        </>
       )}
     </div>
   );

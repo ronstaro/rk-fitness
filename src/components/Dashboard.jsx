@@ -4,6 +4,8 @@ import { fetchDashboardPayments } from "../services/dashboardService.js";
 import { fetchActivePrograms } from "../services/programsService.js";
 import { fetchSessions } from "../services/sessionsService.js";
 import { fetchTrainees } from "../services/traineesService.js";
+import { currentWeekRange } from "../services/traineeHomeService.js";
+import { fetchCompletedWorkoutCounts } from "../services/weeklyGoalsService.js";
 import { fetchPaidPayments } from "../services/financeService.js";
 import { onlinePaymentState, onlinePaymentText } from "../lib/payments.js";
 
@@ -28,15 +30,6 @@ function formatDate(value) {
 
 function monthStartKey(date = new Date()) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-01`;
-}
-
-function weekRange(date = new Date()) {
-  const start = new Date(date);
-  start.setHours(12, 0, 0, 0);
-  start.setDate(start.getDate() - start.getDay());
-  const end = new Date(start);
-  end.setDate(start.getDate() + 6);
-  return { start: localDateKey(start), end: localDateKey(end) };
 }
 
 function formatCurrency(value) {
@@ -70,6 +63,7 @@ export default function Dashboard({ onNavigate }) {
   const [programs, setPrograms] = useState([]);
   const [payments, setPayments] = useState([]);
   const [paidPayments, setPaidPayments] = useState([]);
+  const [completedByTrainee, setCompletedByTrainee] = useState({});
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
 
@@ -78,13 +72,17 @@ export default function Dashboard({ onNavigate }) {
     setLoadError("");
 
     try {
-      const [leadRows, traineeRows, sessionRows, programRows, paymentRows] = await Promise.all([
+      const week = currentWeekRange();
+      const [leadRows, traineeRows, sessionRows, programRows, paymentRows, completedCounts] = await Promise.all([
         fetchLeads(),
         fetchTrainees(),
         fetchSessions(),
         fetchActivePrograms(),
         fetchDashboardPayments(monthStartKey()),
+        // Same completed-workout count as the weekly goals screen and the trainee's Home.
+        fetchCompletedWorkoutCounts(week.from, week.to),
       ]);
+      setCompletedByTrainee(completedCounts);
       setLeads(leadRows);
       setTrainees(traineeRows);
       setSessions(sessionRows);
@@ -119,7 +117,6 @@ export default function Dashboard({ onNavigate }) {
   const dashboard = useMemo(() => {
     const today = new Date();
     const todayKey = localDateKey(today);
-    const week = weekRange(today);
     const traineeNames = Object.fromEntries(
       trainees.map((trainee) => [trainee.id, trainee.full_name])
     );
@@ -169,16 +166,6 @@ export default function Dashboard({ onNavigate }) {
               formatTime(session.start_time) >= today.toTimeString().slice(0, 5)))
       )
       .slice(0, 4);
-    const completedByTrainee = sessions.reduce((result, session) => {
-      if (
-        session.status === "הושלם" &&
-        session.session_date >= week.start &&
-        session.session_date <= week.end
-      ) {
-        result[session.trainee_id] = (result[session.trainee_id] || 0) + 1;
-      }
-      return result;
-    }, {});
     const programByTrainee = Object.fromEntries(
       programs.map((program) => [program.trainee_id, program])
     );
@@ -209,7 +196,7 @@ export default function Dashboard({ onNavigate }) {
       weeklyProgress,
       traineeNames,
     };
-  }, [leads, paidPayments, payments, programs, sessions, trainees]);
+  }, [completedByTrainee, leads, paidPayments, payments, programs, sessions, trainees]);
 
   if (loading) {
     return (

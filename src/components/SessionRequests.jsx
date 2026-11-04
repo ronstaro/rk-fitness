@@ -409,7 +409,7 @@ function approvalForm(trainee) {
   };
 }
 
-export function SessionRequestsPanel({ trainees, hasConflict, onScheduled }) {
+export function SessionRequestsPanel({ trainees, hasConflict, onScheduled, onDecided, defaultShowRecent = false }) {
   const [data, setData] = useState({ pending: [], recent: [] });
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
@@ -418,7 +418,7 @@ export function SessionRequestsPanel({ trainees, hasConflict, onScheduled }) {
   const [form, setForm] = useState(null);
   const [dialogError, setDialogError] = useState("");
   const [working, setWorking] = useState(false);
-  const [showRecent, setShowRecent] = useState(false);
+  const [showRecent, setShowRecent] = useState(defaultShowRecent);
   const lockRef = useRef(false);
 
   useEffect(() => {
@@ -477,6 +477,7 @@ export function SessionRequestsPanel({ trainees, hasConflict, onScheduled }) {
     setDialog(null);
     setForm(null);
     setReloadKey((key) => key + 1);
+    onDecided?.();
     if (scheduled) await onScheduled?.();
   }
 

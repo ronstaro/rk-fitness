@@ -7,16 +7,21 @@ function localDateKey(date) {
   return `${year}-${month}-${day}`;
 }
 
-function currentWeekRange() {
-  const today = new Date();
-  const start = new Date(today);
-  start.setHours(12, 0, 0, 0);
-  start.setDate(today.getDate() - today.getDay());
+// The product week is Sunday to Saturday on the trainee's device clock
+// (Israel). from/to bound timestamps (completed_at); start/end are the
+// inclusive date keys used for training_sessions.session_date.
+export function currentWeekRange(now = new Date()) {
+  const from = new Date(now);
+  from.setHours(0, 0, 0, 0);
+  from.setDate(from.getDate() - from.getDay());
 
-  const end = new Date(start);
-  end.setDate(start.getDate() + 6);
+  const to = new Date(from);
+  to.setDate(from.getDate() + 7);
 
-  return { start: localDateKey(start), end: localDateKey(end) };
+  const last = new Date(from);
+  last.setDate(from.getDate() + 6);
+
+  return { start: localDateKey(from), end: localDateKey(last), from, to };
 }
 
 async function fetchActiveProgramWithDays(traineeId) {
@@ -66,7 +71,7 @@ export async function fetchTraineeHomeData() {
   }
 
   const week = currentWeekRange();
-  const [sessionsResult, programData] = await Promise.all([
+  const [sessionsResult, programData, completedResult, openResult] = await Promise.all([
     supabase
       .from("training_sessions")
       .select("id, session_date, start_time, duration_minutes, training_type, location, status")
@@ -76,13 +81,33 @@ export async function fetchTraineeHomeData() {
       .order("session_date", { ascending: true })
       .order("start_time", { ascending: true }),
     fetchActiveProgramWithDays(trainee.id),
+    // Weekly progress counts finished workouts from the workout history,
+    // however they were started; a log row is one workout, so none counts twice.
+    supabase
+      .from("workout_logs")
+      .select("id, completed_at")
+      .eq("trainee_id", trainee.id)
+      .eq("status", "completed")
+      .gte("completed_at", week.from.toISOString())
+      .lt("completed_at", week.to.toISOString()),
+    // Only the open workout's name is needed here; the workout screen loads it fully.
+    supabase
+      .from("workout_logs")
+      .select("id, day_name")
+      .eq("trainee_id", trainee.id)
+      .eq("status", "in_progress")
+      .maybeSingle(),
   ]);
 
   if (sessionsResult.error) throw sessionsResult.error;
+  if (completedResult.error) throw completedResult.error;
+  if (openResult.error) throw openResult.error;
 
   return {
     trainee,
     sessions: sessionsResult.data ?? [],
+    completedWorkoutsThisWeek: completedResult.data?.length ?? 0,
+    openWorkout: openResult.data ?? null,
     ...programData,
   };
 }

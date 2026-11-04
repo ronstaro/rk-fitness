@@ -1182,6 +1182,9 @@ function TraineeHome({ onNavigate }) {
   const [loadError, setLoadError] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
   const [pendingRequests, setPendingRequests] = useState(0);
+  const [choosingWorkout, setChoosingWorkout] = useState(false);
+  const [startingDayId, setStartingDayId] = useState("");
+  const [startError, setStartError] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -1249,12 +1252,95 @@ function TraineeHome({ onNavigate }) {
     );
   }
 
-  const { trainee, sessions, program, days } = homeData;
-  const completedSessions = sessions.filter((session) => session.status === "הושלם").length;
+  const { trainee, sessions, program, days, completedWorkoutsThisWeek = 0, openWorkout } = homeData;
   const weeklyTarget = program?.sessions_per_week ?? sessions.length;
   const progressPercent = weeklyTarget > 0
-    ? Math.min(100, Math.round((completedSessions / weeklyTarget) * 100))
+    ? Math.min(100, Math.round((completedWorkoutsThisWeek / weeklyTarget) * 100))
     : 0;
+  // Same rule as the program screen: a workout type without exercises cannot start.
+  const startableDays = days.filter((day) => day.exercises.length > 0);
+
+  // A shortcut into the program screen's flow: the same start RPC (which
+  // returns an already-open workout instead of opening a second one), then
+  // the workout screen loads and runs the open workout as usual.
+  async function startFromHome(day) {
+    if (startingDayId) return;
+    setStartingDayId(day.id);
+    setStartError("");
+    try {
+      await startWorkout(day.id);
+      onNavigate("workout");
+    } catch (error) {
+      console.warn("Workout start failed:", error?.name);
+      setStartError("לא ניתן להתחיל את האימון כרגע. נסה שוב.");
+      setStartingDayId("");
+    }
+  }
+
+  function handleQuickStart() {
+    setStartError("");
+    if (openWorkout) {
+      onNavigate("workout");
+    } else if (startableDays.length === 1) {
+      startFromHome(startableDays[0]);
+    } else {
+      setChoosingWorkout((open) => !open);
+    }
+  }
+
+  function renderQuickStart() {
+    if (!openWorkout && startableDays.length === 0) {
+      return (
+        <div className="trainee-home-quickstart-empty" role="status">
+          <strong>🏋️ התחלת אימון מרחוק</strong>
+          <small>
+            {program
+              ? "סוגי האימון בתוכנית עדיין בבנייה. כשרוני תוסיף אותם, אפשר יהיה להתחיל מכאן."
+              : "אין כרגע תוכנית פעילה. כשרוני תפעיל עבורך תוכנית, אפשר יהיה להתחיל מכאן."}
+          </small>
+        </div>
+      );
+    }
+
+    return (
+      <div className="trainee-home-quickstart">
+        <button
+          type="button"
+          className="trainee-home-quickstart-button"
+          onClick={handleQuickStart}
+          disabled={Boolean(startingDayId)}
+          aria-expanded={!openWorkout && startableDays.length > 1 ? choosingWorkout : undefined}
+        >
+          <span className="trainee-home-request-title">
+            {openWorkout ? "▶️ המשך האימון שהתחלת" : startingDayId ? "מתחיל..." : "🏋️ התחלת אימון מרחוק"}
+          </span>
+          <small>
+            {openWorkout
+              ? `${openWorkout.day_name} · הנתונים שמורים`
+              : startableDays.length === 1 ? startableDays[0].name : "בוחרים סוג אימון ומתחילים"}
+          </small>
+        </button>
+        {choosingWorkout && !openWorkout && startableDays.length > 1 && (
+          <div className="trainee-home-quickstart-choices" role="group" aria-label="בחירת סוג אימון">
+            {startableDays.map((day) => (
+              <button
+                type="button"
+                key={day.id}
+                className="trainee-home-quickstart-choice"
+                disabled={Boolean(startingDayId)}
+                onClick={() => startFromHome(day)}
+              >
+                <span>{day.day_order}</span>
+                <strong>{startingDayId === day.id ? "מתחיל..." : day.name}</strong>
+                <small>{day.exercises.length} תרגילים</small>
+              </button>
+            ))}
+          </div>
+        )}
+        {startError && <div className="trainee-workout-feedback error">{startError}</div>}
+      </div>
+    );
+  }
 
   return (
     <div className="trainee-home">
@@ -1267,9 +1353,11 @@ function TraineeHome({ onNavigate }) {
         <span className="badge badge-burg">{trainee.training_type || "מתאמן"}</span>
       </section>
 
+      {onNavigate && renderQuickStart()}
+
       {onNavigate && (
         <button type="button" className="trainee-home-request" onClick={() => onNavigate("session-request")}>
-          <span className="trainee-home-request-title">📅 בקשת אימון</span>
+          <span className="trainee-home-request-title">📅 בקשת אימון אישי</span>
           <small>
             {pendingRequests > 0
               ? pendingRequests === 1 ? "יש בקשה שממתינה לאישור" : `יש ${pendingRequests} בקשות שממתינות לאישור`
@@ -1281,8 +1369,11 @@ function TraineeHome({ onNavigate }) {
       <div className="trainee-home-metrics">
         <article className="trainee-home-metric">
           <span>אימוני השבוע</span>
-          <strong>{sessions.length}</strong>
-          <small>{completedSessions} הושלמו</small>
+          <strong>{completedWorkoutsThisWeek}</strong>
+          <small>
+            {completedWorkoutsThisWeek === 1 ? "אימון שהושלם" : "אימונים שהושלמו"} מיום ראשון
+            {sessions.length > 0 && ` · ${sessions.length} מתוכננים עם רוני`}
+          </small>
         </article>
         <article className="trainee-home-metric">
           <span>יעד שבועי</span>
@@ -1292,6 +1383,7 @@ function TraineeHome({ onNavigate }) {
         <article className="trainee-home-metric">
           <span>השלמה</span>
           <strong>{weeklyTarget ? `${progressPercent}%` : "—"}</strong>
+          {weeklyTarget > 0 && <small>{completedWorkoutsThisWeek}/{weeklyTarget} מהיעד</small>}
           <div className="progress-bar">
             <div className="progress-fill green" style={{ width: `${progressPercent}%` }} />
           </div>

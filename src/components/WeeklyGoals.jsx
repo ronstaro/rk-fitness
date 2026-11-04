@@ -1,28 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { fetchActivePrograms } from "../services/programsService.js";
-import { fetchSessions } from "../services/sessionsService.js";
+import { currentWeekRange } from "../services/traineeHomeService.js";
 import { fetchTrainees } from "../services/traineesService.js";
 import {
+  fetchCompletedWorkoutCounts,
   fetchWeeklyGoalNotes,
   saveWeeklyGoalNote,
 } from "../services/weeklyGoalsService.js";
-
-function dateKey(date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
-function currentWeek() {
-  const today = new Date();
-  const start = new Date(today);
-  start.setHours(12, 0, 0, 0);
-  start.setDate(today.getDate() - today.getDay());
-  const end = new Date(start);
-  end.setDate(start.getDate() + 6);
-  return { start: dateKey(start), end: dateKey(end) };
-}
 
 function formatDate(value) {
   return new Intl.DateTimeFormat("he-IL", {
@@ -41,7 +25,7 @@ function initials(name) {
 }
 
 export default function WeeklyGoals() {
-  const week = useMemo(currentWeek, []);
+  const week = useMemo(() => currentWeekRange(), []);
   const [rows, setRows] = useState([]);
   const [notes, setNotes] = useState({});
   const [drafts, setDrafts] = useState({});
@@ -54,25 +38,15 @@ export default function WeeklyGoals() {
     setLoading(true);
     setLoadError("");
     try {
-      const [trainees, programs, sessions, noteRows] = await Promise.all([
+      const [trainees, programs, completedByTrainee, noteRows] = await Promise.all([
         fetchTrainees(),
         fetchActivePrograms(),
-        fetchSessions(),
+        fetchCompletedWorkoutCounts(week.from, week.to),
         fetchWeeklyGoalNotes(week.start),
       ]);
       const programsByTrainee = Object.fromEntries(
         programs.map((program) => [program.trainee_id, program])
       );
-      const completedByTrainee = sessions.reduce((result, session) => {
-        if (
-          session.status === "הושלם" &&
-          session.session_date >= week.start &&
-          session.session_date <= week.end
-        ) {
-          result[session.trainee_id] = (result[session.trainee_id] || 0) + 1;
-        }
-        return result;
-      }, {});
       const activeTrainees = trainees.filter((trainee) => trainee.status !== "הסתיים");
       setRows(
         activeTrainees.map((trainee) => ({
@@ -92,7 +66,7 @@ export default function WeeklyGoals() {
     } finally {
       setLoading(false);
     }
-  }, [week.end, week.start]);
+  }, [week]);
 
   useEffect(() => {
     load();

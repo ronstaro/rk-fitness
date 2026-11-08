@@ -11,6 +11,7 @@ import { InviteAuthForm, InviteInvalidScreen, InviteLinking } from "./InviteFlow
 import { clearRecoveryFlag, initialAuthRedirect, storeRecoveryFlag } from "../services/authService.js";
 import { ForgotPasswordForm, ResetPasswordForm } from "./PasswordRecovery.jsx";
 import { clearNavigationMemory } from "../lib/navigationMemory.js";
+import { disablePushOnSignOut } from "../lib/pushNotifications.js";
 
 const LINK_ERROR_NOTICE = "הקישור שנפתח אינו בתוקף או שכבר נעשה בו שימוש. אפשר להתחבר, או לבקש קישור חדש לאיפוס סיסמה.";
 const RECOVERY_EXPIRED_NOTICE = "קישור האיפוס אינו בתוקף. יש לבקש קישור חדש.";
@@ -237,6 +238,10 @@ export default function AuthGate({ children }) {
     inviteAuthRef.current = false;
     setSignOutError("");
     setSigningOut(true);
+
+    // A signed-out device should not keep showing business notifications.
+    // Best effort and time-limited, so it never blocks signing out.
+    await disablePushOnSignOut();
 
     try {
       const { error: signOutErr } = await supabase.auth.signOut();

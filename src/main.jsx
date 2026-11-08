@@ -3,6 +3,9 @@ import { createRoot } from 'react-dom/client'
 import './styles/global.css'
 import AppFullMigration from './AppFullMigration.jsx'
 import AuthGate from './components/AuthGate.jsx'
+import { registerServiceWorker } from './lib/pushNotifications.js'
+
+registerServiceWorker()
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>

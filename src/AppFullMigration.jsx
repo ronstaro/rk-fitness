@@ -14,6 +14,7 @@ import Schedule, { SessionRequestsView } from "./components/Schedule.jsx";
 import WeeklyGoals from "./components/WeeklyGoals.jsx";
 import TraineeInviteCard from "./components/TraineeInviteCard.jsx";
 import ExerciseDemoVideo from "./components/ExerciseDemoVideo.jsx";
+import NotificationSettings from "./components/NotificationSettings.jsx";
 import { TraineeSessionRequests } from "./components/SessionRequests.jsx";
 import { fetchMySessionRequests, fetchPendingSessionRequestCount } from "./services/sessionRequestsService.js";
 import {
@@ -23,6 +24,7 @@ import {
   useRememberedState,
   writeNavigation,
 } from "./lib/navigationMemory.js";
+import { syncPushSubscription } from "./lib/pushNotifications.js";
 import { GROUP_LETTERS, buildRoundUnits, groupLabel, groupRestSeconds, roundProgress } from "./lib/exerciseGroups.js";
 import {
   ADD_REST_SECONDS,
@@ -2978,7 +2980,7 @@ function Reviews() {
 
 function Settings() {
   const [lang, setLang] = useState("he");
-  const [checks, setChecks] = useState({ personal: false, online: false, group: false, reminders: false, leads: false, birthdays: false, renewals: false });
+  const [checks, setChecks] = useState({ personal: false, online: false, group: false });
   const toggle = (k) => setChecks(p => ({ ...p, [k]: !p[k] }));
   const pill = (on) => ({ fontSize: 11, padding: "3px 10px", borderRadius: 10, cursor: "pointer", background: on ? "#7C2D3E" : "#EDEBE6", color: on ? "#fff" : "#9E9A90" });
   return (
@@ -2987,6 +2989,7 @@ function Settings() {
         <h2 style={{ margin: 0, fontSize: 20, color: "#1E1C19" }}>הגדרות</h2>
         <div style={{ fontSize: 13, color: "#9E9A90", marginTop: 4 }}>פרטי עסק, העדפות ואינטגרציות</div>
       </div>
+      <NotificationSettings />
       <div style={{ background: "#fff", borderRadius: 12, border: "0.5px solid #EDEBE6", padding: 20, marginBottom: 16 }}>
         <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 12 }}>פרטי עסק</div>
         <div style={{ marginBottom: 12 }}>
@@ -3018,25 +3021,6 @@ function Settings() {
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 0" }}>
           <div style={{ fontSize: 14 }}>אימון קבוצתי</div>
           <div onClick={() => toggle("group")} style={pill(checks.group)}>{checks.group ? "פעיל" : "כבוי"}</div>
-        </div>
-      </div>
-      <div style={{ background: "#fff", borderRadius: 12, border: "0.5px solid #EDEBE6", padding: 20, marginBottom: 16 }}>
-        <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 12 }}>התראות</div>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 0", borderBottom: "0.5px solid #EDEBE6" }}>
-          <div style={{ fontSize: 14 }}>תזכורות אימון</div>
-          <div onClick={() => toggle("reminders")} style={pill(checks.reminders)}>{checks.reminders ? "פעיל" : "כבוי"}</div>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 0", borderBottom: "0.5px solid #EDEBE6" }}>
-          <div style={{ fontSize: 14 }}>מעקב לידים</div>
-          <div onClick={() => toggle("leads")} style={pill(checks.leads)}>{checks.leads ? "פעיל" : "כבוי"}</div>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 0", borderBottom: "0.5px solid #EDEBE6" }}>
-          <div style={{ fontSize: 14 }}>ימי הולדת</div>
-          <div onClick={() => toggle("birthdays")} style={pill(checks.birthdays)}>{checks.birthdays ? "פעיל" : "כבוי"}</div>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 0" }}>
-          <div style={{ fontSize: 14 }}>חידוש מנויים</div>
-          <div onClick={() => toggle("renewals")} style={pill(checks.renewals)}>{checks.renewals ? "פעיל" : "כבוי"}</div>
         </div>
       </div>
       <div style={{ background: "#fff", borderRadius: 12, border: "0.5px solid #EDEBE6", padding: 20 }}>
@@ -3174,6 +3158,13 @@ export default function AppFullMigration({ onLogout, signingOut = false, signOut
   const [selectedProgramTraineeId, setSelectedProgramTraineeId] = useState("");
   const [pendingRequests, setPendingRequests] = useState(0);
   const [pendingCheck, setPendingCheck] = useState(0);
+
+  // Keeps this device's push subscription current on the server (keys can
+  // rotate). Silent: it never asks for permission or creates a subscription.
+  useEffect(() => {
+    if (accountRole !== "admin") return;
+    syncPushSubscription().catch((error) => console.warn("Push sync failed:", error?.name));
+  }, [accountRole]);
 
   useEffect(() => {
     writeNavigation("app:role", role);

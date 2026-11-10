@@ -291,3 +291,30 @@ export async function saveWorkoutReview(workoutId, generalFeedback, exerciseFeed
   if (error) throw error;
   return data;
 }
+
+// Admin only. The database delete is the real action; removing the workout's
+// video files afterwards is best-effort cleanup. A cleanup failure never
+// turns a successful delete into a failure, it is only reported back.
+export async function deleteWorkoutLog(workoutId) {
+  const { data, error } = await supabase.rpc("delete_workout_log", {
+    p_workout_id: workoutId,
+  });
+
+  if (error) throw error;
+
+  const videoPaths = Array.isArray(data?.video_paths) ? data.video_paths : [];
+  if (videoPaths.length === 0) return { videoCleanupFailed: false };
+
+  try {
+    const { data: removed, error: removeError } = await supabase.storage
+      .from(WORKOUT_VIDEO_BUCKET)
+      .remove(videoPaths);
+    if (removeError) throw removeError;
+    // remove() reports success even when RLS hides a file, so compare counts.
+    if ((removed?.length ?? 0) < videoPaths.length) throw new Error("partial-video-cleanup");
+    return { videoCleanupFailed: false };
+  } catch (cleanupError) {
+    console.warn("Workout video cleanup failed:", cleanupError?.name ?? cleanupError?.message);
+    return { videoCleanupFailed: true };
+  }
+}

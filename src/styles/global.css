@@ -2514,6 +2514,20 @@ body.ltr .today-card.warn-border { border-right: none; border-left: 3px solid #F
 .workout-review-status { color: var(--gray-400); font-size: 11px; }
 .workout-review-saved { color: var(--success); font-weight: 600; }
 .workout-review-error { color: var(--danger); }
+.workout-delete-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--gray-200); color: var(--gray-400); font-size: 11px; }
+.workout-delete-row > span:first-child { flex: 1 1 200px; }
+.workout-delete-row .workout-review-error { flex-basis: 100%; font-size: 12px; }
+.delete-workout-modal { max-width: 440px; text-align: center; border-top: 4px solid var(--danger); }
+.delete-workout-icon { font-size: 30px; line-height: 1; margin-bottom: 8px; }
+.delete-workout-modal .modal-title { margin-bottom: 10px; color: var(--danger); }
+.delete-workout-text { margin: 0 0 12px; color: var(--gray-900); font-size: 15px; line-height: 1.6; }
+.delete-workout-details { margin: 0 0 16px; padding: 10px 14px; list-style: none; border-radius: 10px; background: var(--danger-bg); color: var(--danger); font-size: 12px; line-height: 1.7; text-align: start; }
+.delete-workout-actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+.delete-workout-actions .btn { flex: 1 1 160px; min-height: 44px; }
+.btn-danger-solid { background: var(--danger); color: #fff; border: none; }
+.btn-danger-solid:hover { background: #7F1D1D; }
+.btn-danger-solid:disabled { opacity: .6; cursor: not-allowed; }
+.workout-delete-notice { margin-bottom: 12px; padding: 10px 12px; border-radius: 10px; background: var(--success-bg); color: var(--success); font-size: 13px; font-weight: 600; }
 .workout-trainer-feedback { margin-top: 10px; padding: 10px 12px; border-inline-start: 3px solid var(--burg); border-radius: 8px; background: var(--burg-pale); }
 .workout-trainer-feedback strong { display: block; color: var(--burg); font-size: 11px; }
 .workout-trainer-feedback p { margin: 4px 0 0; color: var(--gray-900); font-size: 13px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -2709,6 +2723,7 @@ body.ltr .today-card.warn-border { border-right: none; border-left: 3px solid #F
   .completed-workout-set { grid-template-columns: 30px repeat(4, minmax(0, 1fr)); gap: 3px; padding: 7px 4px; }
   .workout-review-actions { align-items: stretch; flex-direction: column; }
   .workout-review-actions .btn { width: 100%; min-height: 44px; }
+  .workout-delete-row .btn { width: 100%; min-height: 44px; }
   .workout-review-field textarea { font-size: 16px; }
   .trainee-progress-hero { align-items: stretch; flex-direction: column; padding: 18px; }
   .trainee-progress-hero h2 { font-size: 21px; }

@@ -5,7 +5,7 @@ import { fetchActivePrograms } from "./services/programsService.js";
 import { fetchPaidPayments } from "./services/financeService.js";
 import { PAYMENT_METHODS, onlinePaymentState, onlinePaymentText, paymentMethodLabel } from "./lib/payments.js";
 import { fetchTraineeHomeData, fetchTraineeProfile, fetchTraineeProgramData } from "./services/traineeHomeService.js";
-import { fetchCompletedWorkouts, fetchOpenWorkout, finishWorkout, saveWorkoutReview, startWorkout, updateWorkoutExercise, updateWorkoutSet, uploadExerciseVideo } from "./services/workoutExecutionService.js";
+import { deleteWorkoutLog, fetchCompletedWorkouts, fetchOpenWorkout, finishWorkout, saveWorkoutReview, startWorkout, updateWorkoutExercise, updateWorkoutSet, uploadExerciseVideo } from "./services/workoutExecutionService.js";
 import Dashboard from "./components/Dashboard.jsx";
 import Finance from "./components/Finance.jsx";
 import Leads from "./components/Leads.jsx";
@@ -1579,18 +1579,89 @@ function formatWorkoutDuration(startedAt, completedAt) {
   return remainingMinutes ? `${hours} ש׳ ${remainingMinutes} דק׳` : `${hours} שעות`;
 }
 
+function formatWorkoutDateOnly(value) {
+  if (!value) return "";
+  return new Date(value).toLocaleDateString("he-IL", { day: "numeric", month: "numeric", year: "numeric" });
+}
+
+function deleteWorkoutErrorMessage(error) {
+  if (error?.code === "P0002") return "האימון כבר לא קיים או שאי אפשר למחוק אותו. רענני את הרשימה.";
+  return "לא הצלחנו למחוק את האימון. נסי שוב.";
+}
+
+// In-app confirmation for the irreversible workout delete. Cancel is the
+// focused default, and the dialog cannot be dismissed while deleting.
+function DeleteWorkoutConfirm({ traineeName, workout, deleting, error, onCancel, onConfirm }) {
+  const cancelRef = useRef(null);
+  const name = traineeName || "המתאמן";
+  const date = formatWorkoutDateOnly(workout.completed_at);
+  const videoCount = workout.exercises.filter((exercise) => exercise.video_path).length;
+  const setCount = workout.exercises.reduce((total, exercise) => total + exercise.sets.length, 0);
+
+  useEffect(() => {
+    cancelRef.current?.focus();
+  }, []);
+
+  useEffect(() => {
+    function onKey(event) {
+      if (event.key === "Escape" && !deleting) onCancel();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [deleting, onCancel]);
+
+  return (
+    <div
+      className="modal-overlay"
+      role="presentation"
+      onClick={(event) => {
+        if (event.target === event.currentTarget && !deleting) onCancel();
+      }}
+    >
+      <div className="modal delete-workout-modal slide-in" role="alertdialog" aria-modal="true" aria-labelledby="delete-workout-title" aria-describedby="delete-workout-text">
+        <div className="delete-workout-icon" aria-hidden="true">⚠️</div>
+        <div className="modal-title" id="delete-workout-title">מחיקת אימון</div>
+        <p className="delete-workout-text" id="delete-workout-text">
+          למחוק את האימון של <strong>{name}</strong> מתאריך <strong>{date}</strong>? הפעולה אינה ניתנת לביטול.
+        </p>
+        <ul className="delete-workout-details">
+          <li>{workout.day_name} · {workout.program_name}</li>
+          <li>
+            יימחקו {workout.exercises.length === 1 ? "תרגיל אחד" : `${workout.exercises.length} תרגילים`}
+            {setCount > 0 ? ` ו־${setCount === 1 ? "סט אחד" : `${setCount} סטים`} שתועדו` : ""}
+            {videoCount > 0 ? `, כולל ${videoCount === 1 ? "סרטון אחד" : `${videoCount} סרטונים`} של המתאמן` : ""}.
+          </li>
+          <li>האימון ייעלם מההיסטוריה של המתאמן ומהספירה השבועית.</li>
+        </ul>
+        {error && <div className="alert-strip danger" role="alert">{error}</div>}
+        <div className="delete-workout-actions">
+          <button ref={cancelRef} type="button" className="btn btn-outline" disabled={deleting} onClick={onCancel}>
+            ביטול, להשאיר את האימון
+          </button>
+          <button type="button" className="btn btn-danger-solid" disabled={deleting} onClick={onConfirm}>
+            {deleting ? "מוחק..." : "כן, למחוק לצמיתות"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function feedbackDraftsFor(workout) {
   return Object.fromEntries(workout.exercises.map((exercise) => [exercise.id, exercise.trainer_feedback ?? ""]));
 }
 
 // reviewMode is the admin's review form; without it the same details are the
 // trainee's read-only view with the trainer's saved feedback.
-function CompletedWorkoutDetails({ workout, reviewMode = false, onReviewed, onDirtyChange }) {
+function CompletedWorkoutDetails({ workout, reviewMode = false, traineeName = "", onReviewed, onDelete, onDirtyChange }) {
   const [exerciseDrafts, setExerciseDrafts] = useState(() => feedbackDraftsFor(workout));
   const [generalDraft, setGeneralDraft] = useState(workout.trainer_feedback ?? "");
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [justSaved, setJustSaved] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   const isDirty = reviewMode && (
     generalDraft.trim() !== (workout.trainer_feedback ?? "")
@@ -1629,6 +1700,24 @@ function CompletedWorkoutDetails({ workout, reviewMode = false, onReviewed, onDi
       setSaveError("לא הצלחנו לשמור את המשוב. הטקסט נשאר כאן, נסי שוב.");
     } finally {
       setSaving(false);
+    }
+  }
+
+  function openDeleteConfirm() {
+    setDeleteError("");
+    setConfirmingDelete(true);
+  }
+
+  async function handleDeleteWorkout() {
+    setDeleting(true);
+    setDeleteError("");
+    try {
+      await onDelete(workout);
+      // On success the card is removed from the list, so no state to reset.
+    } catch (error) {
+      console.warn("Workout delete failed:", error?.code ?? error?.name);
+      setDeleteError(deleteWorkoutErrorMessage(error));
+      setDeleting(false);
     }
   }
 
@@ -1760,12 +1849,39 @@ function CompletedWorkoutDetails({ workout, reviewMode = false, onReviewed, onDi
             <button
               type="button"
               className="btn btn-primary btn-sm"
-              disabled={saving || (!isDirty && Boolean(workout.trainer_reviewed_at))}
+              disabled={saving || deleting || (!isDirty && Boolean(workout.trainer_reviewed_at))}
               onClick={handleSaveReview}
             >
               {saving ? "שומר..." : "שמור משוב"}
             </button>
           </div>
+          {onDelete && (
+            <div className="workout-delete-row">
+              <span>אימון שנפתח או נשלח בטעות? אפשר למחוק אותו לגמרי.</span>
+              <button
+                type="button"
+                className="btn btn-danger btn-sm"
+                disabled={saving || deleting}
+                onClick={openDeleteConfirm}
+              >
+                {deleting ? "מוחק..." : "🗑 מחיקת אימון"}
+              </button>
+              {deleteError && !confirmingDelete && <span className="workout-review-error" role="alert">{deleteError}</span>}
+            </div>
+          )}
+          {confirmingDelete && (
+            <DeleteWorkoutConfirm
+              traineeName={traineeName}
+              workout={workout}
+              deleting={deleting}
+              error={deleteError}
+              onCancel={() => {
+                setConfirmingDelete(false);
+                setDeleteError("");
+              }}
+              onConfirm={handleDeleteWorkout}
+            />
+          )}
         </section>
       ) : workout.trainer_feedback ? (
         <div className="workout-trainer-feedback general">
@@ -1788,7 +1904,7 @@ function ReviewBadge({ workout, reviewMode }) {
     : <span className="badge badge-inactive">ממתין לסקירת המאמנת</span>;
 }
 
-function CompletedWorkoutsList({ workouts, traineeNamesById = {}, emptyText, reviewMode = false, onWorkoutReviewed }) {
+function CompletedWorkoutsList({ workouts, traineeNamesById = {}, emptyText, reviewMode = false, onWorkoutReviewed, onWorkoutDelete }) {
   const [openWorkoutId, setOpenWorkoutId] = useState("");
   const openDirtyRef = useRef(false);
 
@@ -1835,7 +1951,13 @@ function CompletedWorkoutsList({ workouts, traineeNamesById = {}, emptyText, rev
               <CompletedWorkoutDetails
                 workout={workout}
                 reviewMode={reviewMode}
+                traineeName={traineeName}
                 onReviewed={onWorkoutReviewed}
+                onDelete={reviewMode && onWorkoutDelete ? async (target) => {
+                  await onWorkoutDelete(target);
+                  openDirtyRef.current = false;
+                  setOpenWorkoutId("");
+                } : undefined}
                 onDirtyChange={(dirty) => {
                   openDirtyRef.current = dirty;
                 }}
@@ -2893,6 +3015,20 @@ function Reviews() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
+  const [deleteNotice, setDeleteNotice] = useState("");
+
+  // Throws on a failed delete so the card can show the error. The list only
+  // changes after the server confirmed the delete.
+  async function handleWorkoutDelete(workout) {
+    setDeleteNotice("");
+    const { videoCleanupFailed } = await deleteWorkoutLog(workout.id);
+    setWorkouts((current) => current.filter((item) => item.id !== workout.id));
+    setDeleteNotice(
+      videoCleanupFailed
+        ? "האימון נמחק ✓ (את קובץ הסרטון שלו לא הצלחנו לנקות מהשרת, זה לא משפיע על האפליקציה)"
+        : "האימון נמחק ✓"
+    );
+  }
 
   useEffect(() => {
     let active = true;
@@ -2952,6 +3088,10 @@ function Reviews() {
         <article><span>אימונים עם הערות</span><strong>{workoutsWithNotes}</strong></article>
       </div>
 
+      {deleteNotice && (
+        <div className="workout-delete-notice" role="status">{deleteNotice}</div>
+      )}
+
       {loadError ? (
         <div className="trainee-home-state">
           <p>{loadError}</p>
@@ -2970,6 +3110,7 @@ function Reviews() {
           onWorkoutReviewed={(updated) =>
             setWorkouts((current) => current.map((workout) => (workout.id === updated.id ? updated : workout)))
           }
+          onWorkoutDelete={handleWorkoutDelete}
         />
       )}
     </div>

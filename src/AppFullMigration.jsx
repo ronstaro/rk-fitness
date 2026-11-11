@@ -2238,7 +2238,7 @@ function Workout() {
     } catch (error) {
       console.warn("Workout video upload failed:", error?.name);
       const message = error?.message === "video-too-large"
-        ? "הסרטון גדול מ־50MB. נסה לצלם קטע קצר יותר."
+        ? "הסרטון גדול מ־50MB. אפשר לקצר אותו בגלריה (עריכה ← חיתוך) או לצלם קטע קצר יותר."
         : error?.message === "unsupported-video"
           ? "סוג הסרטון אינו נתמך. אפשר להעלות MP4, MOV, M4V או WebM."
           : "הסרטון לא עלה. החיבור יכול להישמר לאימון ולנסות שוב.";
@@ -2406,25 +2406,40 @@ function Workout() {
             <div><strong>צלם את התרגיל</strong><small>סרטון קצר יעזור לרוני לתת משוב מדויק</small></div>
           </div>
         )}
-        <label className={`trainee-live-video-button ${uploadingVideoIds[exercise.id] ? "disabled" : ""}`}>
-          <input
-            type="file"
-            accept="video/mp4,video/quicktime,video/webm,video/x-m4v"
-            capture="environment"
-            disabled={uploadingVideoIds[exercise.id]}
-            onChange={(event) => {
-              const file = event.target.files?.[0];
-              handleVideoUpload(exercise, file);
-              event.target.value = "";
-            }}
-          />
-          {uploadingVideoIds[exercise.id]
-            ? "מעלה סרטון..."
-            : exercise.video_path
-              ? "📹 החלף סרטון"
-              : "📹 צלם או העלה סרטון"}
-        </label>
-        <small className="trainee-live-video-hint">MP4, MOV, M4V או WebM · עד 50MB · הסרטון פרטי</small>
+        {uploadingVideoIds[exercise.id] ? (
+          <div className="trainee-live-video-button disabled" role="status">מעלה סרטון...</div>
+        ) : (
+          // Two inputs on purpose: capture= forces the camera, so the gallery
+          // option needs its own input without it.
+          <div className="trainee-live-video-actions">
+            <label className="trainee-live-video-button">
+              <input
+                type="file"
+                accept="video/mp4,video/quicktime,video/webm,video/x-m4v"
+                capture="environment"
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  handleVideoUpload(exercise, file);
+                  event.target.value = "";
+                }}
+              />
+              {exercise.video_path ? "📹 צלם מחדש" : "📹 צלם עכשיו"}
+            </label>
+            <label className="trainee-live-video-button secondary">
+              <input
+                type="file"
+                accept="video/mp4,video/quicktime,video/webm,video/x-m4v"
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  handleVideoUpload(exercise, file);
+                  event.target.value = "";
+                }}
+              />
+              {exercise.video_path ? "🖼️ החלף מהגלריה" : "🖼️ בחר מהגלריה"}
+            </label>
+          </div>
+        )}
+        <small className="trainee-live-video-hint">עד 30 שניות (50MB) · MP4, MOV, M4V או WebM · הסרטון פרטי</small>
         {videoErrors[exercise.id] && (
           <p className="trainee-live-video-error">{videoErrors[exercise.id]}</p>
         )}

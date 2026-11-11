@@ -9,6 +9,21 @@ const VIDEO_EXTENSIONS = {
   "video/x-m4v": "m4v",
 };
 
+const VIDEO_TYPES_BY_EXTENSION = {
+  mp4: "video/mp4",
+  mov: "video/quicktime",
+  webm: "video/webm",
+  m4v: "video/x-m4v",
+};
+
+function videoContentType(file) {
+  if (!file) return null;
+  if (Object.hasOwn(VIDEO_EXTENSIONS, file.type)) return file.type;
+  if (file.type) return null;
+  const extension = file.name?.split(".").pop()?.toLowerCase();
+  return VIDEO_TYPES_BY_EXTENSION[extension] ?? null;
+}
+
 function nullableNumber(value) {
   if (value === "" || value == null) return null;
   const number = Number(value);
@@ -203,21 +218,24 @@ export async function uploadExerciseVideo({
   file,
   previousPath,
 }) {
-  if (!file || !Object.hasOwn(VIDEO_EXTENSIONS, file.type)) {
+  // Some Android gallery pickers hand over a file with an empty type, so
+  // fall back to the file extension before rejecting it.
+  const contentType = videoContentType(file);
+  if (!contentType) {
     throw new Error("unsupported-video");
   }
   if (file.size > MAX_VIDEO_BYTES) {
     throw new Error("video-too-large");
   }
 
-  const extension = VIDEO_EXTENSIONS[file.type];
+  const extension = VIDEO_EXTENSIONS[contentType];
   const uniqueId = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const path = `${traineeId}/${exerciseId}/${workoutId}-${uniqueId}.${extension}`;
   const { error: uploadError } = await supabase.storage
     .from(WORKOUT_VIDEO_BUCKET)
     .upload(path, file, {
       cacheControl: "3600",
-      contentType: file.type,
+      contentType,
       upsert: false,
     });
 

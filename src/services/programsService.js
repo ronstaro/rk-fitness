@@ -62,7 +62,10 @@ export async function fetchActivePrograms() {
     .select(
       "id, trainee_id, name, goal, status, start_date, end_date, duration_weeks, sessions_per_week"
     )
-    .eq("status", "active");
+    .eq("status", "active")
+    // A trainee may have several active programs; keep their order stable.
+    .order("start_date", { ascending: true, nullsFirst: false })
+    .order("created_at", { ascending: true });
 
   if (error) throw error;
   return data;

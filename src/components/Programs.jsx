@@ -611,14 +611,17 @@ export default function Programs({ initialTraineeId = "" }) {
     try {
       const activated = await activateProgram(program.id);
       setPrograms((current) =>
-        current.map((item) => {
-          if (item.id === activated.id) return activated;
-          if (item.trainee_id === activated.trainee_id && item.status === "active") {
-            return { ...item, status: "archived" };
-          }
-          return item;
-        })
+        current.map((item) => (item.id === activated.id ? activated : item))
       );
+      // The server decides what else changes for this trainee (today it
+      // archives their other active program; later it may keep several
+      // active), so the list is re-read instead of guessed here.
+      try {
+        const programRows = await fetchPrograms();
+        setPrograms(programRows);
+      } catch (refreshError) {
+        console.error("Programs refresh after activation failed:", refreshError);
+      }
     } catch (error) {
       console.error("Program activation error:", error);
       setActionError("לא ניתן להפעיל את התוכנית. נסה שוב.");

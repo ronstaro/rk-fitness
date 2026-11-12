@@ -2202,6 +2202,27 @@ body.ltr .today-card.warn-border { border-right: none; border-left: 3px solid #F
 .trainee-home-quickstart-choice strong { flex: 1; min-width: 0; color: var(--gray-900); font-size: 15px; overflow-wrap: anywhere; }
 .trainee-home-quickstart-choice small { color: var(--gray-400); font-size: 12px; white-space: nowrap; }
 .trainee-home-quickstart .trainee-workout-feedback { margin-top: 8px; }
+/* Quick start with several programs: each program's workout types under its name. */
+.trainee-home-quickstart-program { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px; }
+.trainee-home-quickstart-program + .trainee-home-quickstart-program { margin-top: 6px; }
+.trainee-home-quickstart-program-name { grid-column: 1 / -1; color: var(--burg-d); font-size: 13px; font-weight: 700; overflow-wrap: anywhere; }
+/* "התוכניות שלי": one card per active program (Home and the program screen). */
+.trainee-program-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
+.trainee-program-card { display: flex; flex-direction: column; gap: 10px; min-width: 0; padding: 16px; border: 1px solid var(--gray-100); border-radius: 12px; background: #fff; }
+.trainee-program-card.has-open-workout { border-color: var(--burg); background: var(--burg-pale); }
+.trainee-program-card-header { display: grid; gap: 2px; min-width: 0; }
+.trainee-program-card-header strong { color: var(--gray-900); font-size: 17px; overflow-wrap: anywhere; }
+.trainee-program-card-header small { color: var(--gray-600); font-size: 13px; overflow-wrap: anywhere; }
+.trainee-program-card-meta { display: flex; flex-wrap: wrap; gap: 6px 12px; color: var(--gray-600); font-size: 13px; }
+.trainee-program-card-progress { display: grid; gap: 6px; }
+.trainee-program-card-progress small { color: var(--gray-600); font-size: 13px; }
+.trainee-program-card-progress b { color: var(--gray-900); }
+.trainee-program-card-open { margin: 0; padding: 8px 10px; border-radius: 8px; background: var(--mustard-pale); color: var(--mustard-d); font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
+.trainee-program-card-action { align-self: stretch; min-height: 44px; margin-top: auto; }
+.trainee-workout > .trainee-program-cards { margin-bottom: 18px; }
+.trainee-workout-back { align-self: flex-start; margin-bottom: 8px; }
+.trainee-profile-program + .trainee-profile-program { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--gray-100); }
+.trainee-programs-total { margin: 0 0 10px; }
 .trainee-home-quickstart-empty { display: grid; gap: 4px; margin-bottom: 12px; padding: 14px 18px; border: 1px dashed var(--gray-200); border-radius: 12px; background: var(--gray-50); }
 .trainee-home-quickstart-empty strong { color: var(--gray-600); font-size: 15px; }
 .trainee-home-quickstart-empty small { color: var(--gray-400); font-size: 13px; }

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { fetchActivePrograms } from "../services/programsService.js";
+import { groupProgramsByTrainee, programNamesLabel, weeklyTargetOf } from "../lib/activePrograms.js";
 import { currentWeekRange } from "../services/traineeHomeService.js";
 import { fetchTrainees } from "../services/traineesService.js";
 import {
@@ -44,14 +45,12 @@ export default function WeeklyGoals() {
         fetchCompletedWorkoutCounts(week.from, week.to),
         fetchWeeklyGoalNotes(week.start),
       ]);
-      const programsByTrainee = Object.fromEntries(
-        programs.map((program) => [program.trainee_id, program])
-      );
+      const programsByTrainee = groupProgramsByTrainee(programs);
       const activeTrainees = trainees.filter((trainee) => trainee.status !== "הסתיים");
       setRows(
         activeTrainees.map((trainee) => ({
           trainee,
-          program: programsByTrainee[trainee.id] || null,
+          programs: programsByTrainee[trainee.id] || [],
           completed: completedByTrainee[trainee.id] || 0,
         }))
       );
@@ -118,8 +117,9 @@ export default function WeeklyGoals() {
         <div className="card weekly-goals-state">אין מתאמנים פעילים להצגה.</div>
       ) : (
         <div className="weekly-goals-grid">
-          {rows.map(({ trainee, program, completed }) => {
-            const target = program?.sessions_per_week || 0;
+          {rows.map(({ trainee, programs, completed }) => {
+            // Several active programs add up to one weekly target.
+            const target = weeklyTargetOf(programs);
             const percent = target ? Math.min(100, Math.round((completed / target) * 100)) : 0;
             const reached = target > 0 && completed >= target;
             const status = !target ? "ללא יעד" : reached ? "עמד/ה ביעד" : "בתהליך";
@@ -132,7 +132,7 @@ export default function WeeklyGoals() {
                   <div className="weekly-goal-avatar">{initials(trainee.full_name)}</div>
                   <div>
                     <h3>{trainee.full_name}</h3>
-                    <p>{program?.name || "אין תוכנית פעילה"}</p>
+                    <p>{programs.length ? programNamesLabel(programs) : "אין תוכנית פעילה"}</p>
                   </div>
                   <span className={`weekly-goal-status ${statusClass}`}>{status}</span>
                 </div>

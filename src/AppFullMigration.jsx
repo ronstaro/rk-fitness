@@ -4,7 +4,8 @@ import { fetchSessions } from "./services/sessionsService.js";
 import { fetchActivePrograms } from "./services/programsService.js";
 import { fetchPaidPayments } from "./services/financeService.js";
 import { PAYMENT_METHODS, onlinePaymentState, onlinePaymentText, paymentMethodLabel } from "./lib/payments.js";
-import { fetchTraineeHomeData, fetchTraineeProfile, fetchTraineeProgramData } from "./services/traineeHomeService.js";
+import { countWorkoutsByProgram, groupProgramsByTrainee, programNamesLabel, weeklyTargetOf } from "./lib/activePrograms.js";
+import { currentWeekRange, fetchTraineeHomeData, fetchTraineeProfile, fetchTraineeProgramData } from "./services/traineeHomeService.js";
 import { deleteWorkoutLog, fetchCompletedWorkouts, fetchOpenWorkout, finishWorkout, saveWorkoutReview, startWorkout, updateWorkoutExercise, updateWorkoutSet, uploadExerciseVideo } from "./services/workoutExecutionService.js";
 import Dashboard from "./components/Dashboard.jsx";
 import Finance from "./components/Finance.jsx";
@@ -128,6 +129,14 @@ function RestTimerBar({ timer, onAdd, onSkip, onExpire }) {
   );
 }
 
+function activeProgramsLabel(count) {
+  return count > 1 ? `${count} תוכניות פעילות` : "תוכנית פעילה";
+}
+
+// The program the trainee last opened on the program screen; Home writes it
+// when navigating so "פתיחת התוכנית" lands on that program.
+const WORKOUT_PROGRAM_KEY = "workout:program";
+
 function isRememberedId(value) {
   return typeof value === "string" && value.length > 0 && value.length <= 64;
 }
@@ -196,11 +205,7 @@ function Trainees({ onOpenPrograms }) {
       ]);
       setTrainees(traineeRows);
       setSessions(sessionRows);
-      setActiveProgramsByTrainee(
-        Object.fromEntries(
-          activePrograms.map((program) => [program.trainee_id, program])
-        )
-      );
+      setActiveProgramsByTrainee(groupProgramsByTrainee(activePrograms));
       setHasLoadedTrainees(true);
     } catch (err) {
       console.error("Trainees fetch error:", err);
@@ -223,11 +228,7 @@ function Trainees({ onOpenPrograms }) {
         if (active) {
           setTrainees(traineeRows);
           setSessions(sessionRows);
-          setActiveProgramsByTrainee(
-            Object.fromEntries(
-              activePrograms.map((program) => [program.trainee_id, program])
-            )
-          );
+          setActiveProgramsByTrainee(groupProgramsByTrainee(activePrograms));
           setLoadError("");
           setHasLoadedTrainees(true);
         }
@@ -608,7 +609,7 @@ function Trainees({ onOpenPrograms }) {
   }
 
   if (selectedTrainee) {
-    const activeProgram = activeProgramsByTrainee[selectedTrainee.id];
+    const activePrograms = activeProgramsByTrainee[selectedTrainee.id] ?? [];
     const stats = sessionStats(selectedTrainee.id);
     const age = ageFromBirthDate(selectedTrainee.birth_date);
     const years = trainingYears(selectedTrainee.start_date);
@@ -636,7 +637,7 @@ function Trainees({ onOpenPrograms }) {
                   {selectedTrainee.status}
                 </span>
                 <span className="badge badge-new">{selectedTrainee.training_type}</span>
-                {activeProgram && <span className="badge badge-burg">תוכנית פעילה</span>}
+                {activePrograms.length > 0 && <span className="badge badge-burg">{activeProgramsLabel(activePrograms.length)}</span>}
                 {years >= 1 && (
                   <span className="badge badge-mustard">
                     {years === 1 ? "שנת אימונים" : `${years} שנות אימונים`}
@@ -829,24 +830,33 @@ function Trainees({ onOpenPrograms }) {
 
           <div className="trainee-profile-column">
             <section className="card trainee-detail-card">
-              <div className="section-title">📋 תוכנית אימון</div>
-              {activeProgram ? (
+              <div className="section-title">📋 {activePrograms.length > 1 ? "תוכניות אימון" : "תוכנית אימון"}</div>
+              {activePrograms.length > 0 ? (
                 <>
-                  <div className="trainee-program-name">{activeProgram.name}</div>
-                  <dl className="trainee-detail-list mt-16">
-                    <div><dt>מטרת התוכנית</dt><dd>{activeProgram.goal || "לא הוזנה"}</dd></div>
-                    <div><dt>התחלה</dt><dd>{formatDate(activeProgram.start_date)}</dd></div>
-                    <div><dt>סיום</dt><dd>{formatDate(activeProgram.end_date)}</dd></div>
-                    <div><dt>משך</dt><dd>{activeProgram.duration_weeks ? `${activeProgram.duration_weeks} שבועות` : "לא הוגדר"}</dd></div>
-                    <div><dt>אימונים בשבוע</dt><dd>{activeProgram.sessions_per_week || "לא הוגדר"}</dd></div>
-                    <div><dt>ימים שנותרו</dt><dd>{remainingProgramDays(activeProgram.end_date)}</dd></div>
-                  </dl>
+                  {activePrograms.length > 1 && (
+                    <p className="muted text-sm trainee-programs-total">
+                      יעד שבועי כולל: {weeklyTargetOf(activePrograms) || "לא הוגדר"}
+                    </p>
+                  )}
+                  {activePrograms.map((activeProgram) => (
+                    <div className="trainee-profile-program" key={activeProgram.id}>
+                      <div className="trainee-program-name">{activeProgram.name}</div>
+                      <dl className="trainee-detail-list mt-16">
+                        <div><dt>מטרת התוכנית</dt><dd>{activeProgram.goal || "לא הוזנה"}</dd></div>
+                        <div><dt>התחלה</dt><dd>{formatDate(activeProgram.start_date)}</dd></div>
+                        <div><dt>סיום</dt><dd>{formatDate(activeProgram.end_date)}</dd></div>
+                        <div><dt>משך</dt><dd>{activeProgram.duration_weeks ? `${activeProgram.duration_weeks} שבועות` : "לא הוגדר"}</dd></div>
+                        <div><dt>אימונים בשבוע</dt><dd>{activeProgram.sessions_per_week || "לא הוגדר"}</dd></div>
+                        <div><dt>ימים שנותרו</dt><dd>{remainingProgramDays(activeProgram.end_date)}</dd></div>
+                      </dl>
+                    </div>
+                  ))}
                   <button
                     type="button"
                     className="btn btn-outline btn-sm mt-16"
                     onClick={() => onOpenPrograms(selectedTrainee.id)}
                   >
-                    פתח תוכנית
+                    {activePrograms.length > 1 ? "פתח תוכניות" : "פתח תוכנית"}
                   </button>
                 </>
               ) : (
@@ -1041,7 +1051,7 @@ function Trainees({ onOpenPrograms }) {
         <div className="trainee-cards-grid">
           {filteredTrainees.map((trainee) => {
             const stats = sessionStats(trainee.id);
-            const activeProgram = activeProgramsByTrainee[trainee.id];
+            const activePrograms = activeProgramsByTrainee[trainee.id] ?? [];
             const busy = rowActionId === trainee.id;
 
             return (
@@ -1088,13 +1098,13 @@ function Trainees({ onOpenPrograms }) {
                   <span className={`badge ${statusClass(trainee.status)}`}>
                     {trainee.status}
                   </span>
-                  {activeProgram && <span className="badge badge-burg">תוכנית פעילה</span>}
+                  {activePrograms.length > 0 && <span className="badge badge-burg">{activeProgramsLabel(activePrograms.length)}</span>}
                 </div>
 
                 <div className="trainee-card-program">
                   <div>
-                    <span className="muted text-xs">תוכנית אימון</span>
-                    <div>{activeProgram ? activeProgram.name : "אין תוכנית פעילה"}</div>
+                    <span className="muted text-xs">{activePrograms.length > 1 ? "תוכניות אימון" : "תוכנית אימון"}</span>
+                    <div>{activePrograms.length > 0 ? programNamesLabel(activePrograms) : "אין תוכנית פעילה"}</div>
                   </div>
                   <button
                     type="button"
@@ -1104,7 +1114,7 @@ function Trainees({ onOpenPrograms }) {
                       onOpenPrograms(trainee.id);
                     }}
                   >
-                    {activeProgram ? "פתח" : "צור"}
+                    {activePrograms.length > 0 ? "פתח" : "צור"}
                   </button>
                 </div>
 
@@ -1264,6 +1274,63 @@ function TraineeProfile() {
 }
 
 
+// One active program as a card: its weekly target, this week's workouts from
+// it, and the way in. An open workout always wins: from any card the action
+// is to continue it, and a card of another program says where it is.
+function ActiveProgramCard({ program, completed, openWorkout, onOpen, onContinue }) {
+  const target = Number(program.sessions_per_week) || 0;
+  const percent = target > 0 ? Math.min(100, Math.round((completed / target) * 100)) : 0;
+  const startableTypes = program.days.filter((day) => day.exercises.length > 0).length;
+  const openHere = Boolean(openWorkout) && openWorkout.source_program_id === program.id;
+  const openElsewhere = Boolean(openWorkout) && !openHere;
+
+  return (
+    <article className={`trainee-program-card${openHere ? " has-open-workout" : ""}`}>
+      <header className="trainee-program-card-header">
+        <strong>{program.name}</strong>
+        {program.goal && <small>{program.goal}</small>}
+      </header>
+      <div className="trainee-program-card-meta">
+        <span>{target ? `${target} אימונים בשבוע` : "ללא יעד שבועי"}</span>
+        <span>{program.days.length === 1 ? "סוג אימון אחד" : `${program.days.length} סוגי אימון`}</span>
+      </div>
+      <div className="trainee-program-card-progress">
+        <small>
+          השבוע: <b>{target ? `${completed}/${target}` : completed}</b>
+          {target ? "" : completed === 1 ? " אימון" : " אימונים"}
+        </small>
+        {target > 0 && (
+          <div className="progress-bar" aria-hidden="true">
+            <div className="progress-fill green" style={{ width: `${percent}%` }} />
+          </div>
+        )}
+      </div>
+      {openHere && (
+        <p className="trainee-program-card-open">▶️ אימון פתוח: {openWorkout.day_name}</p>
+      )}
+      {openElsewhere && (
+        <p className="trainee-program-card-open">
+          יש לך אימון פתוח ב־{openWorkout.program_name || "תוכנית אחרת"}
+        </p>
+      )}
+      {openWorkout && onContinue ? (
+        <button type="button" className="btn btn-primary btn-sm trainee-program-card-action" onClick={onContinue}>
+          המשך אימון
+        </button>
+      ) : onOpen ? (
+        <button
+          type="button"
+          className="btn btn-outline btn-sm trainee-program-card-action"
+          onClick={onOpen}
+          aria-label={`פתיחת התוכנית ${program.name}`}
+        >
+          {startableTypes > 0 ? "פתיחת התוכנית" : "צפייה בתוכנית"}
+        </button>
+      ) : null}
+    </article>
+  );
+}
+
 function TraineeHome({ onNavigate }) {
   const [homeData, setHomeData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -1340,13 +1407,40 @@ function TraineeHome({ onNavigate }) {
     );
   }
 
-  const { trainee, sessions, program, days, completedWorkoutsThisWeek = 0, openWorkout } = homeData;
-  const weeklyTarget = program?.sessions_per_week ?? sessions.length;
+  const {
+    trainee,
+    sessions,
+    programs = [],
+    completedWorkoutsThisWeek = 0,
+    completedThisWeekByProgram = {},
+    openWorkout,
+  } = homeData;
+  // One program keeps the original Home; several get "התוכניות שלי".
+  const singleProgram = programs.length === 1 ? programs[0] : null;
+  const multiplePrograms = programs.length > 1;
+  // The weekly target is the sum of every active program's weekly target.
+  const weeklyTarget = weeklyTargetOf(programs) || sessions.length;
   const progressPercent = weeklyTarget > 0
     ? Math.min(100, Math.round((completedWorkoutsThisWeek / weeklyTarget) * 100))
     : 0;
-  // Same rule as the program screen: a workout type without exercises cannot start.
-  const startableDays = days.filter((day) => day.exercises.length > 0);
+  // Same rule as the program screen: a workout type without exercises cannot
+  // start. Each type keeps the program it belongs to.
+  const startableDays = programs.flatMap((program) =>
+    program.days
+      .filter((day) => day.exercises.length > 0)
+      .map((day) => ({ ...day, program }))
+  );
+  const startablePrograms = programs.filter((program) =>
+    startableDays.some((day) => day.program.id === program.id)
+  );
+
+  // Navigating clears what the program screen remembered (a menu visit
+  // starts fresh), so the chosen program is written right after it, before
+  // the program screen mounts and reads it.
+  function openProgram(programId) {
+    onNavigate("workout");
+    writeNavigation(WORKOUT_PROGRAM_KEY, programId);
+  }
 
   // A shortcut into the program screen's flow: the same start RPC (which
   // returns an already-open workout instead of opening a second one), then
@@ -1358,6 +1452,8 @@ function TraineeHome({ onNavigate }) {
     try {
       await startWorkout(day.id);
       onNavigate("workout");
+      // After this workout ends, the program screen shows its program (see openProgram).
+      writeNavigation(WORKOUT_PROGRAM_KEY, day.program.id);
     } catch (error) {
       console.warn("Workout start failed:", error?.name);
       setStartError("לא ניתן להתחיל את האימון כרגע. נסה שוב.");
@@ -1376,13 +1472,29 @@ function TraineeHome({ onNavigate }) {
     }
   }
 
+  function renderQuickStartChoice(day) {
+    return (
+      <button
+        type="button"
+        key={day.id}
+        className="trainee-home-quickstart-choice"
+        disabled={Boolean(startingDayId)}
+        onClick={() => startFromHome(day)}
+      >
+        <span>{day.day_order}</span>
+        <strong>{startingDayId === day.id ? "מתחיל..." : day.name}</strong>
+        <small>{day.exercises.length} תרגילים</small>
+      </button>
+    );
+  }
+
   function renderQuickStart() {
     if (!openWorkout && startableDays.length === 0) {
       return (
         <div className="trainee-home-quickstart-empty" role="status">
           <strong>🏋️ התחלת אימון מרחוק</strong>
           <small>
-            {program
+            {programs.length > 0
               ? "סוגי האימון בתוכנית עדיין בבנייה. כשרוני תוסיף אותם, אפשר יהיה להתחיל מכאן."
               : "אין כרגע תוכנית פעילה. כשרוני תפעיל עבורך תוכנית, אפשר יהיה להתחיל מכאן."}
           </small>
@@ -1404,25 +1516,26 @@ function TraineeHome({ onNavigate }) {
           </span>
           <small>
             {openWorkout
-              ? `${openWorkout.day_name} · הנתונים שמורים`
-              : startableDays.length === 1 ? startableDays[0].name : "בוחרים סוג אימון ומתחילים"}
+              ? multiplePrograms && openWorkout.program_name
+                ? `${openWorkout.day_name} · ${openWorkout.program_name} · הנתונים שמורים`
+                : `${openWorkout.day_name} · הנתונים שמורים`
+              : startableDays.length === 1
+                ? multiplePrograms ? `${startableDays[0].program.name} · ${startableDays[0].name}` : startableDays[0].name
+                : startablePrograms.length > 1 ? "בוחרים תוכנית וסוג אימון ומתחילים" : "בוחרים סוג אימון ומתחילים"}
           </small>
         </button>
         {choosingWorkout && !openWorkout && startableDays.length > 1 && (
           <div className="trainee-home-quickstart-choices" role="group" aria-label="בחירת סוג אימון">
-            {startableDays.map((day) => (
-              <button
-                type="button"
-                key={day.id}
-                className="trainee-home-quickstart-choice"
-                disabled={Boolean(startingDayId)}
-                onClick={() => startFromHome(day)}
-              >
-                <span>{day.day_order}</span>
-                <strong>{startingDayId === day.id ? "מתחיל..." : day.name}</strong>
-                <small>{day.exercises.length} תרגילים</small>
-              </button>
-            ))}
+            {startablePrograms.length > 1
+              ? startablePrograms.map((program) => (
+                  <div className="trainee-home-quickstart-program" role="group" aria-label={program.name} key={program.id}>
+                    <div className="trainee-home-quickstart-program-name">{program.name}</div>
+                    {startableDays
+                      .filter((day) => day.program.id === program.id)
+                      .map(renderQuickStartChoice)}
+                  </div>
+                ))
+              : startableDays.map(renderQuickStartChoice)}
           </div>
         )}
         {startError && <div className="trainee-workout-feedback error">{startError}</div>}
@@ -1435,8 +1548,8 @@ function TraineeHome({ onNavigate }) {
       <section className="trainee-home-welcome">
         <div>
           <span>שלום {trainee.full_name} 👋</span>
-          <h2>{program ? program.name : "אזור המתאמן שלך"}</h2>
-          <p>{program?.goal || trainee.main_goal || "התוכנית והאימונים שלך במקום אחד"}</p>
+          <h2>{singleProgram ? singleProgram.name : "אזור המתאמן שלך"}</h2>
+          <p>{singleProgram?.goal || trainee.main_goal || (multiplePrograms ? "התוכניות והאימונים שלך במקום אחד" : "התוכנית והאימונים שלך במקום אחד")}</p>
         </div>
         <span className="badge badge-burg">{trainee.training_type || "מתאמן"}</span>
       </section>
@@ -1466,7 +1579,7 @@ function TraineeHome({ onNavigate }) {
         <article className="trainee-home-metric">
           <span>יעד שבועי</span>
           <strong>{weeklyTarget || "—"}</strong>
-          <small>{program ? "לפי התוכנית הפעילה" : "טרם הוגדר"}</small>
+          <small>{multiplePrograms ? `סה״כ מ־${programs.length} תוכניות` : singleProgram ? "לפי התוכנית הפעילה" : "טרם הוגדר"}</small>
         </article>
         <article className="trainee-home-metric">
           <span>השלמה</span>
@@ -1479,15 +1592,32 @@ function TraineeHome({ onNavigate }) {
       </div>
 
       <div className="trainee-home-layout">
+        {multiplePrograms ? (
+          <section className="card trainee-home-panel">
+            <div className="section-title">📋 התוכניות שלי</div>
+            <div className="trainee-program-cards">
+              {programs.map((program) => (
+                <ActiveProgramCard
+                  key={program.id}
+                  program={program}
+                  completed={completedThisWeekByProgram[program.id] || 0}
+                  openWorkout={openWorkout}
+                  onOpen={onNavigate ? () => openProgram(program.id) : null}
+                  onContinue={onNavigate ? () => onNavigate("workout") : null}
+                />
+              ))}
+            </div>
+          </section>
+        ) : (
         <section className="card trainee-home-panel">
           <div className="section-title">📝 התוכנית השבועית</div>
-          {!program ? (
+          {!singleProgram ? (
             <div className="trainee-home-empty">אין תוכנית פעילה כרגע</div>
-          ) : days.length === 0 ? (
+          ) : singleProgram.days.length === 0 ? (
             <div className="trainee-home-empty">התוכנית פעילה, אך עדיין לא נוספו לה סוגי אימון</div>
           ) : (
             <div className="trainee-program-days">
-              {days.map((day) => (
+              {singleProgram.days.map((day) => (
                 <article className="trainee-program-day" key={day.id}>
                   <div className="trainee-program-day-title">
                     <span>{day.day_order}</span>
@@ -1521,6 +1651,7 @@ function TraineeHome({ onNavigate }) {
             </div>
           )}
         </section>
+        )}
 
         <div className="trainee-home-side">
           <section className="card trainee-home-panel">
@@ -1546,10 +1677,10 @@ function TraineeHome({ onNavigate }) {
 
           <section className="card trainee-home-panel">
             <div className="section-title">🎯 היעד שלי</div>
-            <p className="trainee-home-goal">{program?.goal || trainee.main_goal || "עדיין לא הוגדר יעד"}</p>
+            <p className="trainee-home-goal">{singleProgram?.goal || trainee.main_goal || "עדיין לא הוגדר יעד"}</p>
             {trainee.success_metric && <small className="muted">מדד הצלחה: {trainee.success_metric}</small>}
-            {program?.end_date && (
-              <small className="muted trainee-home-end-date">סיום התוכנית: {formatDate(program.end_date)}</small>
+            {singleProgram?.end_date && (
+              <small className="muted trainee-home-end-date">סיום התוכנית: {formatDate(singleProgram.end_date)}</small>
             )}
           </section>
         </div>
@@ -1987,6 +2118,8 @@ function WorkoutHistory({ workouts }) {
 
 function Workout() {
   const [programData, setProgramData] = useState(null);
+  // Which active program is open when the trainee has more than one.
+  const [selectedProgramId, setSelectedProgramId] = useRememberedState(WORKOUT_PROGRAM_KEY, "", isRememberedId);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
@@ -2644,7 +2777,7 @@ function Workout() {
     );
   }
 
-  const { program, days, activeWorkout, completedWorkouts = [] } = programData;
+  const { programs = [], activeWorkout, completedWorkouts = [] } = programData;
 
   if (activeWorkout) {
     const allSets = activeWorkout.exercises.flatMap((exercise) => exercise.sets);
@@ -2710,7 +2843,7 @@ function Workout() {
     );
   }
 
-  if (!program) {
+  if (programs.length === 0) {
     return (
       <div className="trainee-workout slide-in">
         <section className="trainee-workout-hero">
@@ -2727,11 +2860,55 @@ function Workout() {
     );
   }
 
+  // With several active programs the trainee picks one; a single program
+  // opens directly, exactly as before.
+  const program = programs.length === 1
+    ? programs[0]
+    : programs.find((item) => item.id === selectedProgramId) ?? null;
+
+  if (!program) {
+    const week = currentWeekRange();
+    const completedThisWeekByProgram = countWorkoutsByProgram(
+      completedWorkouts.filter((workout) => {
+        const completedAt = new Date(workout.completed_at);
+        return completedAt >= week.from && completedAt < week.to;
+      })
+    );
+    return (
+      <div className="trainee-workout slide-in">
+        <section className="trainee-workout-hero">
+          <span>תוכניות האימון שלי</span>
+          <h2>התוכניות שלי</h2>
+          <p>בוחרים תוכנית כדי לראות את סוגי האימון שלה ולהתחיל אימון.</p>
+        </section>
+        <div className="trainee-program-cards">
+          {programs.map((item) => (
+            <ActiveProgramCard
+              key={item.id}
+              program={item}
+              completed={completedThisWeekByProgram[item.id] || 0}
+              openWorkout={null}
+              onOpen={() => setSelectedProgramId(item.id)}
+              onContinue={null}
+            />
+          ))}
+        </div>
+        <WorkoutHistory workouts={completedWorkouts} />
+      </div>
+    );
+  }
+
+  const { days } = program;
   const exercises = days.flatMap((day) => day.exercises);
   const totalSets = exercises.reduce((sum, exercise) => sum + exercise.sets, 0);
 
   return (
     <div className="trainee-workout slide-in">
+      {programs.length > 1 && (
+        <button type="button" className="btn btn-ghost btn-sm trainee-workout-back" onClick={() => setSelectedProgramId("")}>
+          → כל התוכניות שלי
+        </button>
+      )}
       <section className="trainee-workout-hero">
         <span>תוכנית האימון שלי</span>
         <h2>{program.name}</h2>
@@ -2903,7 +3080,10 @@ function Progress() {
     );
   }
 
-  const { trainee, program, workouts } = progressData;
+  const { trainee, programs = [], workouts } = progressData;
+  // One program keeps its name in the header; several share a combined target.
+  const singleProgram = programs.length === 1 ? programs[0] : null;
+  const weeklyTarget = weeklyTargetOf(programs);
   const weeks = buildProgressWeeks(workouts);
   const maxWeeklyWorkouts = Math.max(1, ...weeks.map((week) => week.count));
   const monthStart = new Date();
@@ -2929,8 +3109,8 @@ function Progress() {
       <section className="trainee-progress-hero">
         <div>
           <span>ההתקדמות שלי</span>
-          <h2>{program?.name || "הדרך שלך באימונים"}</h2>
-          <p>{program?.goal || trainee.main_goal || "כל אימון שהושלם מתווסף לסיכום שלך"}</p>
+          <h2>{singleProgram?.name || "הדרך שלך באימונים"}</h2>
+          <p>{singleProgram?.goal || trainee.main_goal || "כל אימון שהושלם מתווסף לסיכום שלך"}</p>
         </div>
         <button type="button" className="btn btn-ghost btn-sm" onClick={() => setReloadKey((key) => key + 1)}>
           רענון
@@ -2967,8 +3147,8 @@ function Progress() {
               <h3>📊 עקביות בארבעת השבועות האחרונים</h3>
               <p>מספר האימונים שהשלמת בכל שבוע</p>
             </div>
-            {program?.sessions_per_week && (
-              <span className="badge badge-burg">יעד: {program.sessions_per_week} בשבוע</span>
+            {weeklyTarget > 0 && (
+              <span className="badge badge-burg">יעד: {weeklyTarget} בשבוע</span>
             )}
           </div>
           <div className="trainee-progress-weeks">

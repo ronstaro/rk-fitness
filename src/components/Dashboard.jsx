@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { fetchLeads } from "../services/leadsService.js";
 import { fetchDashboardPayments } from "../services/dashboardService.js";
 import { fetchActivePrograms } from "../services/programsService.js";
+import { groupProgramsByTrainee, weeklyTargetOf } from "../lib/activePrograms.js";
 import { fetchSessions } from "../services/sessionsService.js";
 import { fetchTrainees } from "../services/traineesService.js";
 import { currentWeekRange } from "../services/traineeHomeService.js";
@@ -166,12 +167,11 @@ export default function Dashboard({ onNavigate }) {
               formatTime(session.start_time) >= today.toTimeString().slice(0, 5)))
       )
       .slice(0, 4);
-    const programByTrainee = Object.fromEntries(
-      programs.map((program) => [program.trainee_id, program])
-    );
+    // A trainee's weekly target is the sum of all their active programs.
+    const programsByTrainee = groupProgramsByTrainee(programs);
     const weeklyProgress = activeTrainees
       .map((trainee) => {
-        const target = Number(programByTrainee[trainee.id]?.sessions_per_week || 0);
+        const target = weeklyTargetOf(programsByTrainee[trainee.id]);
         const completed = completedByTrainee[trainee.id] || 0;
         return {
           trainee,

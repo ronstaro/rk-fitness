@@ -160,7 +160,7 @@ export async function fetchOpenWorkout(traineeId) {
 export async function fetchCompletedWorkouts({ traineeId, limit = 50 } = {}) {
   let query = supabase
     .from("workout_logs")
-    .select("id, trainee_id, program_name, program_goal, day_name, day_order, status, started_at, completed_at, trainer_feedback, trainer_reviewed_at")
+    .select("id, trainee_id, source_program_id, program_name, program_goal, day_name, day_order, status, started_at, completed_at, trainer_feedback, trainer_reviewed_at")
     .eq("status", "completed")
     .order("completed_at", { ascending: false })
     .limit(limit);

@@ -4,6 +4,7 @@ import { useRememberedState } from "../lib/navigationMemory.js";
 import {
   activateProgram,
   applyExerciseGroupChanges,
+  archiveProgram,
   createProgram,
   createProgramDay,
   createProgramExercise,
@@ -367,6 +368,71 @@ function Field({ label, children }) {
   );
 }
 
+// In-app confirmation for archiving a program. Cancel is the focused
+// default, and the dialog cannot be dismissed while the archive runs.
+function ArchiveProgramConfirm({ program, traineeName, otherActiveCount, archiving, error, onCancel, onConfirm }) {
+  const cancelRef = useRef(null);
+
+  useEffect(() => {
+    cancelRef.current?.focus();
+  }, []);
+
+  useEffect(() => {
+    function onKey(event) {
+      if (event.key === "Escape" && !archiving) onCancel();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [archiving, onCancel]);
+
+  return (
+    <div
+      className="modal-overlay"
+      role="presentation"
+      onClick={(event) => {
+        if (event.target === event.currentTarget && !archiving) onCancel();
+      }}
+    >
+      <div
+        className="modal archive-program-modal slide-in"
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="archive-program-title"
+        aria-describedby="archive-program-text"
+      >
+        <div className="archive-program-icon" aria-hidden="true">🗂️</div>
+        <div className="modal-title" id="archive-program-title">העברת תוכנית לארכיון</div>
+        <p className="archive-program-text" id="archive-program-text">
+          להעביר את התוכנית <strong>{program.name}</strong> של <strong>{traineeName}</strong> לארכיון?
+        </p>
+        <ul className="archive-program-details">
+          <li>התוכנית תיעלם מהאפליקציה של המתאמן, ולא יהיה אפשר להתחיל ממנה אימון חדש.</li>
+          <li>
+            {program.status !== "active"
+              ? "התוכניות הפעילות של המתאמן לא ישתנו."
+              : otherActiveCount > 0
+                ? otherActiveCount === 1
+                  ? "התוכנית הפעילה הנוספת של המתאמן תישאר פעילה."
+                  : `${otherActiveCount} התוכניות הפעילות האחרות של המתאמן יישארו פעילות.`
+                : "לא תישאר למתאמן תוכנית פעילה, ושום תוכנית אחרת לא תופעל במקומה."}
+          </li>
+          <li>אימונים שכבר בוצעו נשמרים בהיסטוריה. אם יש אימון פתוח מהתוכנית, המתאמן יוכל לסיים אותו.</li>
+          <li>אפשר להפעיל את התוכנית מחדש בכל רגע.</li>
+        </ul>
+        {error && <div className="alert-strip danger" role="alert">{error}</div>}
+        <div className="archive-program-actions">
+          <button ref={cancelRef} type="button" className="btn btn-outline" disabled={archiving} onClick={onCancel}>
+            ביטול
+          </button>
+          <button type="button" className="btn btn-primary" disabled={archiving} onClick={onConfirm}>
+            {archiving ? "מעביר לארכיון..." : "העבר לארכיון"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Programs({ initialTraineeId = "" }) {
   const [trainees, setTrainees] = useState([]);
   const [programs, setPrograms] = useState([]);
@@ -387,6 +453,9 @@ export default function Programs({ initialTraineeId = "" }) {
   const [detailsError, setDetailsError] = useState("");
   const [actionError, setActionError] = useState("");
   const [actionKey, setActionKey] = useState("");
+  // Program waiting for the archive confirmation, and that dialog's error.
+  const [archiveTarget, setArchiveTarget] = useState(null);
+  const [archiveError, setArchiveError] = useState("");
   const [listFilter, setListFilter] = useState("all");
 
   const [showProgramForm, setShowProgramForm] = useState(false);
@@ -625,6 +694,31 @@ export default function Programs({ initialTraineeId = "" }) {
     } catch (error) {
       console.error("Program activation error:", error);
       setActionError("לא ניתן להפעיל את התוכנית. נסה שוב.");
+    } finally {
+      setActionKey("");
+    }
+  }
+
+  // The confirm dialog drives the archive; the list changes only after the
+  // RPC succeeded, and is then re-read from the server.
+  async function handleArchive(program) {
+    setActionKey(`archive-${program.id}`);
+    setArchiveError("");
+    try {
+      const archived = await archiveProgram(program.id);
+      setPrograms((current) =>
+        current.map((item) => (item.id === archived.id ? archived : item))
+      );
+      setArchiveTarget(null);
+      try {
+        const programRows = await fetchPrograms();
+        setPrograms(programRows);
+      } catch (refreshError) {
+        console.error("Programs refresh after archive failed:", refreshError);
+      }
+    } catch (error) {
+      console.error("Program archive error:", error);
+      setArchiveError("לא ניתן להעביר את התוכנית לארכיון כרגע. נסה שוב.");
     } finally {
       setActionKey("");
     }
@@ -2058,6 +2152,19 @@ export default function Programs({ initialTraineeId = "" }) {
           >
             ערוך פרטי תוכנית
           </button>
+          {selectedProgram.status !== "archived" && !selectedProgram.is_template && (
+            <button
+              type="button"
+              className="btn btn-outline btn-sm"
+              onClick={() => {
+                setArchiveError("");
+                setArchiveTarget(selectedProgram);
+              }}
+              disabled={busy}
+            >
+              {actionKey === `archive-${selectedProgram.id}` ? "מעביר..." : "העבר לארכיון"}
+            </button>
+          )}
           <button
             type="button"
             className="btn btn-sm program-action-danger"
@@ -2071,6 +2178,28 @@ export default function Programs({ initialTraineeId = "" }) {
 
       {actionError && !formOpen && (
         <div className="alert-strip danger">{actionError}</div>
+      )}
+
+      {archiveTarget && (
+        <ArchiveProgramConfirm
+          program={archiveTarget}
+          traineeName={traineeName(archiveTarget)}
+          otherActiveCount={
+            programs.filter(
+              (item) =>
+                item.trainee_id === archiveTarget.trainee_id &&
+                item.status === "active" &&
+                item.id !== archiveTarget.id
+            ).length
+          }
+          archiving={actionKey === `archive-${archiveTarget.id}`}
+          error={archiveError}
+          onCancel={() => {
+            setArchiveTarget(null);
+            setArchiveError("");
+          }}
+          onConfirm={() => handleArchive(archiveTarget)}
+        />
       )}
 
       <div className="program-days-header">

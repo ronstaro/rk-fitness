@@ -2549,6 +2549,15 @@ body.ltr .today-card.warn-border { border-right: none; border-left: 3px solid #F
 .delete-workout-details { margin: 0 0 16px; padding: 10px 14px; list-style: none; border-radius: 10px; background: var(--danger-bg); color: var(--danger); font-size: 12px; line-height: 1.7; text-align: start; }
 .delete-workout-actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
 .delete-workout-actions .btn { flex: 1 1 160px; min-height: 44px; }
+/* Archive program confirmation (Programs). */
+.archive-program-modal { max-width: 460px; text-align: center; border-top: 4px solid var(--burg); }
+.archive-program-icon { font-size: 30px; line-height: 1; margin-bottom: 8px; }
+.archive-program-modal .modal-title { margin-bottom: 10px; color: var(--burg-d); }
+.archive-program-text { margin: 0 0 12px; color: var(--gray-900); font-size: 15px; line-height: 1.6; overflow-wrap: anywhere; }
+.archive-program-details { margin: 0 0 16px; padding: 10px 14px 10px 14px; padding-inline-start: 28px; border-radius: 10px; background: var(--burg-pale); color: var(--gray-600); font-size: 13px; line-height: 1.7; text-align: start; }
+.archive-program-modal .alert-strip { margin-bottom: 12px; text-align: start; }
+.archive-program-actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+.archive-program-actions .btn { flex: 1 1 160px; min-height: 44px; }
 .btn-danger-solid { background: var(--danger); color: #fff; border: none; }
 .btn-danger-solid:hover { background: #7F1D1D; }
 .btn-danger-solid:disabled { opacity: .6; cursor: not-allowed; }

@@ -159,6 +159,25 @@ export async function activateProgram(id) {
   return data;
 }
 
+// Explicit archive (032): only this program changes; the trainee's other
+// active programs stay active and nothing else is activated.
+export async function archiveProgram(id) {
+  const { error } = await supabase.rpc("archive_workout_program", {
+    p_program_id: id,
+  });
+
+  if (error) throw error;
+
+  const { data, error: fetchError } = await supabase
+    .from("workout_programs")
+    .select("*")
+    .eq("id", id)
+    .single();
+
+  if (fetchError) throw fetchError;
+  return data;
+}
+
 export async function deleteProgram(id) {
   const { data: programDays, error: daysError } = await supabase
     .from("program_days")

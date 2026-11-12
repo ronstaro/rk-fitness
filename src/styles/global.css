@@ -2403,6 +2403,8 @@ body.ltr .today-card.warn-border { border-right: none; border-left: 3px solid #F
 }
 /* While a field is being typed in, the bar must not cover it above the keyboard. */
 .trainee-workout-live:has(input:focus, textarea:focus) .trainee-workout-finish-bar { position: static; }
+/* Before every set is recorded the bar sits quietly after the last exercise. */
+.trainee-workout-finish-bar.early { position: static; box-shadow: none; background: var(--gray-50); }
 .trainee-workout-finish-bar strong, .trainee-workout-finish-bar span { display: block; }
 .trainee-workout-finish-bar strong { font-size: 12px; }
 .trainee-workout-finish-bar span { margin-top: 2px; color: var(--gray-400); font-size: 9px; }

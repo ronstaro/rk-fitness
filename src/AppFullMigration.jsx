@@ -2656,6 +2656,10 @@ function Workout() {
       Object.values(savingSetIds).some(Boolean)
       || Object.values(savingExerciseIds).some(Boolean)
       || Object.values(uploadingVideoIds).some(Boolean);
+    // Finishing stays possible at any time (skipped exercise, busy machine, no
+    // time left), but it only becomes the pinned primary action once every set
+    // is recorded, so it does not invite an early tap mid-workout.
+    const allSetsRecorded = allSets.length > 0 && recordedSets === allSets.length;
 
     return (
       <div className="trainee-workout trainee-workout-live slide-in">
@@ -2691,17 +2695,17 @@ function Workout() {
           ))}
         </div>
 
-        <WorkoutHistory workouts={completedWorkouts} />
-
-        <div className="trainee-workout-finish-bar">
+        <div className={`trainee-workout-finish-bar ${allSetsRecorded ? "ready" : "early"}`}>
           <div>
-            <strong>{hasPendingSaves ? "שומר את הנתונים..." : "סיימת את האימון?"}</strong>
-            <span>{hasPendingSaves ? "יש להמתין לפני נעילת האימון." : "לאחר הסיום האימון יינעל לעריכה."}</span>
+            <strong>{hasPendingSaves ? "שומר את הנתונים..." : allSetsRecorded ? "כל הסטים תועדו 💪" : "לא הספקת הכל?"}</strong>
+            <span>{hasPendingSaves ? "יש להמתין לפני נעילת האימון." : allSetsRecorded ? "לאחר הסיום האימון יינעל לעריכה." : "אפשר לסיים גם עכשיו. מה שתיעדת נשמר."}</span>
           </div>
-          <button type="button" className="btn btn-primary" disabled={finishing || hasPendingSaves} onClick={handleFinishWorkout}>
-            {finishing ? "מסיים..." : hasPendingSaves ? "שומר..." : "סיום אימון"}
+          <button type="button" className={`btn ${allSetsRecorded ? "btn-primary" : "btn-outline"}`} disabled={finishing || hasPendingSaves} onClick={handleFinishWorkout}>
+            {finishing ? "מסיים..." : hasPendingSaves ? "שומר..." : allSetsRecorded ? "סיום אימון" : "סיום אימון מוקדם"}
           </button>
         </div>
+
+        <WorkoutHistory workouts={completedWorkouts} />
       </div>
     );
   }

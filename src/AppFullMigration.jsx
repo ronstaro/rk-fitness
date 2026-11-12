@@ -28,6 +28,17 @@ import {
 import { syncPushSubscription } from "./lib/pushNotifications.js";
 import { GROUP_LETTERS, buildRoundUnits, groupLabel, groupRestSeconds, roundProgress } from "./lib/exerciseGroups.js";
 import {
+  autoFocusUnitKey,
+  currentSetId,
+  isExerciseDone,
+  isUnitDone,
+  previousSummary,
+  roundSummary,
+  topWeight,
+  unitKey,
+  unitSetCounts,
+} from "./lib/workoutFocus.js";
+import {
   ADD_REST_SECONDS,
   effectiveRestSeconds,
   extendRest,
@@ -93,38 +104,30 @@ function RestTimerBar({ timer, onAdd, onSkip, onExpire }) {
   if (phase === "done") {
     return (
       <section className="rest-timer done" role="status" aria-label="זמן המנוחה הסתיים">
-        <div>
-          <strong>✅ זמן המנוחה הסתיים</strong>
-          <span>אפשר להתחיל את הסט הבא · <b>{timer.nextLabel}</b></span>
-        </div>
+        <span className="rest-timer-done-text">✅ אפשר להתחיל · הבא: <b>{timer.nextLabel}</b></span>
         <button type="button" className="rest-timer-close" aria-label="סגירת הודעת המנוחה" onClick={onSkip}>✕</button>
       </section>
     );
   }
 
+  // One thin pinned line: the clock, what comes next and the two shortcuts.
+  // The time, the triggers and the stored end time are unchanged.
   const remaining = restRemainingMs(timer, now);
   const progress = timer.durationMs > 0 ? Math.min(100, (remaining / timer.durationMs) * 100) : 0;
   return (
     <section className="rest-timer" aria-label={timer.title}>
-      <div className="rest-timer-top">
-        <div>
-          <strong>⏱ {timer.title}</strong>
-          <span>{timer.doneLabel}</span>
-        </div>
+      <div className="rest-timer-row">
         <span className="rest-timer-clock" role="timer" aria-label="זמן מנוחה שנותר">{formatRestClock(remaining)}</span>
-      </div>
-      {timer.members.length > 0 && (
-        <div className="rest-timer-members">
-          {timer.members.map((member) => <span key={member}>{member} ✓</span>)}
+        <div className="rest-timer-text">
+          <strong>{timer.kind === "rounds" ? "מנוחה בין סבבים" : "מנוחה"}</strong>
+          <span>הבא: <b>{timer.nextLabel}</b></span>
         </div>
-      )}
-      <div className="rest-timer-track" aria-hidden="true"><div style={{ width: `${progress}%` }} /></div>
-      <p className="rest-timer-next">{timer.kind === "rounds" ? "הבא" : "הסט הבא"}: <b>{timer.nextLabel}</b></p>
-      <div className="rest-timer-actions">
-        <button type="button" onClick={onAdd}>+{ADD_REST_SECONDS} שנ׳</button>
-        <button type="button" className="rest-timer-skip" onClick={onSkip}>דלג על המנוחה</button>
+        <div className="rest-timer-actions">
+          <button type="button" aria-label={`+${ADD_REST_SECONDS} שנ׳`} onClick={onAdd}>+{ADD_REST_SECONDS}</button>
+          <button type="button" className="rest-timer-skip" aria-label="דלג על המנוחה" onClick={onSkip}>דלג</button>
+        </div>
       </div>
-      <small className="rest-timer-hint">לא חובה ללחוץ · אפשר להמשיך להקליד ולסמן סטים</small>
+      <div className="rest-timer-track" aria-hidden="true"><div style={{ width: `${progress}%` }} /></div>
     </section>
   );
 }
@@ -1863,8 +1866,8 @@ function CompletedWorkoutDetails({ workout, reviewMode = false, traineeName = ""
               <small>יעד: {letter ? "" : `${exercise.prescribed_sets} סטים × `}{exercise.prescribed_reps}{letter ? " חזרות" : ""} · {exercise.target_weight_kg == null ? "ללא משקל יעד" : `${exercise.target_weight_kg} ק״ג`}</small>
             </div>
           </div>
-          <span className={`badge ${exercise.is_completed ? "badge-active" : "badge-warn"}`}>
-            {exercise.is_completed ? "הושלם" : "חלקי"}
+          <span className={`badge ${isExerciseDone(exercise) ? "badge-active" : "badge-warn"}`}>
+            {isExerciseDone(exercise) ? "הושלם" : "חלקי"}
           </span>
         </header>
 
@@ -2142,6 +2145,100 @@ function Workout() {
   const programDataRef = useRef(programData);
   programDataRef.current = programData;
   const activeWorkoutId = programData?.activeWorkout?.id ?? null;
+
+  // Focus mode (src/lib/workoutFocus.js): one exercise or block is open at a
+  // time. All of this is screen state only; nothing here is saved, and the
+  // open unit after a refresh comes again from the saved sets.
+  // openUnit: a unit the trainee opened by hand ({ key, wasDone }), or null
+  // for the automatic one (the first unit that is not done yet).
+  const [openUnit, setOpenUnit] = useState(null);
+  // Where the keyboard focus is: { unitKey, rows }. A finished set or round
+  // only collapses once focus has left its row, so it never disappears while
+  // the trainee is still typing in it.
+  const [focusWithin, setFocusWithin] = useState(null);
+  // A finished set or round reopened by a tap, to check or correct it.
+  const [expandedRowKey, setExpandedRowKey] = useState(null);
+  // The small panel of an exercise: `${exerciseId}:video` or `${exerciseId}:note`.
+  const [openTool, setOpenTool] = useState(null);
+  const blurTimerRef = useRef(null);
+  const unitRefs = useRef(new Map());
+  const shownUnitKeyRef = useRef(null);
+
+  const liveUnits = programData?.activeWorkout ? loggedRoundUnits(programData.activeWorkout.exercises) : [];
+  const liveUnitKeys = liveUnits.map(unitKey);
+  let shownUnitKey = autoFocusUnitKey(liveUnits);
+  if (openUnit && liveUnitKeys.includes(openUnit.key)) shownUnitKey = openUnit.key;
+  // The unit being typed in stays open even when it has just been finished.
+  if (focusWithin?.unitKey && liveUnitKeys.includes(focusWithin.unitKey)) shownUnitKey = focusWithin.unitKey;
+
+  // A unit opened by hand goes back to the automatic one once it is finished
+  // and left; one that was already finished when opened stays until another
+  // is chosen.
+  useEffect(() => {
+    if (!openUnit) return;
+    const workout = programData?.activeWorkout;
+    const unit = workout ? loggedRoundUnits(workout.exercises).find((item) => unitKey(item) === openUnit.key) : null;
+    if (!unit || (!openUnit.wasDone && isUnitDone(unit) && focusWithin?.unitKey !== openUnit.key)) {
+      setOpenUnit(null);
+    }
+  }, [openUnit, focusWithin, programData]);
+
+  // When another unit opens, its top is brought into view once (iOS Safari
+  // does not keep the scroll position when the unit above collapses). Never
+  // while a field has focus, so the screen does not move under the keyboard.
+  useEffect(() => {
+    const previous = shownUnitKeyRef.current;
+    shownUnitKeyRef.current = shownUnitKey;
+    if (!previous || !shownUnitKey || previous === shownUnitKey) return;
+    if (document.activeElement?.closest?.(".trainee-workout-live input, .trainee-workout-live textarea")) return;
+    const element = unitRefs.current.get(shownUnitKey);
+    if (!element) return;
+    const top = element.getBoundingClientRect().top;
+    if (top < 0 || top > window.innerHeight * 0.55) {
+      element.scrollIntoView({ block: "start", behavior: "smooth" });
+    }
+  }, [shownUnitKey]);
+
+  useEffect(() => () => window.clearTimeout(blurTimerRef.current), []);
+
+  function openUnitByHand(unit) {
+    setExpandedRowKey(null);
+    setOpenUnit({ key: unitKey(unit), wasDone: isUnitDone(unit) });
+  }
+
+  // Focus is followed on the whole unit; the row is the closest [data-row].
+  // A newly focused row is protected at once, but a row that focus left only
+  // collapses a moment later: on a phone a tap first moves focus and then
+  // clicks (or, on iOS, does not move focus at all), and the screen must not
+  // shift between the two.
+  function unitFocusProps(key) {
+    return {
+      onFocus: (event) => {
+        window.clearTimeout(blurTimerRef.current);
+        const rowKey = event.target.closest?.("[data-row]")?.dataset.row ?? null;
+        setFocusWithin((current) => ({
+          unitKey: key,
+          rows: [rowKey, ...(current?.unitKey === key ? current.rows : [])],
+        }));
+        blurTimerRef.current = window.setTimeout(() => {
+          setFocusWithin((current) => (current?.unitKey === key ? { unitKey: key, rows: [rowKey] } : current));
+          setExpandedRowKey((current) => (current && current !== rowKey ? null : current));
+        }, 300);
+      },
+      onBlur: (event) => {
+        if (event.currentTarget.contains(event.relatedTarget)) return;
+        window.clearTimeout(blurTimerRef.current);
+        blurTimerRef.current = window.setTimeout(() => {
+          setFocusWithin((current) => (current?.unitKey === key ? null : current));
+          setExpandedRowKey(null);
+        }, 300);
+      },
+    };
+  }
+
+  function rowIsOpen(rowKey) {
+    return Boolean(focusWithin?.rows.includes(rowKey)) || expandedRowKey === rowKey;
+  }
 
   // After a refresh or a return to the screen, the timer of this open workout
   // comes back with its original end time.
@@ -2470,32 +2567,33 @@ function Workout() {
     );
   }
 
-  // One set row. A standalone exercise keeps its labels; in a block the row
-  // is one exercise's set of one round, so the labels name both.
-  function renderSetRow(exercise, workoutSet, round = null, letter = null) {
-    const rirValue = workoutSet.rir === "" || workoutSet.rir == null
-      ? null
-      : Number(workoutSet.rir);
+  // One editable set row. A standalone exercise keeps its labels; in a block
+  // the row is one exercise's set of one round, so the labels name both.
+  // The fields are pre-filled from last time (or the target) when the workout
+  // starts; an empty field shows the target as a hint.
+  function renderSetRow(exercise, workoutSet, round = null, letter = null, isCurrent = false) {
     const where = round == null
       ? `בסט ${workoutSet.set_order}`
       : `ב${exercise.exercise_name}, סבב ${round}`;
+    const upcoming = !workoutSet.is_completed && !isCurrent;
     return (
-      <div className={`trainee-live-set ${workoutSet.is_completed ? "completed" : ""} ${round == null && restTimer?.nextSetId === workoutSet.id ? "rest-next" : ""}`} key={workoutSet.id}>
+      <div
+        className={`trainee-live-set ${workoutSet.is_completed ? "completed" : ""} ${isCurrent ? "current" : ""} ${upcoming ? "upcoming" : ""} ${round == null && restTimer?.nextSetId === workoutSet.id ? "rest-next" : ""}`}
+        key={workoutSet.id}
+        data-row={round == null ? workoutSet.id : undefined}
+      >
         <strong>{letter ?? workoutSet.set_order}</strong>
         <label>
           <span>משקל</span>
-          <input aria-label={`משקל ${where}`} type="number" min="0" max="2000" step="0.25" inputMode="decimal" value={workoutSet.weight_kg ?? ""} onFocus={(event) => { rememberFocusValue(`${workoutSet.id}:weight_kg`, workoutSet.weight_kg); event.currentTarget.select(); }} onChange={(event) => updateSetState(exercise.id, workoutSet.id, { weight_kg: event.target.value })} onBlur={() => handleSetSave(exercise.id, workoutSet, "weight_kg")} />
-          <small>קודם: {workoutSet.previous_weight_kg == null ? "—" : `${workoutSet.previous_weight_kg}`}</small>
+          <input aria-label={`משקל ${where}`} type="number" min="0" max="2000" step="0.25" inputMode="decimal" placeholder={exercise.target_weight_kg == null ? "" : String(exercise.target_weight_kg)} value={workoutSet.weight_kg ?? ""} onFocus={(event) => { rememberFocusValue(`${workoutSet.id}:weight_kg`, workoutSet.weight_kg); event.currentTarget.select(); }} onChange={(event) => updateSetState(exercise.id, workoutSet.id, { weight_kg: event.target.value })} onBlur={() => handleSetSave(exercise.id, workoutSet, "weight_kg")} />
         </label>
         <label>
           <span>חזרות</span>
-          <input aria-label={`חזרות ${where}`} type="number" min="0" max="1000" step="1" inputMode="numeric" value={workoutSet.completed_reps ?? ""} onFocus={(event) => { rememberFocusValue(`${workoutSet.id}:completed_reps`, workoutSet.completed_reps); event.currentTarget.select(); }} onChange={(event) => updateSetState(exercise.id, workoutSet.id, { completed_reps: event.target.value })} onBlur={() => handleSetSave(exercise.id, workoutSet, "completed_reps")} />
-          <small>קודם: {workoutSet.previous_reps ?? "—"}</small>
+          <input aria-label={`חזרות ${where}`} type="number" min="0" max="1000" step="1" inputMode="numeric" placeholder={exercise.prescribed_reps ?? ""} value={workoutSet.completed_reps ?? ""} onFocus={(event) => { rememberFocusValue(`${workoutSet.id}:completed_reps`, workoutSet.completed_reps); event.currentTarget.select(); }} onChange={(event) => updateSetState(exercise.id, workoutSet.id, { completed_reps: event.target.value })} onBlur={() => handleSetSave(exercise.id, workoutSet, "completed_reps")} />
         </label>
         <label>
           <span>RIR</span>
-          <input aria-label={`RIR ${where}`} type="number" min="0" max="10" step="0.5" inputMode="decimal" value={workoutSet.rir ?? ""} onFocus={(event) => { rememberFocusValue(`${workoutSet.id}:rir`, workoutSet.rir); event.currentTarget.select(); }} onChange={(event) => updateSetState(exercise.id, workoutSet.id, { rir: event.target.value })} onBlur={() => handleSetSave(exercise.id, workoutSet, "rir")} />
-          <small>קודם: {workoutSet.previous_rir ?? "—"} · RPE {rirValue == null ? "—" : Math.max(0, 10 - rirValue)}</small>
+          <input aria-label={`RIR ${where}`} type="number" min="0" max="10" step="0.5" inputMode="decimal" placeholder={exercise.target_rir == null ? "" : String(exercise.target_rir)} value={workoutSet.rir ?? ""} onFocus={(event) => { rememberFocusValue(`${workoutSet.id}:rir`, workoutSet.rir); event.currentTarget.select(); }} onChange={(event) => updateSetState(exercise.id, workoutSet.id, { rir: event.target.value })} onBlur={() => handleSetSave(exercise.id, workoutSet, "rir")} />
         </label>
         <button
           type="button"
@@ -2512,18 +2610,91 @@ function Workout() {
     );
   }
 
-  function renderCompletionButton(exercise, label = "") {
+  function setResultText(workoutSet) {
+    const hasWeight = workoutSet.weight_kg !== null && workoutSet.weight_kg !== undefined && workoutSet.weight_kg !== "";
+    const hasReps = workoutSet.completed_reps !== null && workoutSet.completed_reps !== undefined && workoutSet.completed_reps !== "";
+    if (hasWeight && hasReps) return `${Number(workoutSet.weight_kg)} ק״ג × ${Number(workoutSet.completed_reps)}`;
+    if (hasWeight) return `${Number(workoutSet.weight_kg)} ק״ג`;
+    if (hasReps) return `${Number(workoutSet.completed_reps)} חזרות`;
+    return "בוצע";
+  }
+
+  // A tap on a finished set or round opens it again for a check or a fix. It
+  // closes again once focus leaves it.
+  function reopenRow(unit, rowKey) {
+    window.clearTimeout(blurTimerRef.current);
+    setFocusWithin(null);
+    setExpandedRowKey(rowKey);
+    if (isUnitDone(unit)) setOpenUnit({ key: unitKey(unit), wasDone: true });
+  }
+
+  function renderDoneSet(unit, workoutSet) {
+    const text = setResultText(workoutSet);
+    const hasRir = workoutSet.rir !== null && workoutSet.rir !== undefined && workoutSet.rir !== "";
     return (
       <button
         type="button"
-        className={`trainee-exercise-check ${exercise.is_completed ? "checked" : ""}`}
-        aria-label={label ? `${exercise.is_completed ? "בטל השלמת" : "סמן כהושלם:"} ${label}` : undefined}
-        disabled={savingExerciseIds[exercise.id]}
-        onClick={() => handleExerciseSave(exercise, { is_completed: !exercise.is_completed })}
+        className="live-set-done"
+        key={workoutSet.id}
+        data-row={workoutSet.id}
+        aria-label={`סט ${workoutSet.set_order} הושלם: ${text}${hasRir ? `, RIR ${workoutSet.rir}` : ""}. פתיחה לעריכה`}
+        onClick={() => reopenRow(unit, workoutSet.id)}
       >
-        {exercise.is_completed ? "✓ הושלם" : "סימון כהושלם"}
+        <span className="live-set-done-n">{workoutSet.set_order}</span>
+        <span className="live-set-done-v">{text}{hasRir && <small> · RIR {Number(workoutSet.rir)}</small>}</span>
+        <span className="live-set-done-c" aria-hidden="true">✓</span>
       </button>
     );
+  }
+
+  // A pair like "47.5×9" is kept left to right inside the Hebrew line.
+  function renderPair(pair, key) {
+    return pair.includes("×") ? <bdi dir="ltr" key={key}>{pair}</bdi> : <span key={key}>{pair}</span>;
+  }
+
+  // Which small panel of an exercise is open. An upload in progress or an
+  // upload error keeps the video panel open so its state is never hidden.
+  function shownTool(exercise) {
+    if (uploadingVideoIds[exercise.id] || videoErrors[exercise.id]) return "video";
+    if (openTool === `${exercise.id}:video`) return "video";
+    if (openTool === `${exercise.id}:note`) return "note";
+    return null;
+  }
+
+  function toggleTool(exercise, kind) {
+    const key = `${exercise.id}:${kind}`;
+    if (shownTool(exercise) === kind) {
+      setOpenTool(null);
+      if (kind === "video" && !uploadingVideoIds[exercise.id]) setVideoErrors((current) => ({ ...current, [exercise.id]: "" }));
+      return;
+    }
+    setOpenTool(key);
+  }
+
+  // Demo, video and note as small actions; each opens the existing component.
+  function renderTools(exercise, labelled = false) {
+    const tool = shownTool(exercise);
+    const hasVideo = Boolean(exercise.video_path);
+    const hasNote = Boolean(exercise.trainee_notes?.trim());
+    const name = labelled ? ` · ${exercise.exercise_name}` : "";
+    return (
+      <div className="live-tools">
+        <ExerciseDemoVideo url={exercise.demo_video_url} path={exercise.demo_video_path} exerciseName={exercise.exercise_name} className="live-chip" label="▶ הדגמה" />
+        <button type="button" className={`live-chip ${hasVideo ? "has" : ""} ${tool === "video" ? "on" : ""}`} aria-expanded={tool === "video"} aria-label={`צילום התרגיל${name}`} onClick={() => toggleTool(exercise, "video")}>
+          📹 {uploadingVideoIds[exercise.id] ? "מעלה…" : hasVideo ? "הסרטון שלי" : "צילום"}
+        </button>
+        <button type="button" className={`live-chip ${hasNote ? "has" : ""} ${tool === "note" ? "on" : ""}`} aria-expanded={tool === "note"} aria-label={`הערה לתרגיל${name}`} onClick={() => toggleTool(exercise, "note")}>
+          ✎ {hasNote ? "ההערה שלי" : "הערה"}
+        </button>
+      </div>
+    );
+  }
+
+  function renderToolPanel(exercise) {
+    const tool = shownTool(exercise);
+    if (tool === "video") return renderExecutionVideo(exercise);
+    if (tool === "note") return renderExerciseNote(exercise);
+    return null;
   }
 
   function renderExecutionVideo(exercise) {
@@ -2597,121 +2768,179 @@ function Workout() {
     );
   }
 
-  function renderLiveExercise(exercise) {
+  function setUnitRef(key) {
+    return (element) => {
+      if (element) unitRefs.current.set(key, element);
+      else if (unitRefs.current.get(key) === element) unitRefs.current.delete(key);
+    };
+  }
+
+  // A unit that is not open: one line, a tap opens it (and closes the open one).
+  function renderUnitRow(unit) {
+    const key = unitKey(unit);
+    const done = isUnitDone(unit);
+    const counts = unitSetCounts(unit);
+    const first = unit.exercises[0];
+    const isGroup = unit.type === "group";
+    const name = isGroup ? unit.exercises.map((exercise) => exercise.exercise_name).join(" + ") : first.exercise_name;
+    let detail;
+    if (isGroup) {
+      const { currentRound } = roundProgress(unit);
+      detail = done
+        ? `${unit.rounds} סבבים · בוצע`
+        : counts.done > 0 ? `סבב ${currentRound} מתוך ${unit.rounds}` : `${unit.rounds} סבבים`;
+    } else if (done) {
+      const top = topWeight(first);
+      detail = counts.done < counts.total
+        ? `${counts.done}/${counts.total} סטים`
+        : `${counts.total} סטים${top == null ? "" : ` · עד ${top} ק״ג`}`;
+    } else {
+      detail = counts.done > 0
+        ? `${counts.done}/${counts.total} סטים`
+        : `${first.prescribed_sets} סטים · ${first.prescribed_reps} חזרות${first.target_weight_kg == null ? "" : ` · ${first.target_weight_kg} ק״ג`}`;
+    }
     return (
-      <section className={`card trainee-live-exercise ${exercise.is_completed ? "completed" : ""}`} key={exercise.id}>
-        <header className="trainee-live-exercise-header">
-          <div className="trainee-workout-exercise-name">
-            <span>{exercise.exercise_order}</span>
-            <div>
-              <strong>{exercise.exercise_name}</strong>
-              <p>
-                {exercise.prescribed_sets} סטים
-                {effectiveRestSeconds(exercise.rest_seconds) > 0 && ` · מנוחה בין סטים: ${formatRest(effectiveRestSeconds(exercise.rest_seconds))}`}
-              </p>
-            </div>
+      <button
+        type="button"
+        className={`live-unit-row ${done ? "done" : ""} ${!done && counts.done > 0 ? "partial" : ""}`}
+        key={key}
+        ref={setUnitRef(key)}
+        aria-expanded="false"
+        onClick={() => openUnitByHand(unit)}
+      >
+        <span className="live-unit-num" aria-hidden="true">{done ? "✓" : first.exercise_order}</span>
+        <span className="live-unit-main">
+          <strong>{name}</strong>
+          <small>{detail}</small>
+        </span>
+        {isGroup && <span className="live-unit-tag">{groupLabel(unit.exercises.length)}</span>}
+        <span className="live-unit-chev" aria-hidden="true">‹</span>
+      </button>
+    );
+  }
+
+  function renderLiveExercise(unit) {
+    const key = unitKey(unit);
+    const exercise = unit.exercises[0];
+    const current = currentSetId(exercise);
+    const previous = previousSummary(exercise);
+    return (
+      <section
+        className={`card trainee-live-exercise live-focus ${isExerciseDone(exercise) ? "completed" : ""}`}
+        key={key}
+        ref={setUnitRef(key)}
+        aria-label={exercise.exercise_name}
+        {...unitFocusProps(key)}
+      >
+        <header className="live-focus-head">
+          <span className="live-unit-num" aria-hidden="true">{exercise.exercise_order}</span>
+          <div>
+            <strong>{exercise.exercise_name}</strong>
+            <p>
+              יעד: {exercise.prescribed_sets} סטים · {exercise.prescribed_reps} חזרות
+              {exercise.target_weight_kg != null && ` · ${exercise.target_weight_kg} ק״ג`}
+              {exercise.target_rir != null && ` · RIR ${exercise.target_rir}`}
+              {effectiveRestSeconds(exercise.rest_seconds) > 0 && ` · מנוחה ${formatRest(effectiveRestSeconds(exercise.rest_seconds))}`}
+            </p>
           </div>
-          {renderCompletionButton(exercise)}
         </header>
 
-        {exercise.trainer_notes && (
-          <p className="trainee-live-trainer-note">💬 {exercise.trainer_notes}</p>
+        {exercise.trainer_notes && <p className="live-coach">💬 {exercise.trainer_notes}</p>}
+
+        {previous.pairs.length > 0 && (
+          <p className="live-prev">
+            בפעם הקודמת:{" "}
+            {previous.pairs.map((pair, index) => (
+              <span key={index}>{index > 0 && " · "}{renderPair(pair)}</span>
+            ))}
+            {previous.repeated > 0 && ` · ${previous.repeated} סטים`}
+          </p>
         )}
-
-        <ExerciseDemoVideo url={exercise.demo_video_url} path={exercise.demo_video_path} exerciseName={exercise.exercise_name} className="btn btn-outline btn-sm trainee-demo-video-button" />
-
-        <div className="trainee-live-targets">
-          <article>
-            <span>יעד משקל</span>
-            <strong>{exercise.target_weight_kg == null ? "—" : `${exercise.target_weight_kg} ק״ג`}</strong>
-          </article>
-          <article>
-            <span>יעד חזרות</span>
-            <strong>{exercise.prescribed_reps}</strong>
-          </article>
-          <article>
-            <span>יעד RIR</span>
-            <strong>{exercise.target_rir ?? "—"}</strong>
-          </article>
-        </div>
 
         <div className="trainee-live-sets">
           <div className="trainee-live-set trainee-live-set-labels" aria-hidden="true">
             <span>סט</span><span>משקל (ק״ג)</span><span>חזרות</span><span>RIR</span><span>בוצע</span>
           </div>
-          {exercise.sets.map((workoutSet) => renderSetRow(exercise, workoutSet))}
+          {exercise.sets.map((workoutSet) => (
+            workoutSet.is_completed && !rowIsOpen(workoutSet.id)
+              ? renderDoneSet(unit, workoutSet)
+              : renderSetRow(exercise, workoutSet, null, null, workoutSet.id === current)
+          ))}
         </div>
 
-        {renderExecutionVideo(exercise)}
-        {renderExerciseNote(exercise)}
+        {renderTools(exercise)}
+        {renderToolPanel(exercise)}
       </section>
     );
   }
 
-  // A block is run round by round: every round lists A, B (and C) in order,
-  // each with its own saved set. The current round and the next exercise come
-  // from the saved sets only, so a refresh shows the same place. Nothing here
-  // moves the screen; the trainee scrolls on through the rounds.
+  // A block is run round by round. Only the current round is open; finished
+  // rounds are one summary line each (a tap opens one again) and later rounds
+  // show only as dots. The current round and the next exercise come from the
+  // saved sets (roundProgress), so a refresh shows the same place.
   function renderLiveGroup(unit) {
+    const key = unitKey(unit);
     const label = groupLabel(unit.exercises.length);
     const names = unit.exercises.map((exercise) => exercise.exercise_name).join(" + ");
     const restValue = effectiveRestSeconds(groupRestSeconds(unit));
     const rest = restValue > 0 ? restValue : null;
     const { currentRound, nextExerciseId } = roundProgress(unit);
-    const nextIndex = unit.exercises.findIndex((exercise) => exercise.id === nextExerciseId);
-    const allCompleted = unit.exercises.every((exercise) => exercise.is_completed);
+    const allCompleted = isUnitDone(unit);
     const rounds = Array.from({ length: unit.rounds }, (_, index) => index + 1);
 
     return (
-      <section className={`card trainee-live-exercise trainee-live-group ${allCompleted ? "completed" : ""}`} key={unit.groupId} aria-label={`${label}: ${names}`}>
-        <header className="trainee-live-group-header">
+      <section
+        className={`card trainee-live-exercise trainee-live-group live-focus ${allCompleted ? "completed" : ""}`}
+        key={key}
+        ref={setUnitRef(key)}
+        aria-label={`${label}: ${names}`}
+        {...unitFocusProps(key)}
+      >
+        <header className="live-group-head">
           <div>
             <span className="trainee-live-group-type">{label}</span>
-            <strong>{unit.rounds} סבבים</strong>
-            {rest != null && <small>מנוחה אחרי סבב: {formatRest(rest)}</small>}
+            <strong aria-live="polite">{currentRound == null ? "✓ כל הסבבים בוצעו" : `סבב ${currentRound} מתוך ${unit.rounds}`}</strong>
           </div>
-          <div className="trainee-live-group-status" aria-live="polite">
-            {currentRound == null ? (
-              <strong>✓ כל הסבבים בוצעו</strong>
-            ) : (
-              <>
-                <strong>סבב {currentRound} מתוך {unit.rounds}</strong>
-                <small>הבא: {GROUP_LETTERS[nextIndex]} · {unit.exercises[nextIndex].exercise_name}</small>
-              </>
-            )}
-          </div>
+          <span className="live-round-dots" aria-hidden="true">
+            {rounds.map((round) => (
+              <i key={round} className={currentRound == null || round < currentRound ? "done" : round === currentRound ? "current" : ""} />
+            ))}
+          </span>
         </header>
-
-        <ol className="trainee-live-group-members">
-          {unit.exercises.map((exercise, index) => (
-            <li key={exercise.id}>
-              <span className="trainee-group-letter">{GROUP_LETTERS[index]}</span>
-              <div>
-                <strong>{exercise.exercise_name}</strong>
-                <small>
-                  {exercise.prescribed_reps} חזרות · {exercise.target_weight_kg == null ? "ללא משקל יעד" : `${exercise.target_weight_kg} ק״ג`} · RIR {exercise.target_rir ?? "—"}
-                </small>
-                {exercise.trainer_notes && <p className="trainee-live-trainer-note">💬 {exercise.trainer_notes}</p>}
-                <ExerciseDemoVideo url={exercise.demo_video_url} path={exercise.demo_video_path} exerciseName={exercise.exercise_name} className="btn btn-outline btn-sm trainee-demo-video-button" />
-              </div>
-            </li>
-          ))}
-        </ol>
+        <p className="live-group-sub">{names}{rest != null && ` · מנוחה אחרי סבב: ${formatRest(rest)}`}</p>
 
         <div className="trainee-live-rounds">
           {rounds.map((round) => {
+            const rowKey = `${unit.groupId}:${round}`;
             const done = currentRound == null || round < currentRound;
             const current = round === currentRound;
+            if (!done && !current) return null;
+            if (done && !rowIsOpen(rowKey)) {
+              return (
+                <button
+                  type="button"
+                  className="live-round-done"
+                  key={round}
+                  data-row={rowKey}
+                  aria-label={`סבב ${round} בוצע: ${roundSummary(unit, round).join(", ")}. פתיחה לעריכה`}
+                  onClick={() => reopenRow(unit, rowKey)}
+                >
+                  <b>✓ סבב {round}</b>
+                  <span>{roundSummary(unit, round).map((item, index) => <span key={index}>{index > 0 && " · "}<bdi dir="ltr">{item}</bdi></span>)}</span>
+                </button>
+              );
+            }
             return (
               <section
                 className={`trainee-live-round ${current ? "current" : ""} ${done ? "done" : ""}`}
                 key={round}
+                data-row={rowKey}
                 aria-label={`סבב ${round}`}
                 aria-current={current ? "step" : undefined}
               >
                 <header>
                   <strong>סבב {round}</strong>
-                  <span>{current ? "סבב נוכחי" : done ? "✓ בוצע" : ""}</span>
+                  <span>{current ? "סבב נוכחי" : "✓ בוצע"}</span>
                 </header>
                 {unit.exercises.map((exercise, index) => {
                   const workoutSet = exercise.sets[round - 1];
@@ -2722,7 +2951,12 @@ function Workout() {
                         <strong>{GROUP_LETTERS[index]} · {exercise.exercise_name}</strong>
                         {isNext && <em>עכשיו</em>}
                       </div>
-                      {renderSetRow(exercise, workoutSet, round, GROUP_LETTERS[index])}
+                      {current && (
+                        <small className="live-member-target">
+                          יעד: {exercise.prescribed_reps} חזרות{exercise.target_weight_kg != null && ` · ${exercise.target_weight_kg} ק״ג`}{exercise.target_rir != null && ` · RIR ${exercise.target_rir}`}
+                        </small>
+                      )}
+                      {renderSetRow(exercise, workoutSet, round, GROUP_LETTERS[index], isNext)}
                     </div>
                   );
                 })}
@@ -2734,20 +2968,28 @@ function Workout() {
           })}
         </div>
 
-        <div className="trainee-live-group-details">
-          {unit.exercises.map((exercise, index) => (
-            <section className={`trainee-live-member ${exercise.is_completed ? "completed" : ""}`} key={exercise.id}>
-              <header>
-                <div className="trainee-live-round-member">
+        <div className="live-group-members">
+          {unit.exercises.map((exercise, index) => {
+            const previous = previousSummary(exercise);
+            return (
+              <div className="live-group-member" key={exercise.id}>
+                <div className="live-group-member-name">
                   <span className="trainee-group-letter">{GROUP_LETTERS[index]}</span>
                   <strong>{exercise.exercise_name}</strong>
+                  {previous.pairs.length > 0 && (
+                    <small>
+                      קודם: {previous.pairs.map((pair, pairIndex) => (
+                        <span key={pairIndex}>{pairIndex > 0 && " · "}{renderPair(pair)}</span>
+                      ))}
+                    </small>
+                  )}
                 </div>
-                {renderCompletionButton(exercise, exercise.exercise_name)}
-              </header>
-              {renderExecutionVideo(exercise)}
-              {renderExerciseNote(exercise)}
-            </section>
-          ))}
+                {exercise.trainer_notes && <p className="live-coach">💬 {exercise.trainer_notes}</p>}
+                {renderTools(exercise, true)}
+                {renderToolPanel(exercise)}
+              </div>
+            );
+          })}
         </div>
       </section>
     );
@@ -2782,9 +3024,8 @@ function Workout() {
   if (activeWorkout) {
     const allSets = activeWorkout.exercises.flatMap((exercise) => exercise.sets);
     const recordedSets = allSets.filter((set) => set.is_completed).length;
-    const completedExercises = activeWorkout.exercises.filter(
-      (exercise) => exercise.is_completed
-    ).length;
+    const completedExercises = activeWorkout.exercises.filter(isExerciseDone).length;
+    const progressPercent = allSets.length ? Math.round((recordedSets / allSets.length) * 100) : 0;
     const hasPendingSaves =
       Object.values(savingSetIds).some(Boolean)
       || Object.values(savingExerciseIds).some(Boolean)
@@ -2804,28 +3045,31 @@ function Workout() {
             onExpire={clearRestTimer}
           />
         )}
-        <section className="trainee-workout-live-hero">
-          <div>
-            <span>אימון בביצוע · נשמר אוטומטית</span>
-            <h2>{activeWorkout.day_name}</h2>
-            <p>{activeWorkout.program_name}</p>
+        <section className="live-head">
+          <div className="live-head-title">
+            <div>
+              <h2>{activeWorkout.day_name}</h2>
+              <p>{activeWorkout.program_name} · התחלה: {formatWorkoutStart(activeWorkout.started_at)}</p>
+            </div>
+            <span className="live-head-saved">{hasPendingSaves ? "שומר…" : "✓ נשמר אוטומטית"}</span>
           </div>
-          <small>התחלה: {formatWorkoutStart(activeWorkout.started_at)}</small>
+          <div className="live-head-progress" role="progressbar" aria-label="התקדמות האימון" aria-valuemin="0" aria-valuemax="100" aria-valuenow={progressPercent}>
+            <div style={{ width: `${progressPercent}%` }} />
+          </div>
+          <div className="live-head-meta">
+            <span>{completedExercises}/{activeWorkout.exercises.length} תרגילים</span>
+            <span>{recordedSets}/{allSets.length} סטים</span>
+          </div>
         </section>
 
         {notice && <div className="trainee-workout-feedback success">{notice}</div>}
         {actionError && <div className="trainee-workout-feedback error">{actionError}</div>}
 
-        <div className="trainee-workout-live-metrics">
-          <article><span>תרגילים</span><strong>{completedExercises}/{activeWorkout.exercises.length}</strong></article>
-          <article><span>סטים שתועדו</span><strong>{recordedSets}/{allSets.length}</strong></article>
-          <article><span>התקדמות</span><strong>{allSets.length ? Math.round((recordedSets / allSets.length) * 100) : 0}%</strong></article>
-        </div>
-
         <div className="trainee-workout-live-exercises">
-          {loggedRoundUnits(activeWorkout.exercises).map((unit) => (
-            unit.type === "group" ? renderLiveGroup(unit) : renderLiveExercise(unit.exercises[0])
-          ))}
+          {liveUnits.map((unit) => {
+            if (unitKey(unit) !== shownUnitKey) return renderUnitRow(unit);
+            return unit.type === "group" ? renderLiveGroup(unit) : renderLiveExercise(unit);
+          })}
         </div>
 
         <div className={`trainee-workout-finish-bar ${allSetsRecorded ? "ready" : "early"}`}>

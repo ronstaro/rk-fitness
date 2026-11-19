@@ -111,26 +111,52 @@ export async function cancelMySessionRequest(requestId) {
   if (error) throw error;
 }
 
-// Admin: pending requests first, then the latest decisions.
-export async function fetchSessionRequests() {
-  const [pending, recent] = await Promise.all([
-    supabase
-      .from("session_requests")
-      .select(REQUEST_COLUMNS)
-      .eq("status", "pending")
-      .order("requested_date", { ascending: true })
-      .order("requested_start_time", { ascending: true }),
-    supabase
-      .from("session_requests")
-      .select(REQUEST_COLUMNS)
-      .neq("status", "pending")
-      .order("decided_at", { ascending: false })
-      .limit(10),
-  ]);
+// Admin: every request that still waits for a decision, soonest first.
+export async function fetchPendingSessionRequests() {
+  const { data, error } = await supabase
+    .from("session_requests")
+    .select(REQUEST_COLUMNS)
+    .eq("status", "pending")
+    .order("requested_date", { ascending: true })
+    .order("requested_start_time", { ascending: true });
 
-  if (pending.error) throw pending.error;
-  if (recent.error) throw recent.error;
-  return { pending: pending.data ?? [], recent: recent.data ?? [] };
+  if (error) throw error;
+  return data ?? [];
+}
+
+export const HISTORY_PAGE_SIZE = 20;
+
+const HISTORY_STATUSES = {
+  all: ["approved", "rejected", "cancelled"],
+  approved: ["approved"],
+  rejected: ["rejected"],
+};
+
+// Admin: decided requests, newest decision first, one page at a time. The
+// linked session comes with each row through the existing foreign key, so the
+// card shows where the session is on the calendar now (moved, cancelled, or
+// gone: the key is cleared when the session is deleted). Read-only: nothing
+// here writes to the request, the session or the payment.
+export async function fetchSessionRequestHistory({ filter = "all", offset = 0 } = {}) {
+  const statuses = HISTORY_STATUSES[filter] ?? HISTORY_STATUSES.all;
+  const { data, error } = await supabase
+    .from("session_requests")
+    .select(
+      `${REQUEST_COLUMNS}, scheduled_session:training_sessions!session_requests_scheduled_session_id_fkey(id, session_date, start_time, status)`,
+    )
+    .in("status", statuses)
+    .order("decided_at", { ascending: false })
+    .order("created_at", { ascending: false })
+    .order("id", { ascending: true })
+    // One extra row tells whether another page exists.
+    .range(offset, offset + HISTORY_PAGE_SIZE);
+
+  if (error) throw error;
+  const rows = data ?? [];
+  return {
+    rows: rows.slice(0, HISTORY_PAGE_SIZE),
+    hasMore: rows.length > HISTORY_PAGE_SIZE,
+  };
 }
 
 // Only the number, for the admin menu badge.

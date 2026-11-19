@@ -831,7 +831,6 @@ export function SessionRequestsView({ onPendingChange }) {
             hasConflict={(date, startTime, duration) => hasOverlap(date, startTime, duration, sessions)}
             onScheduled={refreshSessions}
             onDecided={onPendingChange}
-            defaultShowRecent
           />
         </>
       )}

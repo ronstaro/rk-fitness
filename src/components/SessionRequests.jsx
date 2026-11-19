@@ -7,7 +7,8 @@ import {
   cancelMySessionRequest,
   createMySessionRequest,
   fetchMySessionRequests,
-  fetchSessionRequests,
+  fetchPendingSessionRequests,
+  fetchSessionRequestHistory,
   getPaymentProofUrl,
   rejectSessionRequest,
   sessionRequestErrorMessage,
@@ -41,6 +42,32 @@ function formatRequestDate(value) {
 
 function formatTime(value) {
   return value ? value.slice(0, 5) : "";
+}
+
+// "2026-11-15" → "15.11.2026", without going through a time zone.
+function formatDateKey(value) {
+  if (!value) return "";
+  const [year, month, day] = value.split("-");
+  return `${day}.${month}.${year}`;
+}
+
+// A moment (created_at / decided_at) shown in Israel time: "12.11.2026 · 18:42".
+const ISRAEL_MOMENT = new Intl.DateTimeFormat("en-GB", {
+  timeZone: "Asia/Jerusalem",
+  day: "2-digit",
+  month: "2-digit",
+  year: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+  hourCycle: "h23",
+});
+
+function formatMoment(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const parts = Object.fromEntries(ISRAEL_MOMENT.formatToParts(date).map((part) => [part.type, part.value]));
+  return `${parts.day}.${parts.month}.${parts.year} · ${parts.hour}:${parts.minute}`;
 }
 
 function RequestStatus({ status }) {
@@ -409,35 +436,150 @@ function approvalForm(trainee) {
   };
 }
 
-export function SessionRequestsPanel({ trainees, hasConflict, onScheduled, onDecided, defaultShowRecent = false }) {
-  const [data, setData] = useState({ pending: [], recent: [] });
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState("");
+const HISTORY_FILTERS = [
+  { id: "all", label: "הכל" },
+  { id: "approved", label: "אושרו" },
+  { id: "rejected", label: "נדחו" },
+];
+
+const DECISION_LABELS = {
+  approved: "אושרה",
+  rejected: "נדחתה",
+  cancelled: "בוטלה ע״י המתאמן",
+};
+
+const HISTORY_EMPTY = {
+  all: "עדיין אין בקשות שטופלו.",
+  approved: "אין בקשות שאושרו.",
+  rejected: "אין בקשות שנדחו.",
+};
+
+// Where the approved session sits on the calendar now. Approval always creates
+// a session, so an approved request without one means it was deleted later.
+function CalendarLine({ request }) {
+  const session = request.scheduled_session;
+  if (!session) {
+    return <span className="session-request-history-line warn">האימון הוסר מהיומן</span>;
+  }
+  const moved = session.session_date !== request.requested_date
+    || formatTime(session.start_time) !== formatTime(request.requested_start_time);
+  return (
+    <span className="session-request-history-line">
+      <b>ביומן:</b>{" "}
+      <bdi>{formatDateKey(session.session_date)} · {formatTime(session.start_time)}</bdi>
+      {moved && <span className="session-request-tag">הוזז</span>}
+      {session.status && session.status !== "מתוכנן" && (
+        <span className={`session-request-tag ${session.status === "בוטל" ? "warn" : ""}`}>{session.status}</span>
+      )}
+    </span>
+  );
+}
+
+function HistoryCard({ request, name }) {
+  const [showProof, setShowProof] = useState(false);
+  const decided = DECISION_LABELS[request.status] || REQUEST_STATUS_LABELS[request.status] || request.status;
+
+  return (
+    <article className="session-request-history-card" data-status={request.status}>
+      <div className="session-request-history-head">
+        <strong>{name}</strong>
+        <RequestStatus status={request.status} />
+      </div>
+      <span className="session-request-history-line">
+        <b>מועד מבוקש:</b>{" "}
+        <bdi>{formatDateKey(request.requested_date)} · {formatTime(request.requested_start_time)}</bdi>
+      </span>
+      {request.status === "approved" && <CalendarLine request={request} />}
+      <span className="session-request-history-line">
+        <b>{decided}:</b> <bdi>{formatMoment(request.decided_at)}</bdi>
+      </span>
+      {request.decision_note && (
+        <span className="session-request-history-note">{request.decision_note}</span>
+      )}
+      <div className="session-request-history-meta">
+        <small>
+          נשלחה: <bdi>{formatMoment(request.created_at)}</bdi>
+          {request.status === "approved" && (request.payment_id ? " · תשלום נרשם" : " · לא נרשם תשלום")}
+        </small>
+        <button
+          type="button"
+          className="session-request-proof-toggle"
+          aria-expanded={showProof}
+          onClick={() => setShowProof((value) => !value)}
+        >
+          {showProof ? "הסתרת אישור התשלום" : "אישור התשלום"}
+        </button>
+      </div>
+      {request.trainee_note && <small className="session-request-history-sub">“{request.trainee_note}”</small>}
+      {showProof && <PaymentProof path={request.payment_proof_path} />}
+    </article>
+  );
+}
+
+export function SessionRequestsPanel({ trainees, hasConflict, onScheduled, onDecided }) {
+  const [pending, setPending] = useState({ rows: [], loading: true, error: "" });
+  const [history, setHistory] = useState({ rows: [], hasMore: false, loading: true, loadingMore: false, error: "", moreError: "" });
+  const [filter, setFilter] = useState("all");
   const [reloadKey, setReloadKey] = useState(0);
   const [dialog, setDialog] = useState(null);
   const [form, setForm] = useState(null);
   const [dialogError, setDialogError] = useState("");
   const [working, setWorking] = useState(false);
-  const [showRecent, setShowRecent] = useState(defaultShowRecent);
   const lockRef = useRef(false);
+  // Only the latest history request may write to state (fast filter changes).
+  const historyTokenRef = useRef(0);
 
   useEffect(() => {
     let active = true;
-    fetchSessionRequests()
-      .then((rows) => {
-        if (!active) return;
-        setData(rows);
-        setLoadError("");
-      })
+    setPending((current) => ({ ...current, loading: true, error: "" }));
+    fetchPendingSessionRequests()
+      .then((rows) => active && setPending({ rows, loading: false, error: "" }))
       .catch((error) => {
-        console.error("Session requests fetch error:", error);
-        if (active) setLoadError("לא ניתן לטעון את בקשות האימון.");
-      })
-      .finally(() => active && setLoading(false));
+        console.error("Pending session requests fetch error:", error);
+        if (active) setPending((current) => ({ ...current, loading: false, error: "לא ניתן לטעון את הבקשות הממתינות." }));
+      });
     return () => {
       active = false;
     };
   }, [reloadKey]);
+
+  useEffect(() => {
+    const token = ++historyTokenRef.current;
+    setHistory((current) => ({ ...current, loading: true, error: "", moreError: "" }));
+    fetchSessionRequestHistory({ filter, offset: 0 })
+      .then(({ rows, hasMore }) => {
+        if (historyTokenRef.current !== token) return;
+        setHistory({ rows, hasMore, loading: false, loadingMore: false, error: "", moreError: "" });
+      })
+      .catch((error) => {
+        console.error("Session request history fetch error:", error);
+        if (historyTokenRef.current !== token) return;
+        setHistory((current) => ({ ...current, rows: [], hasMore: false, loading: false, error: "לא ניתן לטעון את ההיסטוריה." }));
+      });
+  }, [filter, reloadKey]);
+
+  async function loadMore() {
+    if (history.loading || history.loadingMore || !history.hasMore) return;
+    const token = historyTokenRef.current;
+    setHistory((current) => ({ ...current, loadingMore: true, moreError: "" }));
+    try {
+      const { rows, hasMore } = await fetchSessionRequestHistory({ filter, offset: history.rows.length });
+      if (historyTokenRef.current !== token) return;
+      setHistory((current) => {
+        const seen = new Set(current.rows.map((row) => row.id));
+        return {
+          ...current,
+          rows: [...current.rows, ...rows.filter((row) => !seen.has(row.id))],
+          hasMore,
+          loadingMore: false,
+        };
+      });
+    } catch (error) {
+      console.error("Session request history load-more error:", error);
+      if (historyTokenRef.current !== token) return;
+      setHistory((current) => ({ ...current, loadingMore: false, moreError: "לא ניתן לטעון עוד. נסו שוב." }));
+    }
+  }
 
   function traineeFor(request) {
     return trainees.find((trainee) => trainee.id === request.trainee_id);
@@ -476,6 +618,7 @@ export function SessionRequestsPanel({ trainees, hasConflict, onScheduled, onDec
   async function finishDecision(scheduled) {
     setDialog(null);
     setForm(null);
+    // Both lists reload: the request leaves "pending" and opens the history.
     setReloadKey((key) => key + 1);
     onDecided?.();
     if (scheduled) await onScheduled?.();
@@ -557,43 +700,41 @@ export function SessionRequestsPanel({ trainees, hasConflict, onScheduled, onDec
     }
   }
 
-  if (loading) return null;
-
   return (
     <section className="schedule-list-section session-requests-panel">
       <div className="schedule-section-title">
         <div>
-          <h3>בקשות אימון ממתאמנים</h3>
+          <h3>ממתינות</h3>
           <p>
-            {data.pending.length === 0
-              ? "אין בקשות שממתינות לאישור"
-              : `${data.pending.length} בקשות ממתינות לאישור`}
+            {pending.loading
+              ? "טוען..."
+              : pending.error
+                ? ""
+                : pending.rows.length === 0
+                ? "אין בקשות שממתינות לאישור"
+                : `${pending.rows.length} בקשות ממתינות לאישור`}
           </p>
         </div>
-        {data.recent.length > 0 && (
-          <button type="button" className="btn btn-ghost btn-sm" onClick={() => setShowRecent((value) => !value)}>
-            {showRecent ? "הסתרת החלטות אחרונות" : "החלטות אחרונות"}
-          </button>
-        )}
       </div>
 
-      {loadError && (
+      {pending.error && (
         <div className="schedule-error-strip">
-          {loadError}{" "}
+          {pending.error}{" "}
           <button type="button" className="btn btn-ghost btn-sm" onClick={() => setReloadKey((key) => key + 1)}>
             נסה שוב
           </button>
         </div>
       )}
 
-      {data.pending.length > 0 && (
+      {pending.rows.length > 0 && (
         <div className="session-request-admin-list">
-          {data.pending.map((request) => (
+          {pending.rows.map((request) => (
             <article className="card session-request-admin" key={request.id}>
               <PaymentProof path={request.payment_proof_path} />
               <div className="session-request-admin-body">
                 <strong>{traineeName(request)}</strong>
                 <span>{formatRequestDate(request.requested_date)} · {formatTime(request.requested_start_time)}</span>
+                <small>נשלחה: <bdi>{formatMoment(request.created_at)}</bdi></small>
                 {request.trainee_note && <small>“{request.trainee_note}”</small>}
                 <div className="session-request-admin-actions">
                   <button type="button" className="btn btn-primary btn-sm" onClick={() => openApprove(request)} disabled={working}>
@@ -609,22 +750,53 @@ export function SessionRequestsPanel({ trainees, hasConflict, onScheduled, onDec
         </div>
       )}
 
-      {showRecent && data.recent.length > 0 && (
-        <div className="schedule-session-list card session-request-recent">
-          {data.recent.map((request) => (
-            <article className="session-request-row" key={request.id}>
-              <div>
-                <strong>{traineeName(request)}</strong>
-                <small>
-                  {formatRequestDate(request.requested_date)} · {formatTime(request.requested_start_time)}
-                  {request.payment_id ? " · תשלום נרשם" : ""}
-                </small>
-                {request.decision_note && <small>{request.decision_note}</small>}
-              </div>
-              <RequestStatus status={request.status} />
-            </article>
-          ))}
+      <div className="schedule-section-title session-request-history-title">
+        <div>
+          <h3>היסטוריה</h3>
+          <p>בקשות שטופלו, מהחדשה לישנה</p>
         </div>
+      </div>
+      <div className="filter-chips session-request-history-filters" role="group" aria-label="סינון היסטוריה">
+        {HISTORY_FILTERS.map((option) => (
+          <button
+            key={option.id}
+            type="button"
+            className={`filter-chip ${filter === option.id ? "active" : ""}`}
+            aria-pressed={filter === option.id}
+            onClick={() => setFilter(option.id)}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+
+      {history.loading ? (
+        <div className="session-request-history-empty">טוען היסטוריה...</div>
+      ) : history.error ? (
+        <div className="schedule-error-strip">
+          {history.error}{" "}
+          <button type="button" className="btn btn-ghost btn-sm" onClick={() => setReloadKey((key) => key + 1)}>
+            נסה שוב
+          </button>
+        </div>
+      ) : history.rows.length === 0 ? (
+        <div className="session-request-history-empty">{HISTORY_EMPTY[filter]}</div>
+      ) : (
+        <>
+          <div className="session-request-history-list">
+            {history.rows.map((request) => (
+              <HistoryCard key={request.id} request={request} name={traineeName(request)} />
+            ))}
+          </div>
+          {history.moreError && <div className="schedule-error-strip">{history.moreError}</div>}
+          {history.hasMore && (
+            <div className="session-request-history-more">
+              <button type="button" className="btn btn-outline btn-sm" onClick={loadMore} disabled={history.loadingMore}>
+                {history.loadingMore ? "טוען..." : "טען עוד"}
+              </button>
+            </div>
+          )}
+        </>
       )}
 
       {dialog && form && (

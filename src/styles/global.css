@@ -2561,6 +2561,14 @@ body.ltr .today-card.warn-border { border-right: none; border-left: 3px solid #F
 .completed-workout-exercise { padding: 14px; border: 1px solid var(--gray-100); border-radius: 10px; background: #fff; }
 .completed-workout-exercise > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .completed-workout-exercise .trainee-workout-exercise-name small { display: block; margin-top: 2px; color: var(--gray-400); font-size: 9px; }
+/* Roni's review: last time versus today, one quiet line per exercise */
+.exercise-compare { display: flex; flex-wrap: wrap; align-items: center; gap: 3px 10px; margin: 8px 0 0; color: var(--gray-600); font-size: 12px; }
+.exercise-compare bdi { color: var(--gray-900); font-weight: 600; }
+.exercise-compare-tag { padding: 1px 8px; border-radius: 10px; background: var(--gray-50); color: var(--gray-600); font-size: 11px; font-weight: 600; white-space: nowrap; }
+.exercise-compare-tag.improved { background: var(--success-bg); color: var(--success); }
+.exercise-compare-tag.lower { background: var(--gray-100); }
+.exercise-compare-summary { color: var(--gray-600); font-weight: 600; }
+.exercise-compare-summary.up { color: var(--success); }
 .completed-workout-sets { display: grid; gap: 5px; margin-top: 12px; }
 .completed-workout-set {
   display: grid; grid-template-columns: 42px repeat(4, minmax(55px, 1fr)); align-items: center; gap: 6px;

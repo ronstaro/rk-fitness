@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useRef, useState } from "react";
+﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fetchTrainees, createTrainee, updateTrainee, updateTraineeStatus, deleteTrainee, deleteTraineeErrorMessage } from "./services/traineesService.js";
 import { fetchSessions } from "./services/sessionsService.js";
 import { fetchActivePrograms } from "./services/programsService.js";
@@ -26,6 +26,7 @@ import {
   writeNavigation,
 } from "./lib/navigationMemory.js";
 import { syncPushSubscription } from "./lib/pushNotifications.js";
+import { buildWorkoutComparisons, comparisonTagText, topSetText } from "./lib/exerciseProgress.js";
 import { GROUP_LETTERS, buildRoundUnits, groupLabel, groupRestSeconds, roundProgress } from "./lib/exerciseGroups.js";
 import {
   autoFocusUnitKey,
@@ -1787,7 +1788,25 @@ function feedbackDraftsFor(workout) {
 
 // reviewMode is the admin's review form; without it the same details are the
 // trainee's read-only view with the trainer's saved feedback.
-function CompletedWorkoutDetails({ workout, reviewMode = false, traineeName = "", onReviewed, onDelete, onDirtyChange }) {
+// One quiet line under an exercise in Roni's review: last time versus today,
+// and a short tag only when the comparison is fair (see exerciseProgress.js).
+function ExerciseComparisonLine({ comparison, workout }) {
+  if (!comparison) return null;
+  const { previous, current, result } = comparison;
+  const tag = comparisonTagText(result);
+  const otherProgram = previous.workout.program_name && previous.workout.program_name !== workout.program_name
+    ? previous.workout.program_name
+    : "";
+  return (
+    <p className="exercise-compare">
+      <span>קודם ({new Date(previous.workout.completed_at).toLocaleDateString("he-IL", { day: "numeric", month: "short" })}{otherProgram && ` · ${otherProgram}`}): <bdi dir="ltr">{topSetText(previous.top)}</bdi></span>
+      <span>היום: <bdi dir="ltr">{topSetText(current)}</bdi></span>
+      {tag && <span className={`exercise-compare-tag ${result.kind}`}>{tag}</span>}
+    </p>
+  );
+}
+
+function CompletedWorkoutDetails({ workout, reviewMode = false, traineeName = "", comparison = null, onReviewed, onDelete, onDirtyChange }) {
   const [exerciseDrafts, setExerciseDrafts] = useState(() => feedbackDraftsFor(workout));
   const [generalDraft, setGeneralDraft] = useState(workout.trainer_feedback ?? "");
   const [saving, setSaving] = useState(false);
@@ -1870,6 +1889,8 @@ function CompletedWorkoutDetails({ workout, reviewMode = false, traineeName = ""
             {isExerciseDone(exercise) ? "הושלם" : "חלקי"}
           </span>
         </header>
+
+        {reviewMode && <ExerciseComparisonLine comparison={comparison?.exercises[exercise.id]} workout={workout} />}
 
         <div className="completed-workout-sets">
           <div className="completed-workout-set labels" aria-hidden="true">
@@ -2038,7 +2059,7 @@ function ReviewBadge({ workout, reviewMode }) {
     : <span className="badge badge-inactive">ממתין לסקירת המאמנת</span>;
 }
 
-function CompletedWorkoutsList({ workouts, traineeNamesById = {}, emptyText, reviewMode = false, onWorkoutReviewed, onWorkoutDelete }) {
+function CompletedWorkoutsList({ workouts, traineeNamesById = {}, emptyText, reviewMode = false, comparisons = null, onWorkoutReviewed, onWorkoutDelete }) {
   const [openWorkoutId, setOpenWorkoutId] = useState("");
   const openDirtyRef = useRef(false);
 
@@ -2063,6 +2084,7 @@ function CompletedWorkoutsList({ workouts, traineeNamesById = {}, emptyText, rev
         const isOpen = openWorkoutId === workout.id;
         const traineeName = traineeNamesById[workout.trainee_id];
         const hasVideo = workout.exercises.some((exercise) => exercise.video_path);
+        const comparison = comparisons?.get(workout.id) ?? null;
         return (
           <article className={`card completed-workout-card ${isOpen ? "open" : ""}`} key={workout.id}>
             <button
@@ -2073,7 +2095,11 @@ function CompletedWorkoutsList({ workouts, traineeNamesById = {}, emptyText, rev
             >
               <div>
                 <strong>{traineeName ? `${traineeName} · ` : ""}{workout.day_name}</strong>
-                <small>{workout.program_name} · {formatCompletedWorkoutDate(workout.completed_at)}</small>
+                <small>
+                  {workout.program_name} · {formatCompletedWorkoutDate(workout.completed_at)}
+                  {comparison?.improved > 0 && <span className="exercise-compare-summary up"> · ↑ {comparison.improved === 1 ? "שיפור אחד" : `${comparison.improved} שיפורים`}</span>}
+                  {comparison?.lower > 0 && <span className="exercise-compare-summary"> · ↓ {comparison.lower === 1 ? "ירידה אחת" : `${comparison.lower} ירידות`}</span>}
+                </small>
               </div>
               <div className="completed-workout-card-badges">
                 {hasVideo && <span className="badge badge-burg">📹 סרטון</span>}
@@ -2086,6 +2112,7 @@ function CompletedWorkoutsList({ workouts, traineeNamesById = {}, emptyText, rev
                 workout={workout}
                 reviewMode={reviewMode}
                 traineeName={traineeName}
+                comparison={comparison}
                 onReviewed={onWorkoutReviewed}
                 onDelete={reviewMode && onWorkoutDelete ? async (target) => {
                   await onWorkoutDelete(target);
@@ -3511,6 +3538,8 @@ function Reviews() {
     workout.exercises.some((exercise) => exercise.trainee_notes)
   ).length;
   const workoutsAwaitingReview = workouts.filter((workout) => !workout.trainer_reviewed_at).length;
+  // Derived from the loaded list, so a deleted workout drops out at once.
+  const comparisons = useMemo(() => buildWorkoutComparisons(workouts), [workouts]);
 
   return (
     <div className="workout-reviews slide-in">
@@ -3550,6 +3579,7 @@ function Reviews() {
           traineeNamesById={traineeNamesById}
           emptyText="עדיין אין אימונים שהושלמו לסקירה."
           reviewMode
+          comparisons={comparisons}
           onWorkoutReviewed={(updated) =>
             setWorkouts((current) => current.map((workout) => (workout.id === updated.id ? updated : workout)))
           }

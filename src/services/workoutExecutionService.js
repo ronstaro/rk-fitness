@@ -175,6 +175,32 @@ export async function fetchCompletedWorkouts({ traineeId, limit = 50 } = {}) {
   return attachWorkoutDetails(workouts ?? []);
 }
 
+// Earlier completed workouts of one exercise, for the trainee's history
+// sheet. Loaded only when needed. The name filter on the server is broad on
+// purpose (contains, case-insensitive); the exact match is done by
+// buildExerciseHistory so that "Hip Thrust" never picks up "Hip Thrust
+// Single Leg". RLS limits the rows to the signed-in trainee's own workouts.
+export const EXERCISE_HISTORY_LIMIT = 400;
+
+export async function fetchExerciseHistory({ traineeId, exerciseName }) {
+  const name = String(exerciseName ?? "").trim();
+  if (!traineeId || !name) return { rows: [], truncated: false };
+  // LIKE wildcards in a name become "any single character", so they can only
+  // widen the server filter, never narrow it.
+  const pattern = `%${name.replace(/[\\%_*]/g, "_")}%`;
+  const { data, error } = await supabase
+    .from("workout_log_exercises")
+    .select("id, exercise_name, workout_logs!inner(id, trainee_id, status, completed_at, program_name, day_name), workout_log_sets(set_order, weight_kg, completed_reps, rir, is_completed)")
+    .eq("workout_logs.trainee_id", traineeId)
+    .eq("workout_logs.status", "completed")
+    .ilike("exercise_name", pattern)
+    .limit(EXERCISE_HISTORY_LIMIT);
+
+  if (error) throw error;
+  const rows = data ?? [];
+  return { rows, truncated: rows.length >= EXERCISE_HISTORY_LIMIT };
+}
+
 export async function startWorkout(programDayId) {
   const { data, error } = await supabase.rpc("start_my_workout", {
     p_program_day_id: programDayId,

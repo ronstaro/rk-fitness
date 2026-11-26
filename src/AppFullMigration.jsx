@@ -6,7 +6,7 @@ import { fetchPaidPayments } from "./services/financeService.js";
 import { PAYMENT_METHODS, onlinePaymentState, onlinePaymentText, paymentMethodLabel } from "./lib/payments.js";
 import { countWorkoutsByProgram, groupProgramsByTrainee, programNamesLabel, weeklyTargetOf } from "./lib/activePrograms.js";
 import { currentWeekRange, fetchTraineeHomeData, fetchTraineeProfile, fetchTraineeProgramData } from "./services/traineeHomeService.js";
-import { deleteWorkoutLog, fetchCompletedWorkouts, fetchOpenWorkout, finishWorkout, saveWorkoutReview, startWorkout, updateWorkoutExercise, updateWorkoutSet, uploadExerciseVideo } from "./services/workoutExecutionService.js";
+import { deleteWorkoutLog, fetchCompletedWorkouts, fetchExerciseHistory, fetchOpenWorkout, finishWorkout, saveWorkoutReview, startWorkout, updateWorkoutExercise, updateWorkoutSet, uploadExerciseVideo } from "./services/workoutExecutionService.js";
 import Dashboard from "./components/Dashboard.jsx";
 import Finance from "./components/Finance.jsx";
 import Leads from "./components/Leads.jsx";
@@ -15,6 +15,7 @@ import Schedule, { SessionRequestsView } from "./components/Schedule.jsx";
 import WeeklyGoals from "./components/WeeklyGoals.jsx";
 import TraineeInviteCard from "./components/TraineeInviteCard.jsx";
 import ExerciseDemoVideo from "./components/ExerciseDemoVideo.jsx";
+import ExerciseHistorySheet from "./components/ExerciseHistorySheet.jsx";
 import NotificationSettings from "./components/NotificationSettings.jsx";
 import { TraineeSessionRequests } from "./components/SessionRequests.jsx";
 import { fetchMySessionRequests, fetchPendingSessionRequestCount } from "./services/sessionRequestsService.js";
@@ -26,7 +27,7 @@ import {
   writeNavigation,
 } from "./lib/navigationMemory.js";
 import { syncPushSubscription } from "./lib/pushNotifications.js";
-import { buildWorkoutComparisons, comparisonTagText, topSetText } from "./lib/exerciseProgress.js";
+import { buildExerciseHistory, buildWorkoutComparisons, compareTopSets, comparisonTagText, detectRecord, exerciseNameKey, recordText, topSet, topSetText } from "./lib/exerciseProgress.js";
 import { GROUP_LETTERS, buildRoundUnits, groupLabel, groupRestSeconds, roundProgress } from "./lib/exerciseGroups.js";
 import {
   autoFocusUnitKey,
@@ -2190,6 +2191,17 @@ function Workout() {
   const blurTimerRef = useRef(null);
   const unitRefs = useRef(new Map());
   const shownUnitKeyRef = useRef(null);
+  // Exercise history (src/lib/exerciseProgress.js), read only and by exercise
+  // name key: { status: "loading" | "ready" | "error", sessions, truncated }.
+  // Loaded when an exercise opens, never on the first screen load, and never
+  // read by any save: the workout works the same if it fails.
+  const [exerciseHistory, setExerciseHistory] = useState({});
+  const exerciseHistoryRef = useRef(exerciseHistory);
+  exerciseHistoryRef.current = exerciseHistory;
+  const loadingHistoryRef = useRef(new Set());
+  // The open history sheet ({ name }) and the line that opened it.
+  const [historySheet, setHistorySheet] = useState(null);
+  const historyTriggerRef = useRef(null);
 
   const liveUnits = programData?.activeWorkout ? loggedRoundUnits(programData.activeWorkout.exercises) : [];
   const liveUnitKeys = liveUnits.map(unitKey);
@@ -2227,6 +2239,65 @@ function Workout() {
   }, [shownUnitKey]);
 
   useEffect(() => () => window.clearTimeout(blurTimerRef.current), []);
+
+  const loadExerciseHistory = useCallback(async (exerciseName, force = false) => {
+    const key = exerciseNameKey(exerciseName);
+    const traineeId = programDataRef.current?.trainee?.id;
+    if (!key || !traineeId || loadingHistoryRef.current.has(key)) return;
+    const cached = exerciseHistoryRef.current[key];
+    if (!force && cached && cached.status !== "error") return;
+    loadingHistoryRef.current.add(key);
+    setExerciseHistory((current) => ({ ...current, [key]: { status: "loading", sessions: [], truncated: false } }));
+    try {
+      const { rows, truncated } = await fetchExerciseHistory({ traineeId, exerciseName });
+      setExerciseHistory((current) => ({ ...current, [key]: { status: "ready", sessions: buildExerciseHistory(rows, exerciseName), truncated } }));
+    } catch (error) {
+      console.warn("Exercise history fetch failed:", error?.name);
+      setExerciseHistory((current) => ({ ...current, [key]: { status: "error", sessions: [], truncated: false } }));
+    } finally {
+      loadingHistoryRef.current.delete(key);
+    }
+  }, []);
+
+  // A finished workout becomes history itself, so a new workout starts fresh.
+  useEffect(() => {
+    setExerciseHistory({});
+    setHistorySheet(null);
+  }, [activeWorkoutId]);
+
+  // The open exercise (or every member of an open block) loads its history
+  // in the background, so a record can be recognised and the sheet opens at once.
+  const shownExerciseNames = liveUnits.find((unit) => unitKey(unit) === shownUnitKey)?.exercises.map((exercise) => exercise.exercise_name).join("\n") ?? "";
+  useEffect(() => {
+    if (!shownExerciseNames) return;
+    shownExerciseNames.split("\n").forEach((name) => loadExerciseHistory(name));
+  }, [shownExerciseNames, loadExerciseHistory]);
+
+  function openExerciseHistory(exercise, trigger) {
+    historyTriggerRef.current = trigger;
+    setHistorySheet({ name: exercise.exercise_name });
+    loadExerciseHistory(exercise.exercise_name);
+  }
+
+  // Closing returns focus to the line that opened the sheet, without scrolling.
+  const closeExerciseHistory = useCallback(() => {
+    setHistorySheet(null);
+    const trigger = historyTriggerRef.current;
+    window.requestAnimationFrame(() => {
+      if (trigger?.isConnected) trigger.focus({ preventScroll: true });
+    });
+  }, []);
+
+  // The personal record of an exercise in the open workout, or null. Only with
+  // history that loaded completely, and never when the workout holds the same
+  // exercise name twice (we could not tell which one it is).
+  function exerciseRecord(exercise) {
+    const workout = programDataRef.current?.activeWorkout;
+    const key = exerciseNameKey(exercise.exercise_name);
+    if (!workout || workout.exercises.filter((item) => exerciseNameKey(item.exercise_name) === key).length !== 1) return null;
+    const history = exerciseHistory[key];
+    return history?.status === "ready" ? detectRecord(history, exercise) : null;
+  }
 
   function openUnitByHand(unit) {
     setExpandedRowKey(null);
@@ -2532,6 +2603,28 @@ function Workout() {
     handleExerciseSave(exercise, { trainee_notes: exercise.trainee_notes ?? "" });
   }
 
+  function finishSummary(workout) {
+    const records = [];
+    let improved = 0;
+    for (const exercise of workout.exercises) {
+      const record = exerciseRecord(exercise);
+      if (record) {
+        records.push({ name: exercise.exercise_name, record });
+        continue;
+      }
+      const history = exerciseHistory[exerciseNameKey(exercise.exercise_name)];
+      const last = history?.status === "ready" ? history.sessions[0] : null;
+      const result = last ? compareTopSets(last.top, topSet(exercise)) : null;
+      if (result?.kind === "improved" && workout.exercises.filter((item) => exerciseNameKey(item.exercise_name) === exerciseNameKey(exercise.exercise_name)).length === 1) improved += 1;
+    }
+    let text = "";
+    if (records.length === 1) text += ` שיא אישי חדש: ${records[0].name} · \u2066${recordText(records[0].record)}\u2069.`; // isolated so "80×8" keeps its order
+    if (records.length > 1) text += ` ${records.length} שיאים אישיים חדשים: ${records.map((item) => item.name).join(", ")}.`;
+    if (improved === 1) text += " תרגיל אחד עם שיפור מהפעם הקודמת.";
+    if (improved > 1) text += ` ${improved} תרגילים עם שיפור מהפעם הקודמת.`;
+    return text;
+  }
+
   async function handleFinishWorkout() {
     const hasPendingSaves =
       Object.values(savingSetIds).some(Boolean)
@@ -2560,9 +2653,12 @@ function Workout() {
     setActionError("");
 
     try {
+      // Records and improvements are counted before the workout becomes
+      // history; the summary is one extra sentence in the usual notice.
+      const summary = finishSummary(workout);
       await finishWorkout(workout.id);
       clearRestTimer();
-      setNotice("האימון הסתיים ונשמר בהצלחה.");
+      setNotice(`האימון הסתיים ונשמר בהצלחה.${summary}`);
       setReloadKey((key) => key + 1);
     } catch (error) {
       console.warn("Workout finish failed:", error?.name);
@@ -2658,17 +2754,20 @@ function Workout() {
   function renderDoneSet(unit, workoutSet) {
     const text = setResultText(workoutSet);
     const hasRir = workoutSet.rir !== null && workoutSet.rir !== undefined && workoutSet.rir !== "";
+    const exercise = unit.exercises.find((item) => item.sets.some((candidate) => candidate.id === workoutSet.id));
+    const isRecord = Boolean(exercise) && exerciseRecord(exercise)?.setId === workoutSet.id;
     return (
       <button
         type="button"
         className="live-set-done"
         key={workoutSet.id}
         data-row={workoutSet.id}
-        aria-label={`סט ${workoutSet.set_order} הושלם: ${text}${hasRir ? `, RIR ${workoutSet.rir}` : ""}. פתיחה לעריכה`}
+        aria-label={`סט ${workoutSet.set_order} הושלם: ${text}${hasRir ? `, RIR ${workoutSet.rir}` : ""}${isRecord ? ", שיא אישי חדש" : ""}. פתיחה לעריכה`}
         onClick={() => reopenRow(unit, workoutSet.id)}
       >
         <span className="live-set-done-n">{workoutSet.set_order}</span>
         <span className="live-set-done-v">{text}{hasRir && <small> · RIR {Number(workoutSet.rir)}</small>}</span>
+        {isRecord && <span className="live-record-tag" aria-hidden="true">שיא אישי</span>}
         <span className="live-set-done-c" aria-hidden="true">✓</span>
       </button>
     );
@@ -2875,13 +2974,16 @@ function Workout() {
         {exercise.trainer_notes && <p className="live-coach">💬 {exercise.trainer_notes}</p>}
 
         {previous.pairs.length > 0 && (
-          <p className="live-prev">
-            בפעם הקודמת:{" "}
-            {previous.pairs.map((pair, index) => (
-              <span key={index}>{index > 0 && " · "}{renderPair(pair)}</span>
-            ))}
-            {previous.repeated > 0 && ` · ${previous.repeated} סטים`}
-          </p>
+          <button type="button" className="live-prev live-prev-open" aria-haspopup="dialog" onClick={(event) => openExerciseHistory(exercise, event.currentTarget)}>
+            <span>
+              בפעם הקודמת:{" "}
+              {previous.pairs.map((pair, index) => (
+                <span key={index}>{index > 0 && " · "}{renderPair(pair)}</span>
+              ))}
+              {previous.repeated > 0 && ` · ${previous.repeated} סטים`}
+            </span>
+            <span className="live-prev-more">היסטוריה ‹</span>
+          </button>
         )}
 
         <div className="trainee-live-sets">
@@ -2954,6 +3056,9 @@ function Workout() {
                 >
                   <b>✓ סבב {round}</b>
                   <span>{roundSummary(unit, round).map((item, index) => <span key={index}>{index > 0 && " · "}<bdi dir="ltr">{item}</bdi></span>)}</span>
+                  {unit.exercises.some((exercise) => exercise.sets[round - 1] && exerciseRecord(exercise)?.setId === exercise.sets[round - 1].id) && (
+                    <span className="live-record-tag">שיא אישי</span>
+                  )}
                 </button>
               );
             }
@@ -3004,11 +3109,12 @@ function Workout() {
                   <span className="trainee-group-letter">{GROUP_LETTERS[index]}</span>
                   <strong>{exercise.exercise_name}</strong>
                   {previous.pairs.length > 0 && (
-                    <small>
+                    <button type="button" className="live-member-prev" aria-haspopup="dialog" onClick={(event) => openExerciseHistory(exercise, event.currentTarget)}>
                       קודם: {previous.pairs.map((pair, pairIndex) => (
                         <span key={pairIndex}>{pairIndex > 0 && " · "}{renderPair(pair)}</span>
                       ))}
-                    </small>
+                      <span className="live-prev-more"> · היסטוריה ‹</span>
+                    </button>
                   )}
                 </div>
                 {exercise.trainer_notes && <p className="live-coach">💬 {exercise.trainer_notes}</p>}
@@ -3063,7 +3169,7 @@ function Workout() {
     const allSetsRecorded = allSets.length > 0 && recordedSets === allSets.length;
 
     return (
-      <div className="trainee-workout trainee-workout-live slide-in">
+      <div className={`trainee-workout trainee-workout-live slide-in ${historySheet ? "history-open" : ""}`}>
         {restTimer && (
           <RestTimerBar
             timer={restTimer}
@@ -3110,6 +3216,15 @@ function Workout() {
         </div>
 
         <WorkoutHistory workouts={completedWorkouts} />
+
+        {historySheet && (
+          <ExerciseHistorySheet
+            exerciseName={historySheet.name}
+            history={exerciseHistory[exerciseNameKey(historySheet.name)]}
+            onClose={closeExerciseHistory}
+            onRetry={() => loadExerciseHistory(historySheet.name, true)}
+          />
+        )}
       </div>
     );
   }

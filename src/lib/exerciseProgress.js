@@ -169,3 +169,141 @@ export function comparisonTagText(result) {
   if (kind === "lower") return `↓ ${text}`;
   return text;
 }
+
+// ---------------------------------------------------------------------------
+// Trainee history of one exercise (bottom sheet) and personal records.
+
+function setDetails(exercise) {
+  return (exercise?.sets ?? [])
+    .filter((workoutSet) => workoutSet.is_completed)
+    .slice()
+    .sort((a, b) => (a.set_order ?? 0) - (b.set_order ?? 0))
+    .map((workoutSet) => ({
+      weight: positiveNumber(workoutSet.weight_kg),
+      reps: positiveNumber(workoutSet.completed_reps),
+      rir: workoutSet.rir === null || workoutSet.rir === undefined || workoutSet.rir === "" ? null : Number(workoutSet.rir),
+    }))
+    .filter((workoutSet) => workoutSet.reps != null);
+}
+
+// Rows from fetchExerciseHistory -> completed sessions of exactly this
+// exercise, newest first. Same identity rules as the review comparison:
+// exact name only, and a workout holding the name twice is left out.
+export function buildExerciseHistory(rows, exerciseName) {
+  const key = exerciseNameKey(exerciseName);
+  if (!key) return [];
+  const byWorkout = new Map();
+  for (const row of rows ?? []) {
+    const workout = row.workout_logs;
+    if (!workout || workout.status !== "completed") continue;
+    if (exerciseNameKey(row.exercise_name) !== key) continue;
+    if (!byWorkout.has(workout.id)) byWorkout.set(workout.id, { workout, rows: [] });
+    byWorkout.get(workout.id).rows.push(row);
+  }
+  const sessions = [];
+  for (const { workout, rows: matches } of byWorkout.values()) {
+    if (matches.length !== 1) continue;
+    const exercise = { sets: matches[0].workout_log_sets ?? [] };
+    const sets = setDetails(exercise);
+    if (sets.length === 0) continue;
+    sessions.push({
+      workoutId: workout.id,
+      completedAt: workout.completed_at,
+      programName: workout.program_name ?? "",
+      dayName: workout.day_name ?? "",
+      sets,
+      top: topSet(exercise),
+    });
+  }
+  sessions.sort((a, b) => new Date(b.completedAt) - new Date(a.completedAt));
+  return sessions;
+}
+
+// A record is only claimed with at least this many earlier sessions, so the
+// second time an exercise is done is never called a "record".
+export const MIN_SESSIONS_FOR_RECORD = 2;
+
+// Best weight ever (most reps at it), or null for bodyweight-only history.
+export function heaviestSet(sessions) {
+  let best = null;
+  for (const session of sessions) {
+    for (const workoutSet of session.sets) {
+      if (workoutSet.weight == null) continue;
+      if (!best || workoutSet.weight > best.weight || (workoutSet.weight === best.weight && workoutSet.reps > best.reps)) {
+        best = { weight: workoutSet.weight, reps: workoutSet.reps, completedAt: session.completedAt };
+      }
+    }
+  }
+  return best;
+}
+
+// Personal record inside the current (open) workout, derived from the saved
+// values every time, so correcting a value updates or removes it.
+// history: { sessions, truncated } of earlier completed workouts.
+// Returns { setId, kind: "weight" | "reps", weight, reps } or null.
+// - weight: heavier than every earlier recorded set.
+// - reps: more repetitions at exactly the same weight than ever before at
+//   that weight, and no earlier set at a heavier weight had as many
+//   repetitions (reps at different weights are never compared as a win).
+// - bodyweight only: more repetitions than ever.
+export function detectRecord(history, exercise) {
+  if (!history || history.truncated) return null;
+  const sessions = history.sessions ?? [];
+  if (sessions.length < MIN_SESSIONS_FOR_RECORD) return null;
+  const done = (exercise?.sets ?? [])
+    .filter((workoutSet) => workoutSet.is_completed)
+    .map((workoutSet) => ({ id: workoutSet.id, weight: positiveNumber(workoutSet.weight_kg), reps: positiveNumber(workoutSet.completed_reps) }))
+    .filter((workoutSet) => workoutSet.reps != null);
+  if (done.length === 0) return null;
+  const earlier = sessions.flatMap((session) => session.sets);
+  const earlierWeighted = earlier.filter((workoutSet) => workoutSet.weight != null);
+  const doneWeighted = done.filter((workoutSet) => workoutSet.weight != null);
+
+  const weightedSessions = sessions.filter((session) => session.sets.some((workoutSet) => workoutSet.weight != null)).length;
+
+  if (earlierWeighted.length > 0 && doneWeighted.length > 0) {
+    if (weightedSessions < MIN_SESSIONS_FOR_RECORD) return null;
+    const maxBefore = Math.max(...earlierWeighted.map((workoutSet) => workoutSet.weight));
+    const heavier = doneWeighted.filter((workoutSet) => workoutSet.weight > maxBefore);
+    if (heavier.length > 0) {
+      const best = heavier.reduce((a, b) => (b.weight > a.weight || (b.weight === a.weight && b.reps > a.reps) ? b : a));
+      return { setId: best.id, kind: "weight", weight: best.weight, reps: best.reps };
+    }
+    let best = null;
+    for (const workoutSet of doneWeighted) {
+      const sameWeight = earlierWeighted.filter((item) => item.weight === workoutSet.weight);
+      if (sameWeight.length === 0) continue;
+      const repsBefore = Math.max(...earlierWeighted.filter((item) => item.weight >= workoutSet.weight).map((item) => item.reps));
+      if (workoutSet.reps <= repsBefore) continue;
+      if (!best || workoutSet.weight > best.weight || (workoutSet.weight === best.weight && workoutSet.reps > best.reps)) best = workoutSet;
+    }
+    return best ? { setId: best.id, kind: "reps", weight: best.weight, reps: best.reps } : null;
+  }
+
+  if (earlierWeighted.length === 0 && doneWeighted.length === 0) {
+    const repsBefore = Math.max(...earlier.map((workoutSet) => workoutSet.reps));
+    const best = done.reduce((a, b) => (b.reps > a.reps ? b : a));
+    return best.reps > repsBefore ? { setId: best.id, kind: "reps", weight: null, reps: best.reps } : null;
+  }
+  return null;
+}
+
+// Long-run direction of the heaviest set, only with enough sessions:
+// { sessions, weightDelta } over the last `limit` sessions, or null.
+export const MIN_SESSIONS_FOR_TREND = 4;
+export function weightTrend(sessions, limit = 6) {
+  const recent = sessions.slice(0, limit).filter((session) => session.top?.weight != null);
+  if (recent.length < MIN_SESSIONS_FOR_TREND) return null;
+  const newest = recent[0].top.weight;
+  const oldest = recent[recent.length - 1].top.weight;
+  return { sessions: recent.length, weightDelta: round2(newest - oldest) };
+}
+
+export function recordText(record) {
+  if (!record) return "";
+  return record.weight == null ? `${record.reps} חזרות` : `${record.weight}×${record.reps}`;
+}
+
+export function signedDelta(value) {
+  return signed(value);
+}
